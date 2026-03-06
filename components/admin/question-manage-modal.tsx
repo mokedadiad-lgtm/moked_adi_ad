@@ -160,7 +160,7 @@ export function QuestionManageModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[90vh] flex-col gap-4 overflow-hidden" dir="rtl">
+      <DialogContent className="flex max-h-[90vh] w-[95vw] max-w-2xl flex-col gap-4 overflow-hidden" dir="rtl">
         <DialogHeader className="shrink-0">
           <DialogTitle>ניהול משימה</DialogTitle>
         </DialogHeader>
@@ -168,6 +168,7 @@ export function QuestionManageModal({
         <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="flex flex-col gap-4 text-right">
           <div className="space-y-1">
+            {question.title && <p className="text-sm font-medium text-slate-800">{question.title}</p>}
             <p className="text-sm font-medium text-primary">תוכן השאלה</p>
             <ScrollArea className="h-[140px] rounded-xl border border-card-border bg-slate-50 p-3 text-sm text-slate-700">
               <div className="whitespace-pre-wrap text-right">{question.content}</div>
@@ -328,6 +329,8 @@ export function QuestionManageModal({
           </Button>
           <Button
             type="button"
+            variant="default"
+            className="bg-primary"
             onClick={handleSubmit}
             disabled={pending || respondents.length === 0 || !respondentId}
           >

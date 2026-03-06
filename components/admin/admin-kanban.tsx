@@ -68,8 +68,9 @@ export function AdminKanban({
                 {items.map((q) => (
                   <Card key={q.id} className="overflow-hidden">
                     <CardContent className="p-3">
+                      {q.title && <p className="text-sm font-medium text-slate-800">{q.title}</p>}
                       <p
-                        className="line-clamp-3 text-start text-sm text-secondary"
+                        className={cn("line-clamp-3 text-start text-sm text-secondary", q.title && "mt-0.5")}
                         title={q.content}
                       >
                         {truncateContent(q.content)}

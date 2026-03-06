@@ -1,19 +1,44 @@
 "use client";
 
+import type { DelayedQuestionItem } from "@/app/admin/actions";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
+import { STAGE_LABELS } from "@/lib/types";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
-const nav = [
-  { href: "/admin", label: "לוח בקרה", icon: HomeIcon },
-  { href: "/admin/linguistic", label: "עריכה לשונית", icon: EditIcon },
-  { href: "/respondent", label: "אזור משיב", icon: RespondentIcon },
-  { href: "/proofreader", label: "לובי הגהה", icon: LobbyIcon },
-  { href: "/admin/team", label: "ניהול צוות", icon: UsersIcon },
-  { href: "/admin/topics", label: "נושאים והגהות", icon: BookIcon },
-  { href: "/admin/archive", label: "ארכיון", icon: ArchiveIcon },
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  adminOnly?: boolean;
+  needRespondent?: boolean;
+  needProofreader?: boolean;
+  needLinguistic?: boolean;
+};
+
+const navItems: NavItem[] = [
+  { href: "/admin", label: "לוח בקרה", icon: HomeIcon, adminOnly: true },
+  { href: "/admin/linguistic", label: "עריכה לשונית", icon: EditIcon, needLinguistic: true },
+  { href: "/respondent", label: "אזור משיב", icon: RespondentIcon, needRespondent: true },
+  { href: "/proofreader", label: "לובי הגהה", icon: LobbyIcon, needProofreader: true },
+  { href: "/admin/team", label: "ניהול צוות", icon: UsersIcon, adminOnly: true },
+  { href: "/admin/topics", label: "נושאים והגהות", icon: BookIcon, adminOnly: true },
+  { href: "/admin/analytics", label: "נתונים ודיאגרמות", icon: ChartIcon, adminOnly: true },
+  { href: "/admin/archive", label: "ארכיון", icon: ArchiveIcon, adminOnly: true },
+  { href: "/admin/trash", label: "אשפה", icon: TrashIcon, adminOnly: true },
 ];
+
+function ChartIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <line x1="18" x2="18" y1="20" y2="10" />
+      <line x1="12" x2="12" y1="20" y2="4" />
+      <line x1="6" x2="6" y1="20" y2="14" />
+    </svg>
+  );
+}
 
 function EditIcon({ className }: { className?: string }) {
   return (
@@ -162,6 +187,29 @@ function ArchiveIcon({ className }: { className?: string }) {
   );
 }
 
+function TrashIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M3 6h18" />
+      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+      <line x1="10" x2="10" y1="11" y2="17" />
+      <line x1="14" x2="14" y1="11" y2="17" />
+    </svg>
+  );
+}
+
 function LogoutIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -183,15 +231,53 @@ function LogoutIcon({ className }: { className?: string }) {
   );
 }
 
-export function AdminNav() {
+interface AdminNavProps {
+  delayedQuestions?: DelayedQuestionItem[];
+  onNavigate?: () => void;
+}
+
+export function AdminNav({ delayedQuestions = [], onNavigate }: AdminNavProps = {}) {
   const pathname = usePathname();
   const router = useRouter();
+  const [nav, setNav] = useState<NavItem[]>(navItems);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const supabase = getSupabaseBrowser();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_admin, is_technical_lead, is_respondent, is_proofreader, is_linguistic_editor, proofreader_type_id")
+        .eq("id", user.id)
+        .single();
+      const isAdmin = profile?.is_admin === true || profile?.is_technical_lead === true;
+      const canRespondent = isAdmin || profile?.is_respondent === true;
+      const canProofreader = isAdmin || (profile?.is_proofreader === true && profile?.proofreader_type_id);
+      const canLinguistic = isAdmin || profile?.is_linguistic_editor === true;
+      const filtered = navItems.filter((item) => {
+        if (item.adminOnly) return isAdmin;
+        if (item.needRespondent) return canRespondent;
+        if (item.needProofreader) return canProofreader;
+        if (item.needLinguistic) return canLinguistic;
+        return true;
+      });
+      if (!cancelled) setNav(filtered);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleLogout = async () => {
     const supabase = getSupabaseBrowser();
     await supabase.auth.signOut();
     router.replace("/login");
     router.refresh();
+  };
+
+  const openDelayedInDashboard = (questionId: string) => {
+    onNavigate?.();
+    router.push(`/admin?open=${encodeURIComponent(questionId)}`);
   };
 
   return (
@@ -202,6 +288,7 @@ export function AdminNav() {
           <Link
             key={item.href}
             href={item.href}
+            onClick={onNavigate}
             className={cn(
               "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
               active
@@ -214,6 +301,26 @@ export function AdminNav() {
           </Link>
         );
       })}
+      {delayedQuestions.length > 0 && (
+        <div className="mt-4 border-t border-slate-600/60 pt-3">
+          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-slate-400">עיכובים (5+ ימים)</p>
+          <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto">
+            {delayedQuestions.map((q) => (
+              <li key={q.id}>
+                <button
+                  type="button"
+                  onClick={() => openDelayedInDashboard(q.id)}
+                  className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-start text-xs text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+                >
+                  <span className="font-medium">{q.short_id ?? q.id.slice(0, 8)}</span>
+                  <span className="line-clamp-1 text-slate-400">{q.title || "—"}</span>
+                  <span className="text-[10px] text-amber-400/90">{STAGE_LABELS[q.stage]}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="mt-auto border-t border-slate-600/60 pt-3">
         <button
           type="button"

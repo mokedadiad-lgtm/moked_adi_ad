@@ -9,6 +9,9 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["var(--font-heebo)", "sans-serif"],
+      },
       colors: {
         primary: {
           DEFAULT: "#4f46e5",

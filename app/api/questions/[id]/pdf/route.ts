@@ -1,7 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { responseToStructured, responseToStructuredForPdf } from "@/lib/response-text";
 import { renderPdfFromHtml } from "@/lib/pdf-from-html";
-import { requireAdminOrLinguistic } from "@/lib/auth-api";
 import { NextResponse } from "next/server";
 import React from "react";
 import * as ReactPDF from "@react-pdf/renderer";
@@ -14,17 +13,11 @@ export const maxDuration = 60;
 
 /**
  * ייצור PDF: מנסה קודם מ-HTML (Puppeteer, עברית תקינה). אם נכשל – fallback ל-react-pdf.
- * דורש אימות: אדמין או עורך לשוני.
  */
 export async function POST(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireAdminOrLinguistic(request);
-  if (!auth.ok) {
-    return NextResponse.json({ error: auth.message }, { status: auth.status });
-  }
-
   const { id } = await params;
   if (!id) {
     return NextResponse.json({ error: "חסר מזהה שאלה" }, { status: 400 });
@@ -106,10 +99,12 @@ export async function POST(
   const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(filename);
   const baseUrl = urlData.publicUrl;
   const pdfUrl = `${baseUrl}?v=${Date.now()}`;
+  const pdfGeneratedAt = new Date().toISOString();
 
-  const updatePayload: { pdf_url: string; updated_at: string; stage?: string } = {
+  const updatePayload: { pdf_url: string; updated_at: string; pdf_generated_at: string; stage?: string } = {
     pdf_url: pdfUrl,
-    updated_at: new Date().toISOString(),
+    updated_at: pdfGeneratedAt,
+    pdf_generated_at: pdfGeneratedAt,
   };
   if (question.stage === "in_linguistic_review") {
     updatePayload.stage = "ready_for_sending";
@@ -117,5 +112,5 @@ export async function POST(
 
   await supabase.from("questions").update(updatePayload).eq("id", id);
 
-  return NextResponse.json({ pdf_url: pdfUrl });
+  return NextResponse.json({ pdf_url: pdfUrl, pdf_generated_at: pdfGeneratedAt });
 }

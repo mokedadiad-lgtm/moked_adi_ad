@@ -303,7 +303,7 @@ export function TopicsManager({
             <Button variant="outline" onClick={() => setAddTypeOpen(false)}>
               ביטול
             </Button>
-            <Button onClick={handleCreateType} disabled={pending || !newTypeName.trim()}>
+            <Button variant="default" className="bg-primary" onClick={handleCreateType} disabled={pending || !newTypeName.trim()}>
               {pending ? "שומר…" : "שמור"}
             </Button>
           </DialogFooter>
@@ -327,7 +327,7 @@ export function TopicsManager({
             <Button variant="outline" onClick={() => setEditTypeId(null)}>
               ביטול
             </Button>
-            <Button onClick={handleUpdateType} disabled={pending}>
+            <Button variant="default" className="bg-primary" onClick={handleUpdateType} disabled={pending}>
               {pending ? "שומר…" : "שמור"}
             </Button>
           </DialogFooter>
@@ -367,6 +367,8 @@ export function TopicsManager({
               ביטול
             </Button>
             <Button
+              variant="default"
+              className="bg-primary"
               onClick={handleCreateTopic}
               disabled={pending || !newTopicName.trim() || !newTopicTypeId}
             >
@@ -398,6 +400,8 @@ export function TopicsManager({
               ביטול
             </Button>
             <Button
+              variant="default"
+              className="bg-primary"
               onClick={handleCreateSubTopic}
               disabled={pending || !newSubTopicName.trim()}
             >

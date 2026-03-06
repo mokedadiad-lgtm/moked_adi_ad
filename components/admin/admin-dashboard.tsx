@@ -1,11 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import type { RespondentOption } from "@/app/admin/actions";
+import { useEffect, useState } from "react";
 import { AdminQuestionStageModal } from "@/components/admin/admin-question-stage-modal";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -14,15 +21,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { TopicOption } from "@/app/admin/actions";
+import type { ProofreaderTypeOption, TopicOption } from "@/app/admin/actions";
 import type { QuestionRow, QuestionStage } from "@/lib/types";
 import { ACTIVE_STAGES, STAGE_LABELS } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-function truncateSummary(text: string, maxLen = 80): string {
-  const t = text.replace(/\s+/g, " ").trim();
-  return t.length <= maxLen ? t : t.slice(0, maxLen) + "…";
-}
 
 function StageIconClock({ className }: { className?: string }) {
   return (
@@ -73,85 +75,131 @@ function StageIconArchive({ className }: { className?: string }) {
   );
 }
 
+function ExcelIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="8" x2="16" y1="13" y2="13" />
+      <line x1="8" x2="16" y1="17" y2="17" />
+      <line x1="8" x2="16" y1="21" y2="21" />
+    </svg>
+  );
+}
+
+function AlertTriangleIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
+    </svg>
+  );
+}
+
 const STAGE_BADGE_CLASS: Record<QuestionStage, string> = {
-  waiting_assignment: "bg-amber-100 text-amber-800 border-amber-200/60",
+  waiting_assignment: "bg-pink-100 text-pink-800 border-pink-200/60",
   with_respondent: "bg-blue-100 text-blue-800 border-blue-200/60",
   in_proofreading_lobby: "bg-violet-100 text-violet-800 border-violet-200/60",
   in_linguistic_review: "bg-orange-100 text-orange-800 border-orange-200/60",
   ready_for_sending: "bg-emerald-100 text-emerald-800 border-emerald-200/60",
+  pending_manager: "bg-red-100 text-red-800 border-red-200/60",
   sent_archived: "bg-slate-100 text-slate-700 border-slate-200/60",
 };
 
 const CARD_STYLES: Record<
   QuestionStage,
-  { bg: string; border: string; number: string; label: string; iconBg: string }
+  { bg: string; border: string; number: string; label: string; iconBg: string; iconColor: string }
 > = {
   waiting_assignment: {
-    bg: "bg-amber-200/90",
-    border: "border-amber-500",
-    number: "text-amber-900",
-    label: "text-amber-900",
-    iconBg: "bg-amber-400/90 text-white",
+    bg: "bg-pink-50/90",
+    border: "border-pink-400",
+    number: "text-pink-900",
+    label: "text-pink-900",
+    iconBg: "bg-pink-100",
+    iconColor: "text-pink-500",
   },
   with_respondent: {
-    bg: "bg-blue-200/90",
-    border: "border-blue-500",
+    bg: "bg-blue-50/90",
+    border: "border-blue-400",
     number: "text-blue-900",
     label: "text-blue-900",
-    iconBg: "bg-blue-500/90 text-white",
+    iconBg: "bg-blue-100",
+    iconColor: "text-blue-500",
   },
   in_proofreading_lobby: {
-    bg: "bg-violet-200/90",
-    border: "border-violet-500",
+    bg: "bg-violet-50/90",
+    border: "border-violet-400",
     number: "text-violet-900",
     label: "text-violet-900",
-    iconBg: "bg-violet-500/90 text-white",
+    iconBg: "bg-violet-100",
+    iconColor: "text-violet-500",
   },
   in_linguistic_review: {
-    bg: "bg-orange-200/90",
-    border: "border-orange-500",
+    bg: "bg-orange-50/90",
+    border: "border-orange-400",
     number: "text-orange-900",
     label: "text-orange-900",
-    iconBg: "bg-orange-500/90 text-white",
+    iconBg: "bg-orange-100",
+    iconColor: "text-orange-500",
   },
   ready_for_sending: {
-    bg: "bg-emerald-200/90",
-    border: "border-emerald-500",
+    bg: "bg-emerald-50/90",
+    border: "border-emerald-400",
     number: "text-emerald-900",
     label: "text-emerald-900",
-    iconBg: "bg-emerald-500/90 text-white",
+    iconBg: "bg-emerald-100",
+    iconColor: "text-emerald-500",
+  },
+  pending_manager: {
+    bg: "bg-red-50/90",
+    border: "border-red-400",
+    number: "text-red-900",
+    label: "text-red-900",
+    iconBg: "bg-red-100",
+    iconColor: "text-red-500",
   },
   sent_archived: {
-    bg: "bg-slate-200/90",
-    border: "border-slate-500",
+    bg: "bg-slate-50/90",
+    border: "border-slate-400",
     number: "text-slate-800",
     label: "text-slate-700",
-    iconBg: "bg-slate-500/80 text-white",
+    iconBg: "bg-slate-100",
+    iconColor: "text-slate-500",
   },
 };
 
-function StageIcon({ stage }: { stage: QuestionStage }) {
+function StageIcon({ stage, className }: { stage: QuestionStage; className?: string }) {
+  const c = className ?? "size-4";
   switch (stage) {
-    case "waiting_assignment": return <StageIconClock className="size-6" />;
-    case "with_respondent": return <StageIconUser className="size-6" />;
-    case "in_proofreading_lobby": return <StageIconLobby className="size-6" />;
-    case "in_linguistic_review": return <StageIconEdit className="size-6" />;
-    case "ready_for_sending": return <StageIconSend className="size-6" />;
-    case "sent_archived": return <StageIconArchive className="size-6" />;
+    case "waiting_assignment": return <StageIconClock className={c} />;
+    case "with_respondent": return <StageIconUser className={c} />;
+    case "in_proofreading_lobby": return <StageIconLobby className={c} />;
+    case "in_linguistic_review": return <StageIconEdit className={c} />;
+    case "ready_for_sending": return <StageIconSend className={c} />;
+    case "pending_manager": return <StageIconClock className={c} />;
+    case "sent_archived": return <StageIconArchive className={c} />;
   }
 }
 
 interface AdminDashboardProps {
   questions: QuestionRow[];
-  respondents: RespondentOption[];
   topics: TopicOption[];
+  proofreaderTypes: ProofreaderTypeOption[];
+  initialOpenQuestionId?: string;
+  emailCounts?: Record<string, number>;
 }
 
-export function AdminDashboard({ questions, respondents, topics }: AdminDashboardProps) {
+export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpenQuestionId, emailCounts = {} }: AdminDashboardProps) {
   const router = useRouter();
   const [filter, setFilter] = useState<QuestionStage | "all">("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [stageModalQuestion, setStageModalQuestion] = useState<QuestionRow | null>(null);
   const [stageModalOpen, setStageModalOpen] = useState(false);
+  const [emailModalEmail, setEmailModalEmail] = useState<string | null>(null);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [emailModalList, setEmailModalList] = useState<{ id: string; short_id: string | null; title: string | null; stage: QuestionStage; created_at: string }[]>([]);
+  const [emailModalLoading, setEmailModalLoading] = useState(false);
   const activeCount = questions.length;
   const byStage = ACTIVE_STAGES.reduce(
     (acc, stage) => {
@@ -160,60 +208,149 @@ export function AdminDashboard({ questions, respondents, topics }: AdminDashboar
     },
     {} as Record<QuestionStage, number>
   );
-  const filtered =
+  const lobbyQuestions = questions.filter((q) => q.stage === "in_proofreading_lobby");
+  const byProofreaderType = proofreaderTypes.map((t) => ({
+    id: t.id,
+    name_he: t.name_he,
+    count: lobbyQuestions.filter((q) => q.proofreader_type_id === t.id).length,
+  }));
+  const byStageFiltered =
     filter === "all"
       ? questions
       : questions.filter((q) => q.stage === filter);
+  const q = (searchQuery ?? "").trim().toLowerCase();
+  const filtered = q
+    ? byStageFiltered.filter(
+        (row) =>
+          (row.short_id ?? "").toLowerCase().includes(q) ||
+          (row.title ?? "").toLowerCase().includes(q) ||
+          (row.content ?? "").toLowerCase().includes(q)
+      )
+    : byStageFiltered;
 
   const openStageModal = (q: QuestionRow) => {
     setStageModalQuestion(q);
     setStageModalOpen(true);
   };
 
+  // פתיחת מודל שאלה כשנכנסים עם ?open=id (מעיכובים בסרגל)
+  useEffect(() => {
+    if (!initialOpenQuestionId || !questions.length) return;
+    const q = questions.find((x) => x.id === initialOpenQuestionId);
+    if (q) {
+      setStageModalQuestion(q);
+      setStageModalOpen(true);
+      setFilter("all");
+    }
+  }, [initialOpenQuestionId, questions]);
+
+  // רענון אוטומטי כל 2 שניות כשהטאב גלוי (מגיה שתפס תשובה — השם יתעדכן)
+  useEffect(() => {
+    const tick = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        router.refresh();
+      }
+    };
+    const id = setInterval(tick, 2000);
+    return () => clearInterval(id);
+  }, [router]);
+
+  const openEmailReuseModal = (e: React.MouseEvent, email: string | null | undefined) => {
+    e.stopPropagation();
+    const em = (email ?? "").trim();
+    if (!em) return;
+    setEmailModalEmail(em);
+    setEmailModalOpen(true);
+    setEmailModalLoading(true);
+    setEmailModalList([]);
+    import("@/app/admin/actions").then(({ getQuestionsByEmail }) => {
+      getQuestionsByEmail(em).then((list) => {
+        setEmailModalList(list);
+        setEmailModalLoading(false);
+      });
+    });
+  };
+
+  const downloadExcel = () => {
+    const BOM = "\uFEFF";
+    const headers = ["ID שאלה", "כותרת השאלה", "סטטוס", "משיב/ה", "מגיה/ה"];
+    const rows = filtered.map((q) => [
+      q.short_id ?? q.id.slice(0, 8),
+      (q.title ?? "").replace(/"/g, '""'),
+      STAGE_LABELS[q.stage],
+      q.respondent_name ?? "",
+      q.proofreader_name ?? "",
+    ]);
+    const csv = [headers.join(","), ...rows.map((r) => r.map((c) => `"${c}"`).join(","))].join("\r\n");
+    const blob = new Blob([BOM + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `לוח-בקרה-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-6">
-        <button
-          type="button"
-          onClick={() => setFilter("all")}
-          className={cn(
-            "rounded-xl border-2 border-slate-200 bg-gradient-to-b from-slate-50 to-white p-4 text-start shadow-sm transition-all hover:border-primary/40 hover:shadow-md",
-            filter === "all" && "border-primary ring-2 ring-primary/20"
-          )}
-        >
-          <div className="flex items-center gap-2 justify-start">
-            <span className="rounded-lg bg-slate-500/80 p-2 text-white">
-              <StageIconArchive className="size-6" />
-            </span>
-            <p className="text-start text-xs font-semibold uppercase tracking-wide text-slate-600">כל המשימות הפעילות</p>
-          </div>
-          <p className="mt-2 text-start text-2xl font-bold text-slate-800">{activeCount}</p>
-        </button>
+    <div className="space-y-3">
+      <div className="grid grid-cols-5 gap-1 sm:grid-cols-3 sm:gap-1.5 md:grid-cols-4 md:gap-3 lg:grid-cols-5">
         {ACTIVE_STAGES.map((stage) => {
           const style = CARD_STYLES[stage];
+          const isLobby = stage === "in_proofreading_lobby";
           return (
             <button
               key={stage}
               type="button"
               onClick={() => setFilter(stage)}
               className={cn(
-                "rounded-xl border-2 p-4 text-start shadow-sm transition-all hover:shadow-md",
+                "flex flex-col overflow-hidden rounded-lg border-2 px-1 py-1 shadow-sm transition-all hover:shadow sm:px-2 sm:py-1.5 md:px-3 md:py-3",
+                "min-h-0 justify-between gap-0.5 md:gap-1",
+                "aspect-[3/2] sm:aspect-[2/1]",
                 style.bg,
                 style.border,
-                filter === stage && "ring-2 ring-offset-2 ring-primary/50"
+                filter === stage && "ring-2 ring-offset-1 ring-primary/50"
               )}
+              dir="rtl"
             >
-              <div className="flex items-center justify-start gap-2">
-                <span className={cn("rounded-lg p-2", style.iconBg)}>
-                  <StageIcon stage={stage} />
-                </span>
-                <p className={cn("text-xs font-semibold uppercase tracking-wide", style.label)}>
+              {/* מובייל: טקסט בשתי שורות מימין, סמליל ומתחתיו מספר בשמאל */}
+              <div className="flex w-full items-stretch justify-between gap-1 md:hidden">
+                <span className={cn("min-w-0 flex-1 line-clamp-2 text-[10px] leading-tight font-semibold text-right", style.label)}>
                   {STAGE_LABELS[stage]}
-                </p>
+                </span>
+                <div className="flex shrink-0 flex-col items-center gap-0.5">
+                  <span className={cn("rounded p-0.5", style.iconBg, style.iconColor)}>
+                    <StageIcon stage={stage} className="size-3.5" />
+                  </span>
+                  <span className={cn("text-xs font-bold tabular-nums", style.number)}>{byStage[stage] ?? 0}</span>
+                </div>
               </div>
-              <p className={cn("mt-2 text-2xl font-bold", style.number)}>
-                {byStage[stage] ?? 0}
-              </p>
+              {/* דסקטופ: שורה עליונה תווית+אייקון, תחתונה מספר+קטגוריות */}
+              <div className="hidden w-full flex-col gap-0.5 md:flex">
+                <div className="flex w-full items-center justify-end gap-1.5">
+                  <span className={cn("min-w-0 flex-1 truncate text-base font-semibold text-right", style.label)}>
+                    {STAGE_LABELS[stage]}
+                  </span>
+                  <span className={cn("shrink-0 rounded p-1.5", style.iconBg, style.iconColor)}>
+                    <StageIcon stage={stage} className="size-5" />
+                  </span>
+                </div>
+                <div className="flex w-full flex-col gap-0.5">
+                  <div className="flex w-full justify-start">
+                    <span className={cn("text-xl font-bold tabular-nums", style.number)}>{byStage[stage] ?? 0}</span>
+                  </div>
+                  {isLobby && byProofreaderType.length > 0 && (
+                    <div className="flex w-full shrink-0 flex-wrap justify-end gap-x-1 gap-y-0 text-[9px] leading-tight text-violet-800/90 md:gap-x-1.5 md:text-[10px]">
+                      {byProofreaderType.map(({ id, name_he, count }, i) => (
+                        <span key={id} className="whitespace-nowrap">
+                          {i > 0 && <span className="text-violet-500/70"> · </span>}
+                          <span className="font-medium tabular-nums text-violet-900/90">{count}</span>
+                          <span className="text-violet-700/80"> {name_he}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </button>
           );
         })}
@@ -221,14 +358,58 @@ export function AdminDashboard({ questions, respondents, topics }: AdminDashboar
 
       <Card className="overflow-hidden rounded-xl border border-slate-200/80 shadow-sm">
         <CardContent className="p-0">
+          <div className="flex flex-nowrap items-center justify-between gap-2 border-b border-slate-200/80 px-2 py-1.5 md:px-3 md:py-2" dir="rtl">
+            <div className="flex min-w-0 flex-1 flex-nowrap items-center justify-start gap-2">
+              {filter === "all" ? (
+                <span className="shrink-0 text-xs font-medium text-slate-800 md:text-sm">משימות:</span>
+              ) : (
+                <>
+                  <span className="shrink-0 text-xs text-slate-600 md:text-sm">
+                    סינון: <span className="font-medium text-slate-800">{STAGE_LABELS[filter]}</span>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setFilter("all")}
+                    className="shrink-0 text-xs md:text-sm bg-slate-100 hover:bg-slate-200 border-slate-300"
+                  >
+                    הצג הכל
+                  </Button>
+                </>
+              )}
+            </div>
+            <div className="flex shrink-0 flex-nowrap items-center gap-1.5">
+              <Input
+                type="search"
+                placeholder="חיפוש..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-8 w-20 border-slate-300 text-xs md:h-9 md:w-36 md:text-sm"
+                dir="rtl"
+              />
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                onClick={downloadExcel}
+                className="h-8 shrink-0 gap-1 bg-green-600 px-2 text-white hover:bg-green-700 md:h-9 md:px-2.5"
+                title="הורד לאקסל"
+              >
+                <ExcelIcon className="h-4 w-4 md:h-4 md:w-4" />
+                <span className="hidden md:inline">הורד לאקסל</span>
+              </Button>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent bg-slate-50/80">
-                <TableHead className="font-semibold">ID שאלה</TableHead>
-                <TableHead className="font-semibold">נושא / תקציר</TableHead>
-                <TableHead className="font-semibold">סטטוס</TableHead>
-                <TableHead className="font-semibold">משיב/ה</TableHead>
-                <TableHead className="font-semibold">מגיה/ה</TableHead>
+                <TableHead className="text-xs font-semibold md:text-sm">ID שאלה</TableHead>
+                <TableHead className="text-xs font-semibold md:text-sm">שאלה</TableHead>
+                <TableHead className="text-xs font-semibold md:text-sm">סטטוס</TableHead>
+                <TableHead className="text-xs font-semibold md:text-sm">משיב/ה</TableHead>
+                <TableHead className="text-xs font-semibold md:text-sm">מגיה/ה</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -242,52 +423,67 @@ export function AdminDashboard({ questions, respondents, topics }: AdminDashboar
                 filtered.map((q) => (
                   <TableRow
                     key={q.id}
-                    className="cursor-pointer transition-colors hover:bg-primary/5"
+                    className={cn(
+                      "cursor-pointer transition-colors hover:bg-primary/5",
+                      q.stage === "pending_manager" && "border-2 border-red-400 bg-red-50/50"
+                    )}
                     onClick={() => openStageModal(q)}
                   >
-                    <TableCell className="font-mono text-xs text-secondary">
-                      {q.id.slice(0, 8)}…
+                    <TableCell className="font-mono text-[11px] text-secondary md:text-xs">
+                      {q.short_id ?? `${q.id.slice(0, 8)}…`}
                     </TableCell>
-                    <TableCell className="max-w-[320px]">
-                      <div>
-                        <span className="line-clamp-2 text-sm" title={q.content}>
-                          {truncateSummary(q.content)}
-                        </span>
-                        {(q.topic_name_he || q.sub_topic_name_he) && (
-                          <p className="mt-1 text-xs text-slate-500">
-                            {[q.topic_name_he, q.sub_topic_name_he].filter(Boolean).join(" › ")}
+                    <TableCell className="max-w-[280px] md:max-w-[320px]">
+                      <div className="flex items-start gap-1.5">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-medium text-slate-800 md:text-sm">
+                            {q.title || "—"}
                           </p>
+                          {(q.topic_name_he || q.sub_topic_name_he) && (
+                            <p className="mt-0.5 text-[10px] text-slate-500 md:text-xs">
+                              {[q.topic_name_he, q.sub_topic_name_he].filter(Boolean).join(" · ")}
+                            </p>
+                          )}
+                        </div>
+                        {(q.asker_email && (emailCounts[(q.asker_email ?? "").trim().toLowerCase()] ?? 0) > 5) && (
+                          <button
+                            type="button"
+                            onClick={(e) => openEmailReuseModal(e, q.asker_email)}
+                            className="shrink-0 rounded p-1 text-amber-600 hover:bg-amber-100 hover:text-amber-700"
+                            title={`אימייל זה מופיע ב־${emailCounts[(q.asker_email ?? "").trim().toLowerCase()]} שאלות`}
+                          >
+                            <AlertTriangleIcon className="size-4" />
+                          </button>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-xs">
                       <Badge
                         variant="outline"
                         className={cn(
-                          "rounded-md border font-medium",
+                          "rounded-md border text-[10px] font-medium md:text-xs",
                           STAGE_BADGE_CLASS[q.stage]
                         )}
                       >
                         {STAGE_LABELS[q.stage]}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-sm text-secondary">
-                      {q.respondent_name ?? "—"}
+                    <TableCell className="min-w-[80px] text-[11px] text-secondary md:text-xs">
+                      {q.respondent_name?.trim() || "—"}
                     </TableCell>
-                    <TableCell className="text-sm text-secondary">
-                      {q.proofreader_name ?? "—"}
+                    <TableCell className="min-w-[80px] text-[11px] text-secondary md:text-xs">
+                      {q.proofreader_name?.trim() || "—"}
                     </TableCell>
                   </TableRow>
                 ))
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
       <AdminQuestionStageModal
         question={stageModalQuestion}
-        respondents={respondents}
         topics={topics}
         open={stageModalOpen}
         onOpenChange={(open) => {
@@ -296,6 +492,48 @@ export function AdminDashboard({ questions, respondents, topics }: AdminDashboar
         }}
         onSuccess={() => router.refresh()}
       />
+
+      <Dialog open={emailModalOpen} onOpenChange={setEmailModalOpen}>
+        <DialogContent className="max-h-[80vh] overflow-hidden flex flex-col" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>שאלות לפי אימייל</DialogTitle>
+          </DialogHeader>
+          {emailModalEmail && (
+            <p className="text-sm text-slate-600">{emailModalEmail}</p>
+          )}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {emailModalLoading ? (
+              <p className="py-4 text-center text-sm text-slate-500">טוען...</p>
+            ) : (
+              <ul className="space-y-2 py-2">
+                {emailModalList.map((item) => (
+                  <li key={item.id}>
+                    <a
+                      href={`/admin?open=${encodeURIComponent(item.id)}`}
+                      className="block rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
+                    >
+                      <span className="font-medium">{item.short_id ?? item.id.slice(0, 8)}</span>
+                      <span className="text-slate-600"> — {item.title || "—"}</span>
+                      <span className="mr-2 text-xs text-slate-400">{STAGE_LABELS[item.stage]}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <p className="text-xs text-slate-500">
+            לחיצה על שאלה תפתח אותה בלוח הבקרה.{" "}
+            {emailModalEmail && (
+              <a
+                href={`/admin/analytics?email=${encodeURIComponent(emailModalEmail)}`}
+                className="text-primary underline hover:no-underline"
+              >
+                לנתונים מלאים לפי אימייל זה
+              </a>
+            )}
+          </p>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

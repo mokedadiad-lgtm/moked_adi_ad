@@ -1,22 +1,32 @@
+import { LinguisticEditorView } from "@/components/admin/linguistic-editor-view";
+import { PageHeader } from "@/components/page-header";
+import { RoleSwitcher } from "@/components/role-switcher";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { QuestionRow } from "@/lib/types";
-import { LinguisticEditorView } from "@/components/admin/linguistic-editor-view";
+import { Suspense } from "react";
 
 const SELECT =
-  "id, stage, content, created_at, asker_email, asker_age, asker_gender, response_type, publication_consent, assigned_respondent_id, response_text, proofreader_note, pdf_url, topic_id, sub_topic_id, topics(name_he), sub_topics(name_he)";
+  "id, short_id, stage, title, content, created_at, asker_email, asker_age, asker_gender, response_type, publication_consent, assigned_respondent_id, response_text, proofreader_note, pdf_url, pdf_generated_at, topic_id, sub_topic_id, topics(name_he), sub_topics(name_he)";
 
+type TopicRef = { name_he: string } | { name_he: string }[] | null | undefined;
 type Row = QuestionRow & {
   assigned_respondent_id?: string | null;
   asker_gender?: "M" | "F" | null;
   publication_consent?: "publish" | "blur" | "none" | null;
   topic_id?: string | null;
   sub_topic_id?: string | null;
-  topics?: { name_he: string } | null;
-  sub_topics?: { name_he: string } | null;
+  topics?: TopicRef;
+  sub_topics?: TopicRef;
   response_text?: string | null;
   proofreader_note?: string | null;
   pdf_url?: string | null;
+  pdf_generated_at?: string | null;
 };
+
+function nameFromRelation(v: TopicRef): string | null {
+  if (v == null) return null;
+  return Array.isArray(v) ? v[0]?.name_he ?? null : v.name_he ?? null;
+}
 
 async function getLinguisticQuestions(): Promise<QuestionRow[]> {
   const supabase = getSupabaseAdmin();
@@ -24,6 +34,7 @@ async function getLinguisticQuestions(): Promise<QuestionRow[]> {
     .from("questions")
     .select(SELECT)
     .in("stage", ["in_linguistic_review", "ready_for_sending"])
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (error) return [];
@@ -41,7 +52,9 @@ async function getLinguisticQuestions(): Promise<QuestionRow[]> {
 
   return rows.map((r) => ({
     id: r.id,
+    short_id: r.short_id ?? null,
     stage: r.stage,
+    title: r.title ?? null,
     content: r.content,
     created_at: r.created_at,
     asker_email: r.asker_email ?? null,
@@ -52,11 +65,12 @@ async function getLinguisticQuestions(): Promise<QuestionRow[]> {
     respondent_name: r.assigned_respondent_id ? names[r.assigned_respondent_id] ?? null : null,
     topic_id: r.topic_id ?? null,
     sub_topic_id: r.sub_topic_id ?? null,
-    topic_name_he: r.topics?.name_he ?? null,
-    sub_topic_name_he: r.sub_topics?.name_he ?? null,
+    topic_name_he: nameFromRelation(r.topics),
+    sub_topic_name_he: nameFromRelation(r.sub_topics),
     response_text: r.response_text ?? null,
     proofreader_note: r.proofreader_note ?? null,
     pdf_url: r.pdf_url ?? null,
+    pdf_generated_at: r.pdf_generated_at ?? null,
   }));
 }
 
@@ -65,11 +79,15 @@ export default async function LinguisticEditorPage() {
 
   return (
     <div className="space-y-6">
-      <header className="border-b border-slate-200/80 pb-4 text-start">
-        <h1 className="text-2xl font-bold text-slate-800">עריכה לשונית</h1>
-        <p className="mt-1 text-sm text-slate-500">עריכת תשובות מוכנות לשליחה ויצירת PDF</p>
-      </header>
-      <LinguisticEditorView questions={questions} />
+      <PageHeader
+        title="עריכה לשונית"
+        subtitle="עריכת תשובות מוכנות לשליחה ויצירת PDF"
+      >
+        <RoleSwitcher className="shrink-0" />
+      </PageHeader>
+      <Suspense fallback={<div className="text-secondary py-8">טוען…</div>}>
+        <LinguisticEditorView questions={questions} />
+      </Suspense>
     </div>
   );
 }

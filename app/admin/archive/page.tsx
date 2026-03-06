@@ -6,12 +6,18 @@ import type { QuestionRow } from "@/lib/types";
 const ARCHIVE_SELECT =
   "id, short_id, stage, title, content, created_at, sent_at, asker_email, asker_age, asker_gender, response_type, publication_consent, assigned_respondent_id, assigned_proofreader_id, response_text, proofreader_note, pdf_url, pdf_generated_at, topic_id, sub_topic_id, topics(name_he), sub_topics(name_he)";
 
+type TopicRef = { name_he: string } | { name_he: string }[] | null | undefined;
 type ArchiveRowRaw = QuestionRow & {
   assigned_respondent_id?: string | null;
   assigned_proofreader_id?: string | null;
-  topics?: { name_he: string } | null;
-  sub_topics?: { name_he: string } | null;
+  topics?: TopicRef;
+  sub_topics?: TopicRef;
 };
+
+function nameFromRelation(v: TopicRef): string | null {
+  if (v == null) return null;
+  return Array.isArray(v) ? v[0]?.name_he ?? null : v.name_he ?? null;
+}
 
 async function getArchivedQuestions(): Promise<QuestionRow[]> {
   const supabase = getSupabaseAdmin();
@@ -34,8 +40,8 @@ async function getArchivedQuestions(): Promise<QuestionRow[]> {
     ...r,
     respondent_name: r.assigned_respondent_id ? (profileNames[r.assigned_respondent_id]?.trim() || null) : null,
     proofreader_name: r.assigned_proofreader_id ? (profileNames[r.assigned_proofreader_id]?.trim() || null) : null,
-    topic_name_he: r.topics?.name_he ?? null,
-    sub_topic_name_he: r.sub_topics?.name_he ?? null,
+    topic_name_he: nameFromRelation(r.topics),
+    sub_topic_name_he: nameFromRelation(r.sub_topics),
   })) as QuestionRow[];
 }
 

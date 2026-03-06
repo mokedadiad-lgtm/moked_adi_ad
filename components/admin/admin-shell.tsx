@@ -4,6 +4,7 @@ import { AdminNav } from "@/components/admin/admin-nav";
 import { InactivityLogout } from "@/components/inactivity-logout";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 function HamburgerIcon({ className }: { className?: string }) {
@@ -47,17 +48,13 @@ function CloseIcon({ className }: { className?: string }) {
   );
 }
 
-import type { DelayedQuestionItem } from "@/app/admin/actions";
+import { getDelayedQuestions, type DelayedQuestionItem } from "@/app/admin/actions";
 
-export function AdminShell({
-  children,
-  delayedQuestions = [],
-}: {
-  children: React.ReactNode;
-  delayedQuestions?: DelayedQuestionItem[];
-}) {
+export function AdminShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showSidebar, setShowSidebar] = useState<boolean | null>(null);
+  const [delayedQuestions, setDelayedQuestions] = useState<DelayedQuestionItem[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,16 +65,23 @@ export function AdminShell({
         if (!cancelled) setShowSidebar(false);
         return;
       }
-      const { data: profile } = await supabase
+      const { data: profile, error } = await supabase
         .from("profiles")
         .select("is_admin, is_technical_lead")
         .eq("id", user.id)
         .single();
+      if (error && !cancelled) {
+        console.warn("[AdminShell] Failed to load profile for sidebar:", error.message);
+      }
       if (!cancelled) {
         setShowSidebar(profile?.is_admin === true || profile?.is_technical_lead === true);
       }
     })();
     return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    getDelayedQuestions().then(setDelayedQuestions);
   }, []);
 
   useEffect(() => {
@@ -148,6 +152,16 @@ export function AdminShell({
           hasSidebar ? "pt-14 md:pt-6 md:ps-[17rem]" : "pt-4 md:pt-6"
         )}
       >
+        {showSidebar === false && pathname?.startsWith("/admin") && (
+          <div className="mx-auto max-w-6xl px-2 sm:px-4 md:px-6">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-right text-amber-900">
+              <p className="font-medium">אין הרשאת מנהל לחשבון זה</p>
+              <p className="mt-1 text-sm text-amber-800">
+                הסרגל והתפריט של ממשק המנהל מוצגים רק כאשר לחשבון מוגדרות הרשאות מנהל או אחראי טכני בטבלת הפרופילים. אם אתה מנהל המערכת, עדכן את השדה <code className="rounded bg-amber-100 px-1">is_admin</code> ל־true בפרופיל שלך ב־Supabase.
+              </p>
+            </div>
+          </div>
+        )}
         <div className="mx-auto w-full max-w-6xl px-2 sm:px-4 md:px-6">{children}</div>
       </main>
     </div>

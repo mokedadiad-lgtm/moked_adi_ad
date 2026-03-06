@@ -93,8 +93,11 @@ export function AnswerModal({
       setError(result.error ?? "שגיאה בשליחה");
       return;
     }
-    notifyLobbyNewQuestion(question.id).catch(() => {});
+    onOpenChange(false);
     onSuccess();
+    reset();
+    notifyLobbyNewQuestion(question.id).catch(() => {});
+    fetch("/api/revalidate", { method: "POST", body: JSON.stringify({ path: "/admin" }) }).catch(() => {});
   };
 
   if (!question) return null;
@@ -113,6 +116,7 @@ export function AnswerModal({
           <div className="flex flex-col gap-6">
             {/* שאלה + כל הפרטים ברשימה אחת בצד ימין */}
             <div className="rounded-xl border border-card-border bg-slate-50/80 p-4 text-start">
+              {question.title && <p className="mb-2 text-sm font-semibold text-slate-800">{question.title}</p>}
               <p className="mb-3 text-sm font-semibold text-primary">השאלה</p>
               <div className="whitespace-pre-wrap text-start text-sm text-secondary" dir="rtl">
                 {question.content}
@@ -120,13 +124,13 @@ export function AnswerModal({
               <div className="mt-4 flex flex-wrap items-center justify-start gap-6 border-t border-card-border pt-3 text-start text-sm">
                 {question.asker_age && (
                   <span>
-                    <span className="text-slate-500">גיל:</span>{" "}
+                    <span className="text-slate-500">גיל<span dir="ltr">:</span></span>{" "}
                     <span className="text-primary">{question.asker_age}</span>
                   </span>
                 )}
                 {question.response_type && (
                   <span>
-                    <span className="text-slate-500">מסלול:</span>{" "}
+                    <span className="text-slate-500">מסלול<span dir="ltr">:</span></span>{" "}
                     <span className="text-primary">
                       {RESPONSE_LABEL[question.response_type]}
                     </span>

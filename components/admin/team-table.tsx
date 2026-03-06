@@ -124,7 +124,12 @@ export function TeamTable({ profiles, categories, proofreaderTypes }: TeamTableP
                             עורך לשוני
                           </Badge>
                         )}
-                        {!p.is_respondent && !p.is_proofreader && !p.is_linguistic_editor && (
+                        {p.is_technical_lead && (
+                          <Badge className="rounded-md border-0 bg-amber-100 text-amber-800">
+                            אחראי טכני
+                          </Badge>
+                        )}
+                        {!p.is_respondent && !p.is_proofreader && !p.is_linguistic_editor && !p.is_technical_lead && (
                           <span className="text-sm text-secondary">—</span>
                         )}
                       </div>

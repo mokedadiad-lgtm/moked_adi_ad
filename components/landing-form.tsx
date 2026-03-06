@@ -8,6 +8,13 @@ import {
   RadioGroup,
   RadioGroupItem,
 } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { submitQuestion, type SubmitState } from "@/app/actions/submit-question";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,13 +24,14 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 const schema = z.object({
-  asker_email: z.string().min(1, "נא להזין אימייל לקבלת מענה.").email("נא להזין אימייל תקין."),
+  asker_email: z.string().min(1, "נא להזין אימייל לשליחת המענה.").email("נא להזין אימייל תקין."),
   asker_gender: z.enum(["M", "F"]).optional(),
   asker_age: z.string().optional(),
-  content: z.string().min(1, "נא להזין את פרטי השאלה."),
+  title: z.string().min(1, "נא להזין כותרת השאלה."),
+  content: z.string().min(1, "נא להזין את פירוט השאלה."),
   response_type: z.enum(["short", "detailed"]),
   publication_consent: z.enum(["publish", "blur", "none"]),
-  terms_accepted: z.literal(true, { errorMap: () => ({ message: "נא לאשר את תנאי השימוש." }) }),
+  terms_accepted: z.boolean().refine((v) => v === true, { message: "נא לאשר את תנאי השימוש." }),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -32,9 +40,10 @@ const defaultValues: FormValues = {
   asker_email: "",
   asker_gender: undefined,
   asker_age: "",
+  title: "",
   content: "",
   response_type: "short",
-  publication_consent: "none",
+  publication_consent: "publish",
   terms_accepted: false,
 };
 
@@ -43,6 +52,7 @@ function formDataFromValues(values: FormValues): FormData {
   fd.set("asker_email", values.asker_email);
   if (values.asker_gender) fd.set("asker_gender", values.asker_gender);
   fd.set("asker_age", values.asker_age ?? "");
+  fd.set("title", values.title);
   fd.set("content", values.content);
   fd.set("response_type", values.response_type);
   fd.set("publication_consent", values.publication_consent);
@@ -88,168 +98,238 @@ export function LandingForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-5">
-      {/* שדות הטופס */}
-      <section className="space-y-4 rounded-xl border border-slate-200/80 bg-white p-4 text-start shadow-sm">
-        {/* אימייל | מין | גיל */}
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="asker_email">אימייל (לקבלת מענה)</Label>
+    <>
+      <div className="mb-5 text-center">
+        <p className="mb-1.5 text-2xl font-bold tracking-tight text-slate-800 md:text-3xl">
+          ברוכה הבאה למוקד האסק-מי פלוס
+        </p>
+        <p className="text-sm leading-relaxed text-slate-600">
+          כאן ניתן להשאיר את השאלה שלך ואנו נשתדל לענות עליה בעז&quot;ה.
+          <br />
+          נא לענות על השאלות הבאות ולאשר את התקנון.
+        </p>
+      </div>
+
+      <section className="mb-6 rounded-xl border border-amber-300/80 bg-amber-50 p-4 text-center shadow-sm">
+        <h2 className="mb-2 flex items-center justify-center gap-1.5 text-base font-bold text-amber-800">
+          <span>🔒</span> דיסקרטיות מלאה
+        </h2>
+        <p className="text-xs leading-relaxed text-slate-600">
+          הכל נשאר חסוי ואנונימי. אנו מתחייבים לשמור על דיסקרטיות מלאה, ולכן גם
+          אם יש פרטים שידועים לנו על הפונה, הם חסויים וישארו כך. למעט מקרים בהם
+          מתקיים נוהל חירום והצלת חיים, שבהם אנו מחויבים על פי חוק ומוסריות לעשות כל מאמץ להציל חיים.
+        </p>
+      </section>
+
+      <form onSubmit={onSubmit} className="mx-auto max-w-2xl space-y-5 text-center">
+      {/* פרטי פונה: אימייל, מין, גיל */}
+      <section className="space-y-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
+        <div className="grid grid-cols-1 place-items-center gap-3 md:grid-cols-3 md:items-start md:justify-items-center">
+          <div className="w-full max-w-xs space-y-1.5">
+            <Label htmlFor="asker_email" className="text-base font-bold">אימייל (לשליחת המענה)</Label>
             <Input
               id="asker_email"
               type="email"
               placeholder="example@email.com"
               {...form.register("asker_email")}
+              className="text-center"
             />
             {form.formState.errors.asker_email && (
-              <p className="text-start text-xs text-red-600">{form.formState.errors.asker_email.message}</p>
+              <p className="text-center text-xs text-red-600">{form.formState.errors.asker_email.message}</p>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-3 md:contents">
-            <div className="space-y-1.5">
-              <Label>מין</Label>
-              <RadioGroup
-                value={form.watch("asker_gender") ?? ""}
-                onValueChange={(v) => form.setValue("asker_gender", v as "M" | "F")}
-                className="flex flex-row gap-4 justify-start"
+          <div className="flex w-full max-w-xs flex-col items-center gap-1.5 md:max-w-none">
+            <Label className="text-base font-bold">מין</Label>
+            <div className="flex flex-row justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => form.setValue("asker_gender", "F")}
+                className={`rounded-lg border-2 px-4 py-2 text-sm transition-all ${
+                  form.watch("asker_gender") === "F"
+                    ? "border-red-400 bg-red-100 text-red-700"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-red-200"
+                }`}
               >
-                <label className="flex cursor-pointer items-center gap-1.5 justify-start">
-                  <RadioGroupItem value="F" id="gender_f" />
-                  <span className="text-xs text-slate-600">נקבה</span>
-                </label>
-                <label className="flex cursor-pointer items-center gap-1.5 justify-start">
-                  <RadioGroupItem value="M" id="gender_m" />
-                  <span className="text-xs text-slate-600">זכר</span>
-                </label>
-              </RadioGroup>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="asker_age">גיל</Label>
-              <Input
-                id="asker_age"
-                type="text"
-                placeholder="למשל 24"
-                {...form.register("asker_age")}
-                className="max-w-full md:max-w-[120px]"
-              />
+                נקבה
+              </button>
+              <button
+                type="button"
+                onClick={() => form.setValue("asker_gender", "M")}
+                className={`rounded-lg border-2 px-4 py-2 text-sm transition-all ${
+                  form.watch("asker_gender") === "M"
+                    ? "border-blue-400 bg-blue-100 text-blue-700"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-blue-200"
+                }`}
+              >
+                זכר
+              </button>
             </div>
           </div>
+          <div className="w-full max-w-[120px] space-y-1.5">
+            <Label htmlFor="asker_age" className="text-base font-bold">גיל</Label>
+            <Input
+              id="asker_age"
+              type="text"
+              placeholder="למשל 24"
+              {...form.register("asker_age")}
+              className="w-full text-center"
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* השאלה: כותרת ופרטים */}
+      <section className="space-y-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
+        <div className="space-y-1.5">
+          <Label htmlFor="title" className="text-base font-bold">כותרת השאלה</Label>
+          <Input
+            id="title"
+            type="text"
+            placeholder="למשל: שאלה על ברכות"
+            {...form.register("title")}
+            className="mx-auto max-w-md text-center"
+          />
+          {form.formState.errors.title && (
+            <p className="text-center text-xs text-red-600">{form.formState.errors.title.message}</p>
+          )}
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="content">פרטי השאלה</Label>
+          <Label htmlFor="content" className="text-base font-bold">פירוט השאלה</Label>
           <Textarea
             id="content"
-            placeholder="כתבי כאן את שאלתך..."
-            rows={5}
+            placeholder={form.watch("asker_gender") === "M" ? "כתוב כאן את שאלתך..." : "כתבי כאן את שאלתך..."}
+            rows={Math.max(3, Math.min(12, (form.watch("content") || "").split("\n").length))}
             {...form.register("content")}
+            className="mx-auto max-w-full min-h-0 text-center resize-y"
           />
           {form.formState.errors.content && (
-            <p className="text-start text-xs text-red-600">{form.formState.errors.content.message}</p>
+            <p className="text-center text-xs text-red-600">{form.formState.errors.content.message}</p>
           )}
         </div>
       </section>
 
       {/* בחירת מסלול */}
-      <section className="rounded-xl border border-slate-200/80 bg-white p-4 text-start shadow-sm">
-        <Label className="mb-3 block">בחירת מסלול</Label>
+      <section className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
+        <Label className="mb-3 block text-center text-base font-bold">בחירת מסלול</Label>
         <RadioGroup
           value={form.watch("response_type")}
           onValueChange={(v) => form.setValue("response_type", v as "short" | "detailed")}
-          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+          className="mx-auto grid max-w-lg grid-cols-1 gap-3 sm:grid-cols-2"
         >
+          {/* תשובה מפורטת — שמאל, אדום */}
           <label
-            className={`order-2 cursor-pointer rounded-lg border-2 p-3 text-start transition-all sm:order-1 ${
+            className={`order-2 cursor-pointer rounded-lg border-2 p-3 text-center transition-all sm:order-1 ${
               form.watch("response_type") === "detailed"
-                ? "border-primary bg-primary/10"
-                : "border-slate-200 bg-white hover:border-slate-300"
+                ? "border-red-600 bg-red-50"
+                : "border-slate-200 bg-white hover:border-red-200"
             }`}
           >
-            <div className="flex items-start gap-2 justify-start text-start">
-              <RadioGroupItem value="detailed" id="route_detailed" className="mt-0.5 shrink-0" />
-              <div className="min-w-0">
-                <span className="text-sm font-medium text-primary">תשובה מפורטת</span>
-                <p className="mt-0.5 text-xs text-slate-600">
-                  תשובה מקיפה, ארוכה ומורחבת (תוך כ־4 שבועות).
+            <div className="flex flex-col items-center gap-2 text-center">
+              <RadioGroupItem value="detailed" id="route_detailed" className="shrink-0" />
+              <div>
+                <span className={`text-sm font-medium ${form.watch("response_type") === "detailed" ? "text-red-700" : "text-red-600"}`}>
+                  תשובה מפורטת
+                </span>
+                <p className="mt-0.5 text-xs text-slate-600" dir="rtl">
+                  <span className="font-bold">תשובה מקיפה, ארוכה ומורחבת</span>
+                  <br />
+                  (תוך כ־4 שבועות){"\u200E"}.
                 </p>
               </div>
             </div>
           </label>
+          {/* קצר ולעניין — ימין, ירוק */}
           <label
-            className={`order-1 cursor-pointer rounded-lg border-2 p-3 text-start transition-all sm:order-2 ${
+            className={`order-1 cursor-pointer rounded-lg border-2 p-3 text-center transition-all sm:order-2 ${
               form.watch("response_type") === "short"
-                ? "border-primary bg-primary/10"
-                : "border-slate-200 bg-white hover:border-slate-300"
+                ? "border-green-600 bg-green-50"
+                : "border-slate-200 bg-white hover:border-green-200"
             }`}
           >
-            <div className="flex items-start gap-2 justify-start text-start">
-              <RadioGroupItem value="short" id="route_short" className="mt-0.5 shrink-0" />
-              <div className="min-w-0">
-                <span className="text-sm font-medium text-primary">קצר ולעניין</span>
-                <p className="mt-0.5 text-xs text-slate-600">
-                  תשובה קצרה, מתומצתת ומעשית (תוך כ־3 שבועות).
+            <div className="flex flex-col items-center gap-2 text-center">
+              <RadioGroupItem value="short" id="route_short" className="shrink-0" />
+              <div>
+                <span className={`text-sm font-medium ${form.watch("response_type") === "short" ? "text-green-700" : "text-green-600"}`}>
+                  קצר ולעניין
+                </span>
+                <p className="mt-0.5 text-xs text-slate-600" dir="rtl">
+                  <span className="font-bold">תשובה קצרה, מתומצתת ומעשית</span>
+                  <br />
+                  (תוך כ־3 שבועות){"\u200E"}.
                 </p>
               </div>
             </div>
           </label>
         </RadioGroup>
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-center text-xs text-slate-500">
           * לעיתים רחוקות ייתכנו עיכובים במענה, אנו עושים כל מאמץ, בעז&quot;ה, לצמצם
           זאת ככל האפשר.
         </p>
       </section>
 
       {/* פרסום והסכמה */}
-      <section className="space-y-3 rounded-xl border border-slate-200/80 bg-white p-4 text-start shadow-sm">
-        <Label className="block">פרסום והסכמה</Label>
-        <RadioGroup
+      <section className="space-y-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
+        <Label className="block text-center text-base font-bold">פרסום והסכמה</Label>
+        <Select
           value={form.watch("publication_consent")}
           onValueChange={(v) => form.setValue("publication_consent", v as "publish" | "blur" | "none")}
-          className="flex flex-row flex-wrap justify-start gap-2"
         >
-          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 justify-start text-start hover:border-slate-300">
-            <RadioGroupItem value="publish" id="pub_publish" className="shrink-0" />
-            <span className="text-xs text-slate-600">אני מסכימה לפרסם את השאלה שלי.</span>
-          </label>
-          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 justify-start text-start hover:border-slate-300">
-            <RadioGroupItem value="blur" id="pub_blur" className="shrink-0" />
-            <span className="text-xs text-slate-600">אני מסכימה לפרסם בטשטוש נתונים.</span>
-          </label>
-          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 justify-start text-start hover:border-slate-300">
-            <RadioGroupItem value="none" id="pub_none" className="shrink-0" />
-            <span className="text-xs text-slate-600">השאלה שלי לא לפרסום.</span>
-          </label>
-        </RadioGroup>
+          <SelectTrigger className="mx-auto max-w-md">
+            <SelectValue placeholder={form.watch("asker_gender") === "M" ? "בחר אפשרות פרסום" : "בחרי אפשרות פרסום"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="publish">
+              <span dir="rtl">
+                {form.watch("asker_gender") === "M" ? "אני מסכים לפרסם את השאלה שלי" : "אני מסכימה לפרסם את השאלה שלי"}
+                {"\u200E"}.
+              </span>
+            </SelectItem>
+            <SelectItem value="blur">
+              <span dir="rtl">
+                {form.watch("asker_gender") === "M" ? "אני מסכים לפרסם בטשטוש נתונים" : "אני מסכימה לפרסם בטשטוש נתונים"}
+                {"\u200E"}.
+              </span>
+            </SelectItem>
+            <SelectItem value="none">
+              <span dir="rtl">השאלה שלי לא לפרסום{"\u200E"}.</span>
+            </SelectItem>
+          </SelectContent>
+        </Select>
 
-        <p className="text-xs leading-relaxed text-slate-600">
-          פעמים רבות השאלות שאנו נשאלים יכולות לסייע למתמודדות נוספות. את חשוב לנו ולעולם לא נפרסם את השאלה שלך אם לא תסכימי.
+        <p className="text-center text-xs leading-relaxed text-slate-600">
+          {form.watch("asker_gender") === "M"
+            ? "פעמים רבות השאלות שאנו נשאלים יכולות לסייע למתמודדים נוספים. אתה חשוב לנו ולעולם לא נפרסם את השאלה שלך אם לא תסכים."
+            : "פעמים רבות השאלות שאנו נשאלים יכולות לסייע למתמודדות נוספות. את חשוב לנו ולעולם לא נפרסם את השאלה שלך אם לא תסכימי."}
         </p>
-        <p className="text-xs leading-relaxed text-slate-600">
-          את התשובות שאנו עונים יש לנו את הזכות לפרסם לתועלת נערות נוספות, בטשטוש פרטים מזהים.
+        <p className="text-center text-xs leading-relaxed text-slate-600">
+          {form.watch("asker_gender") === "M"
+            ? "את התשובות שאנו עונים יש לנו את הזכות לפרסם לתועלת נערים נוספים, בטשטוש פרטים מזהים."
+            : "את התשובות שאנו עונים יש לנו את הזכות לפרסם לתועלת נערות נוספות, בטשטוש פרטים מזהים."}
         </p>
-
-        <div className="flex justify-start pt-1">
-          <label className="flex cursor-pointer items-center gap-2 justify-start text-start">
-            <Checkbox
-              checked={form.watch("terms_accepted")}
-              onCheckedChange={(v) => form.setValue("terms_accepted", !!v)}
-            />
-            <span className="text-xs text-slate-600">
-              קראתי את תנאי השימוש במוקד ואני מאשרת אותם.
-            </span>
-          </label>
-        </div>
-        {form.formState.errors.terms_accepted && (
-          <p className="text-start text-xs text-red-600" role="alert">{form.formState.errors.terms_accepted.message}</p>
-        )}
       </section>
 
       {state?.ok === false && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{state.error}</p>
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-center text-xs text-red-700">{state.error}</p>
       )}
 
-      <div className="flex justify-center pt-1">
-        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+      <div className="flex flex-col items-center gap-2 pt-1">
+        <label className="flex cursor-pointer items-center gap-2 text-center">
+          <Checkbox
+            checked={form.watch("terms_accepted")}
+            onCheckedChange={(v) => form.setValue("terms_accepted", !!v)}
+          />
+          <span className="text-xs text-slate-600" dir="rtl">
+            {form.watch("asker_gender") === "M"
+              ? "קראתי את תנאי השימוש במוקד ואני מאשר אותם"
+              : "קראתי את תנאי השימוש במוקד ואני מאשרת אותם"}
+            {"\u200E"}.
+          </span>
+        </label>
+        {form.formState.errors.terms_accepted && (
+          <p className="text-center text-xs text-red-600" role="alert">{form.formState.errors.terms_accepted.message}</p>
+        )}
+        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="pt-1">
           <Button
             type="submit"
             size="default"
@@ -261,5 +341,6 @@ export function LandingForm() {
         </motion.div>
       </div>
     </form>
+    </>
   );
 }

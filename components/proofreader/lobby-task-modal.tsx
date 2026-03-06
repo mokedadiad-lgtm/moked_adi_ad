@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface LobbyTaskModalProps {
   question: LobbyQuestion | null;
@@ -37,12 +37,21 @@ export function LobbyTaskModal({
   const [returnNote, setReturnNote] = useState("");
   const [showReturnNote, setShowReturnNote] = useState(false);
   const [responseText, setResponseText] = useState("");
+  const returnNoteRef = useRef<HTMLTextAreaElement>(null);
 
   const isMine = question && userId && question.assigned_proofreader_id === userId;
+  const initialResponse = question?.response_text ?? "";
+  const hasResponseChanges = responseText.trim() !== initialResponse.trim();
 
   useEffect(() => {
     if (open && question) setResponseText(question.response_text ?? "");
   }, [open, question?.id, question?.response_text]);
+
+  useEffect(() => {
+    if (showReturnNote && returnNoteRef.current) {
+      returnNoteRef.current.focus();
+    }
+  }, [showReturnNote]);
 
   const reset = () => {
     setError(null);
@@ -83,31 +92,43 @@ export function LobbyTaskModal({
 
   const handleClaim = () => runUpdate({ assigned_proofreader_id: userId });
 
-  const handleRelease = () => runUpdate({ assigned_proofreader_id: null });
+  const handleRelease = () =>
+    runUpdate(
+      { assigned_proofreader_id: null, response_text: responseText.trim() || null },
+      () => onOpenChange(false)
+    );
 
   const notifyLinguistic = () => {
-    if (question) notifyLinguisticNewQuestion(question.id).catch(() => {});
+    if (question) {
+      notifyLinguisticNewQuestion(question.id).then((r) => {
+        if (!r?.ok) console.warn("[עריכה לשונית] שליחת מייל לעורכים:", r?.error ?? "שגיאה");
+      }).catch((e) => console.error("[עריכה לשונית] שגיאה בשליחת מייל:", e));
+    }
   };
 
   const handleDoneToLinguistic = () =>
     runUpdate(
       {
         stage: "in_linguistic_review",
-        assigned_proofreader_id: null,
         proofreader_note: null,
+        response_text: responseText.trim() || null,
       },
-      notifyLinguistic
+      () => {
+        notifyLinguistic();
+        onOpenChange(false);
+      }
     );
 
   const handleReturnToAdmin = () => {
     if (showReturnNote) {
       runUpdate(
         {
-          stage: "in_linguistic_review",
+          stage: "pending_manager",
           assigned_proofreader_id: null,
           proofreader_note: returnNote.trim() || null,
+          response_text: responseText.trim() || null,
         },
-        notifyLinguistic
+        () => onOpenChange(false)
       );
       return;
     }
@@ -119,7 +140,7 @@ export function LobbyTaskModal({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="flex max-h-[90vh] max-w-2xl flex-col gap-4 overflow-hidden"
+        className="flex max-h-[90vh] w-[95vw] max-w-2xl flex-col gap-4 overflow-hidden"
         dir="rtl"
       >
         <DialogHeader className="shrink-0">
@@ -128,6 +149,7 @@ export function LobbyTaskModal({
 
         <div className="min-h-0 flex-1 overflow-y-auto space-y-4 text-start">
           <div>
+            {question.title && <p className="mb-1 text-sm font-medium text-slate-800">{question.title}</p>}
             <p className="mb-1 text-xs font-medium text-secondary">תוכן השאלה</p>
             <ScrollArea className="h-24 rounded-xl border border-card-border bg-slate-50 p-3 text-sm text-start">
               <div className="whitespace-pre-wrap" dir="rtl">{question.content}</div>
@@ -149,11 +171,10 @@ export function LobbyTaskModal({
                 </div>
                 <Button
                   type="button"
-                  variant="outline"
                   size="sm"
-                  className="mt-2"
+                  className="bg-green-600 text-white hover:bg-green-700"
                   onClick={handleSaveResponse}
-                  disabled={pending}
+                  disabled={pending || !hasResponseChanges}
                 >
                   {pending ? "שומר…" : "שמור שינויים"}
                 </Button>
@@ -169,6 +190,7 @@ export function LobbyTaskModal({
             <div>
               <p className="text-xs font-medium text-secondary mb-1">הערה למנהל (אופציונלי)</p>
               <Textarea
+                ref={returnNoteRef}
                 value={returnNote}
                 onChange={(e) => setReturnNote(e.target.value)}
                 placeholder="למשל: צריך הבהרה לגבי..."

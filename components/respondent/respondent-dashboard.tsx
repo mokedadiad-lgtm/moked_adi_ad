@@ -3,13 +3,17 @@
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/page-header";
+import { RoleSwitcher, useHasSidebar } from "@/components/role-switcher";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 import { AnswerModal } from "./answer-modal";
 
 export interface RespondentQuestion {
   id: string;
+  title?: string | null;
   content: string;
   created_at: string;
   asker_age: string | null;
@@ -33,20 +37,21 @@ function truncateSummary(text: string, maxLines = 2): string {
   return lines.length > maxLines ? `${show}…` : show;
 }
 
-const RESPONSE_LABEL: Record<string, string> = { short: "קצר", detailed: "מפורט" };
-const PUB_LABEL: Record<string, string> = {
-  publish: "לפרסם",
-  blur: "בטשטוש",
-  none: "לא לפרסום",
+const RESPONSE_LABEL: Record<string, string> = {
+  short: "קצר ולעניין",
+  detailed: "תשובה מפורטת",
 };
 
 export function RespondentDashboard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const hasSidebar = useHasSidebar();
   const [questions, setQuestions] = useState<RespondentQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<RespondentQuestion | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [isAdminViewing, setIsAdminViewing] = useState(false);
+  const openedFromLink = useRef(false);
 
   const fetchQuestions = useCallback(async () => {
     const supabase = getSupabaseBrowser();
@@ -57,14 +62,14 @@ export function RespondentDashboard() {
     }
     const { data: profile } = await supabase
       .from("profiles")
-      .select("is_admin")
+      .select("is_admin, is_technical_lead")
       .eq("id", user.id)
       .single();
-    setIsAdminViewing(profile?.is_admin === true);
+    setIsAdminViewing(profile?.is_admin === true || profile?.is_technical_lead === true);
 
     const { data, error } = await supabase
       .from("questions")
-      .select("id, content, created_at, asker_age, asker_gender, response_type, publication_consent, response_text")
+      .select("id, title, content, created_at, asker_age, asker_gender, response_type, publication_consent, response_text")
       .eq("stage", "with_respondent")
       .eq("assigned_respondent_id", user.id)
       .order("created_at", { ascending: true });
@@ -82,14 +87,29 @@ export function RespondentDashboard() {
   }, [fetchQuestions]);
 
   const didAutoOpen = useRef(false);
+  const openQuestionId = searchParams.get("open");
+
+  // קישור ממייל עם ?open=QUESTION_ID — לפתוח ישירות את חלון השאלה הזו
+  useEffect(() => {
+    if (openedFromLink.current || loading || !openQuestionId) return;
+    const q = questions.find((x) => x.id === openQuestionId);
+    if (q) {
+      openedFromLink.current = true;
+      didAutoOpen.current = true; // מונע פתיחה מחדש אחרי סגירה (effect של "שאלה אחת")
+      setSelected(q);
+      setModalOpen(true);
+      router.replace("/respondent", { scroll: false });
+    }
+  }, [loading, questions, openQuestionId, router]);
+
   // יש רק שאלה אחת — לפתוח אוטומטית פעם אחת את חלון התשובה כדי שהמשיב יוכל להתחיל לעבוד מיד
   useEffect(() => {
-    if (!loading && questions.length === 1 && !modalOpen && !didAutoOpen.current) {
+    if (!loading && questions.length === 1 && !modalOpen && !didAutoOpen.current && !openQuestionId) {
       didAutoOpen.current = true;
       setSelected(questions[0]);
       setModalOpen(true);
     }
-  }, [loading, questions, modalOpen]);
+  }, [loading, questions, modalOpen, openQuestionId]);
 
   const handleLogout = async () => {
     const supabase = getSupabaseBrowser();
@@ -110,26 +130,20 @@ export function RespondentDashboard() {
 
   const handleAnswerSubmitted = () => {
     closeModal();
+    router.replace("/respondent", { scroll: false });
     fetchQuestions();
   };
 
   return (
     <>
-      <header className="sticky top-0 z-10 border-b border-card-border bg-card py-4 shadow-soft">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4">
-          <h1 className="text-start text-xl font-bold text-primary">שולחן עבודה - משיבים</h1>
-          <div className="flex items-center gap-2">
-            {isAdminViewing && (
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/admin">חזרה ללוח בקרה</Link>
-              </Button>
-            )}
-            <Button variant="outline" size="sm" onClick={handleLogout}>
-              התנתקות
-            </Button>
-          </div>
-        </div>
-      </header>
+      <PageHeader title="שולחן עבודה - משיבים">
+        <RoleSwitcher />
+        {!hasSidebar && (
+          <Button variant="outline" size="sm" onClick={handleLogout}>
+            התנתקות
+          </Button>
+        )}
+      </PageHeader>
 
       <main className="mx-auto max-w-4xl px-4 py-6">
         {loading ? (
@@ -142,7 +156,7 @@ export function RespondentDashboard() {
             <p className="mt-2 text-secondary">
               {isAdminViewing
                 ? "כדי לראות איך משיב רואה שאלות משובצות: הוסף משיב/ה בניהול צוות, שייך/י אליו/ה שאלה בלוח הבקרה (עפרון → שמור ושלח למשיב), ואז התנתק והתחבר עם האימייל והסיסמה של המשיב/ה — או פתח חלון גלישה פרטית והתחבר שם כמשיב/ה."
-                : "אין לך שאלות פתוחות כרגע."}
+                : "אין לך שאלות פתוחות כרגע\u200E."}
             </p>
           </div>
         ) : (
@@ -155,7 +169,8 @@ export function RespondentDashboard() {
                 >
                   <CardContent className="p-4">
                     <p className="text-xs text-secondary">{formatDate(q.created_at)}</p>
-                    <p className="mt-1 line-clamp-2 text-start text-sm text-primary">
+                    {q.title && <p className="mt-1 text-sm font-medium text-slate-800">{q.title}</p>}
+                    <p className={cn("line-clamp-2 text-start text-sm text-primary", q.title && "mt-0.5")}>
                       {truncateSummary(q.content)}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -165,13 +180,15 @@ export function RespondentDashboard() {
                         </span>
                       )}
                       {q.response_type && (
-                        <span className="rounded-md bg-blue-100 px-2 py-0.5 text-xs text-blue-800">
+                        <span
+                          className={cn(
+                            "rounded-md px-2 py-0.5 text-xs",
+                            q.response_type === "short"
+                              ? "bg-green-100 text-green-800"
+                              : "bg-red-100 text-red-800"
+                          )}
+                        >
                           {RESPONSE_LABEL[q.response_type] ?? q.response_type}
-                        </span>
-                      )}
-                      {q.publication_consent && (
-                        <span className="rounded-md bg-violet-100 px-2 py-0.5 text-xs text-violet-800">
-                          {PUB_LABEL[q.publication_consent] ?? q.publication_consent}
                         </span>
                       )}
                     </div>

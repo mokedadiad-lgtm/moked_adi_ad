@@ -1,28 +1,35 @@
-import {
-  getRespondents,
-  getTopicsWithSubTopics,
-} from "@/app/admin/actions";
+import { getEmailCounts, getProofreaderTypes, getTopicsWithSubTopics } from "@/app/admin/actions";
+import { PageHeader } from "@/components/page-header";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { QuestionRow } from "@/lib/types";
-import { ACTIVE_STAGES } from "@/lib/types";
+import { ADMIN_TABLE_STAGES } from "@/lib/types";
 import { AdminDashboard } from "@/components/admin/admin-dashboard";
 
 const BASE_SELECT =
-  "id, stage, content, created_at, asker_age, asker_gender, response_type, publication_consent, assigned_respondent_id, assigned_proofreader_id, response_text, proofreader_note";
+  "id, short_id, stage, title, content, created_at, asker_email, asker_age, asker_gender, response_type, publication_consent, assigned_respondent_id, assigned_proofreader_id, response_text, proofreader_note, pdf_url, proofreader_type_id";
 const EXTENDED_SELECT = `${BASE_SELECT}, topic_id, sub_topic_id, topics(name_he), sub_topics(name_he)`;
 
-type QuestionRowRaw = QuestionRow & {
+type TopicRef = { name_he: string } | { name_he: string }[] | null | undefined;
+type QuestionRowRaw = Omit<QuestionRow, "short_id"> & {
+  short_id?: string | null;
   assigned_respondent_id?: string | null;
   assigned_proofreader_id?: string | null;
   asker_gender?: "M" | "F" | null;
   publication_consent?: "publish" | "blur" | "none" | null;
   topic_id?: string | null;
   sub_topic_id?: string | null;
-  topics?: { name_he: string } | null;
-  sub_topics?: { name_he: string } | null;
+  topics?: TopicRef;
+  sub_topics?: TopicRef;
   response_text?: string | null;
   proofreader_note?: string | null;
+  pdf_url?: string | null;
+  proofreader_type_id?: string | null;
 };
+
+function nameFromRelation(v: TopicRef): string | null {
+  if (v == null) return null;
+  return Array.isArray(v) ? v[0]?.name_he ?? null : v.name_he ?? null;
+}
 
 async function getActiveQuestions(): Promise<QuestionRow[]> {
   const supabase = getSupabaseAdmin();
@@ -30,7 +37,8 @@ async function getActiveQuestions(): Promise<QuestionRow[]> {
   const { data, error } = await supabase
     .from("questions")
     .select(EXTENDED_SELECT)
-    .in("stage", ACTIVE_STAGES)
+    .in("stage", ADMIN_TABLE_STAGES)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   let rows: QuestionRowRaw[];
@@ -38,7 +46,8 @@ async function getActiveQuestions(): Promise<QuestionRow[]> {
     const { data: fallbackData, error: fallbackError } = await supabase
       .from("questions")
       .select(BASE_SELECT)
-      .in("stage", ACTIVE_STAGES)
+      .in("stage", ADMIN_TABLE_STAGES)
+      .is("deleted_at", null)
       .order("created_at", { ascending: false });
     if (fallbackError) return [];
     rows = (fallbackData ?? []) as QuestionRowRaw[];
@@ -58,43 +67,59 @@ async function getActiveQuestions(): Promise<QuestionRow[]> {
     if (profiles) profileNames = Object.fromEntries(profiles.map((p) => [p.id, p.full_name_he ?? ""]));
   }
 
-  return rows.map((r) => ({
+  const withEmail = rows.map((r) => ({
     id: r.id,
+    short_id: r.short_id ?? null,
     stage: r.stage,
+    title: r.title ?? null,
     content: r.content,
     created_at: r.created_at,
+    asker_email: (r as { asker_email?: string | null }).asker_email ?? null,
     asker_age: r.asker_age,
     asker_gender: r.asker_gender ?? null,
     response_type: r.response_type,
     publication_consent: r.publication_consent ?? null,
-    respondent_name: r.assigned_respondent_id ? profileNames[r.assigned_respondent_id] ?? null : null,
-    proofreader_name: r.assigned_proofreader_id ? profileNames[r.assigned_proofreader_id] ?? null : null,
+    respondent_name: r.assigned_respondent_id ? (profileNames[r.assigned_respondent_id]?.trim() || null) : null,
+    proofreader_name: r.assigned_proofreader_id ? (profileNames[r.assigned_proofreader_id]?.trim() || null) : null,
     topic_id: r.topic_id ?? null,
     sub_topic_id: r.sub_topic_id ?? null,
-    topic_name_he: r.topics?.name_he ?? null,
-    sub_topic_name_he: r.sub_topics?.name_he ?? null,
+    topic_name_he: nameFromRelation(r.topics),
+    sub_topic_name_he: nameFromRelation(r.sub_topics),
     response_text: r.response_text ?? null,
     proofreader_note: r.proofreader_note ?? null,
+    pdf_url: r.pdf_url ?? null,
+    proofreader_type_id: r.proofreader_type_id ?? null,
   }));
+
+  return withEmail;
 }
 
-export default async function AdminDashboardPage() {
-  const [questions, respondents, topics] = await Promise.all([
+export const revalidate = 0;
+
+export default async function AdminDashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ open?: string }>;
+}) {
+  const params = await searchParams;
+  const [questions, topics, proofreaderTypes] = await Promise.all([
     getActiveQuestions(),
-    getRespondents(),
     getTopicsWithSubTopics(),
+    getProofreaderTypes(),
   ]);
+
+  const uniqueEmails = [...new Set(questions.map((r) => (r.asker_email ?? "").trim().toLowerCase()).filter(Boolean))];
+  const emailCounts = uniqueEmails.length > 0 ? await getEmailCounts(uniqueEmails) : {};
 
   return (
     <div className="space-y-6">
-      <header className="border-b border-slate-200/80 pb-4 text-start">
-        <h1 className="text-2xl font-bold text-slate-800">לוח בקרה</h1>
-        <p className="mt-1 text-sm text-slate-500">סקירה וניהול משימות פעילות</p>
-      </header>
+      <PageHeader title="לוח בקרה" subtitle="סקירה וניהול משימות פעילות" />
       <AdminDashboard
         questions={questions}
-        respondents={respondents}
         topics={topics}
+        proofreaderTypes={proofreaderTypes}
+        initialOpenQuestionId={params.open ?? undefined}
+        emailCounts={emailCounts}
       />
     </div>
   );

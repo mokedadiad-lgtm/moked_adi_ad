@@ -53,6 +53,8 @@ export function RichTextEditor({
   const ref = useRef<HTMLDivElement>(null);
   const [footnoteTexts, setFootnoteTexts] = useState<Record<string, string>>({});
   const [orderedFnIds, setOrderedFnIds] = useState<string[]>([]);
+  const [focusFootnoteId, setFocusFootnoteId] = useState<string | null>(null);
+  const footnoteInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const renumberAndCapture = useCallback(() => {
     if (!ref.current) return;
@@ -99,6 +101,19 @@ export function RichTextEditor({
     setFootnoteTexts(initial);
   }, [value]);
 
+  // מעבר אוטומטי לשדה ההערה אחרי הוספת הערת שוליים
+  useEffect(() => {
+    if (!focusFootnoteId || !orderedFnIds.includes(focusFootnoteId)) return;
+    const t = setTimeout(() => {
+      const el = footnoteInputRefs.current[focusFootnoteId];
+      if (el) {
+        el.focus();
+        setFocusFootnoteId(null);
+      }
+    }, 50);
+    return () => clearTimeout(t);
+  }, [focusFootnoteId, orderedFnIds]);
+
   const exec = useCallback(
     (cmd: string, value?: string) => {
       document.execCommand(cmd, false, value);
@@ -125,6 +140,7 @@ export function RichTextEditor({
     range.insertNode(sup);
     range.collapse(false);
     setFootnoteTexts((prev) => ({ ...prev, [id]: "" }));
+    setFocusFootnoteId(id);
     ref.current?.focus();
     setTimeout(capture, 0);
   }, [capture]);
@@ -175,7 +191,7 @@ export function RichTextEditor({
         ref={ref}
         contentEditable={!disabled}
         dir="rtl"
-        className="min-h-[280px] w-full rounded-b-xl border border-card-border bg-white p-4 text-start focus:outline-none focus:ring-2 focus:ring-primary/20 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:text-base [&_h3]:font-semibold"
+        className="min-h-[3rem] max-h-[400px] overflow-y-auto w-full rounded-b-xl border border-card-border bg-white p-4 text-start focus:outline-none focus:ring-2 focus:ring-primary/20 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:text-base [&_h3]:font-semibold"
         onInput={capture}
         onBlur={capture}
         data-placeholder={placeholder}
@@ -189,6 +205,9 @@ export function RichTextEditor({
               <div key={id} className="flex items-start gap-2 text-start">
                 <span className="mt-2 shrink-0 text-sm font-medium text-primary">[{i + 1}]</span>
                 <input
+                  ref={(el) => {
+                    footnoteInputRefs.current[id] = el;
+                  }}
                   type="text"
                   value={footnoteTexts[id] ?? ""}
                   onChange={(e) => setFootnoteText(id, e.target.value)}

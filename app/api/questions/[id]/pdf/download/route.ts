@@ -1,5 +1,4 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { isAdminOrLinguisticOrTechnicalLead } from "@/lib/supabase/server-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 const BUCKET = "response-pdfs";
@@ -10,8 +9,8 @@ function sanitizeFilename(s: string): string {
 
 /**
  * GET: הורדת ה-PDF עם שם קובץ מתאים.
- * for=asker → דורש token תקף (נשלח למייל השואל). תשובה ו[כותרת].pdf
- * for=archive → דורש אימות אדמין/עורך לשוני. [תאריך]_[ID]_[נושא]_[תת נושא].pdf
+ * for=asker → תשובה ו[כותרת השאלה].pdf
+ * for=archive → [תאריך]_[ID]_[נושא]_[תת נושא].pdf
  */
 export async function GET(
   request: NextRequest,
@@ -19,7 +18,6 @@ export async function GET(
 ) {
   const { id } = await params;
   const forParam = request.nextUrl.searchParams.get("for") ?? "asker";
-  const token = request.nextUrl.searchParams.get("token") ?? "";
   const inline = request.nextUrl.searchParams.get("view") === "1";
   if (!id) {
     return NextResponse.json({ error: "חסר מזהה שאלה" }, { status: 400 });
@@ -28,7 +26,7 @@ export async function GET(
   const supabase = getSupabaseAdmin();
   const { data: question, error: qErr } = await supabase
     .from("questions")
-    .select("title, short_id, topic_id, sub_topic_id, created_at, asker_download_token, asker_download_token_expires_at")
+    .select("title, short_id, topic_id, sub_topic_id, created_at")
     .eq("id", id)
     .single();
 
@@ -42,24 +40,7 @@ export async function GET(
     topic_id?: string | null;
     sub_topic_id?: string | null;
     created_at?: string | null;
-    asker_download_token?: string | null;
-    asker_download_token_expires_at?: string | null;
   };
-
-  if (forParam === "asker") {
-    if (!token || token !== q.asker_download_token) {
-      return NextResponse.json({ error: "קישור לא תקף או שפג תוקפו" }, { status: 403 });
-    }
-    const expiresAt = q.asker_download_token_expires_at ? new Date(q.asker_download_token_expires_at).getTime() : 0;
-    if (Date.now() > expiresAt) {
-      return NextResponse.json({ error: "קישור ההורדה פג תוקף" }, { status: 403 });
-    }
-  } else {
-    const allowed = await isAdminOrLinguisticOrTechnicalLead();
-    if (!allowed) {
-      return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
-    }
-  }
 
   let topicName = "";
   let subTopicName = "";

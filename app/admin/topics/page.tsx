@@ -3,6 +3,7 @@ import {
   getTopicsWithSubTopics,
 } from "@/app/admin/actions";
 import { TopicsManager } from "@/components/admin/topics-manager";
+import { PageHeader } from "@/components/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +15,7 @@ export default async function AdminTopicsPage() {
 
   return (
     <div className="space-y-6">
-      <header className="border-b border-slate-200/80 pb-4 text-start">
-        <h1 className="text-2xl font-bold text-slate-800">נושאים וסוגי הגהות</h1>
-        <p className="mt-1 text-sm text-slate-500">ניהול נושאים, תת־נושאים וסוגי מגיהים</p>
-      </header>
+      <PageHeader title="נושאים וסוגי הגהות" subtitle="ניהול נושאים, תת־נושאים וסוגי מגיהים" />
       <TopicsManager
         proofreaderTypes={proofreaderTypes}
         topics={topics}

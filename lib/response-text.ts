@@ -26,7 +26,7 @@ export function parseResponseRich(value: string | null | undefined): ParsedRespo
   return { bodyHtml: body, footnotes };
 }
 
-const ALLOWED_TAGS = new Set(["p", "div", "h2", "h3", "strong", "b", "sup", "span", "br"]);
+const ALLOWED_TAGS = new Set(["p", "div", "h2", "h3", "strong", "b", "sup", "span", "br", "ul", "ol", "li"]);
 
 /** Decode HTML entities so PDF/text doesn't show &amp; # etc. */
 function decodeHtmlEntities(s: string): string {

@@ -4,12 +4,16 @@ import { responseToPlainText } from "@/lib/response-text";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { PageHeader } from "@/components/page-header";
+import { RoleSwitcher, useHasSidebar } from "@/components/role-switcher";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 import { LobbyTaskModal } from "./lobby-task-modal";
 
 export interface LobbyQuestion {
   id: string;
+  title?: string | null;
   content: string;
   response_text: string | null;
   created_at: string;
@@ -31,11 +35,15 @@ function truncateSummary(text: string, maxLen = 100): string {
 
 export function ProofreaderDashboard() {
   const router = useRouter();
+  const hasSidebar = useHasSidebar();
   const [questions, setQuestions] = useState<LobbyQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<LobbyQuestion | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const openQuestionId = searchParams.get("open");
+  const openedFromLink = useRef(false);
 
   const fetchQuestions = useCallback(async () => {
     const supabase = getSupabaseBrowser();
@@ -51,11 +59,11 @@ export function ProofreaderDashboard() {
     }
     const { data: profile } = await supabase
       .from("profiles")
-      .select("is_admin, is_proofreader, proofreader_type_id")
+      .select("is_admin, is_technical_lead, is_proofreader, proofreader_type_id")
       .eq("id", user.id)
       .single();
-    const isAdmin = profile?.is_admin === true;
-    const canLobby = isAdmin || (profile?.is_proofreader && profile?.proofreader_type_id);
+    const isAdminOrTechLead = profile?.is_admin === true || profile?.is_technical_lead === true;
+    const canLobby = isAdminOrTechLead || (profile?.is_proofreader && profile?.proofreader_type_id);
     if (!canLobby) {
       router.replace("/admin");
       return;
@@ -63,7 +71,7 @@ export function ProofreaderDashboard() {
     setUserId(user.id);
     const { data, error } = await supabase
       .from("questions")
-      .select("id, content, response_text, created_at, assigned_proofreader_id")
+      .select("id, title, content, response_text, created_at, assigned_proofreader_id")
       .eq("stage", "in_proofreading_lobby")
       .order("created_at", { ascending: true });
 
@@ -78,6 +86,18 @@ export function ProofreaderDashboard() {
   useEffect(() => {
     fetchQuestions();
   }, [fetchQuestions]);
+
+  // קישור עם ?open=QUESTION_ID — לפתוח ישירות את חלון השאלה
+  useEffect(() => {
+    if (openedFromLink.current || loading || !openQuestionId || questions.length === 0) return;
+    const q = questions.find((x) => x.id === openQuestionId);
+    if (q) {
+      openedFromLink.current = true;
+      setSelected(q);
+      setModalOpen(true);
+      router.replace("/proofreader", { scroll: false });
+    }
+  }, [loading, questions, openQuestionId, router]);
 
   const handleLogout = async () => {
     const supabase = getSupabaseBrowser();
@@ -101,6 +121,7 @@ export function ProofreaderDashboard() {
 
   const handleActionDone = () => {
     fetchQuestions();
+    fetch("/api/revalidate", { method: "POST", body: JSON.stringify({ path: "/admin" }) }).catch(() => {});
   };
 
   // אחרי רענון: אם השאלה כבר לא בתור — לסגור מודאל; אם עדיין בתור — לעדכן את השאלה (למשל אחרי "תפוס משימה") כדי להציג עריכה
@@ -117,14 +138,14 @@ export function ProofreaderDashboard() {
 
   return (
     <>
-      <header className="sticky top-0 z-10 border-b border-card-border bg-card py-4 shadow-soft">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4">
-          <h1 className="text-start text-xl font-bold text-primary">לובי הגהה</h1>
+      <PageHeader title="לובי הגהה">
+        <RoleSwitcher />
+        {!hasSidebar && (
           <Button variant="outline" size="sm" onClick={handleLogout}>
             התנתקות
           </Button>
-        </div>
-      </header>
+        )}
+      </PageHeader>
 
       <main className="mx-auto max-w-4xl px-4 py-6 space-y-8">
         {loading ? (
@@ -143,12 +164,13 @@ export function ProofreaderDashboard() {
                       >
                         <CardContent className="p-4">
                           <p className="text-xs text-secondary">{formatDate(q.created_at)}</p>
-                          <p className="mt-1 line-clamp-2 text-start text-sm text-primary">
+                          {q.title && <p className="mt-1 text-sm font-medium text-slate-800">{q.title}</p>}
+                          <p className={cn("mt-1 line-clamp-2 text-start text-sm text-primary", q.title && "mt-0.5")}>
                             {truncateSummary(q.content)}
                           </p>
                           {q.response_text && (
                             <p className="mt-2 line-clamp-1 text-start text-xs text-slate-600">
-                              תשובה: {truncateSummary(responseToPlainText(q.response_text), 80)}
+                              תשובה{"\u200E"}: {truncateSummary(responseToPlainText(q.response_text), 80)}
                             </p>
                           )}
                         </CardContent>
@@ -164,7 +186,7 @@ export function ProofreaderDashboard() {
               {available.length === 0 && mine.length === 0 ? (
                 <div className="rounded-2xl border border-card-border bg-card p-12 text-start shadow-soft">
                   <p className="text-lg font-medium text-primary">אין משימות בהמתנה</p>
-                  <p className="mt-2 text-secondary">משימות חדשות יופיעו כאן כשמשיבים ישלחו תשובות.</p>
+                  <p className="mt-2 text-secondary">משימות חדשות יופיעו כאן כשמשיבים ישלחו תשובות{"\u200E"}.</p>
                 </div>
               ) : (
                 <ul className="space-y-3">
@@ -176,12 +198,13 @@ export function ProofreaderDashboard() {
                       >
                         <CardContent className="p-4">
                           <p className="text-xs text-secondary">{formatDate(q.created_at)}</p>
-                          <p className="mt-1 line-clamp-2 text-start text-sm text-primary">
+                          {q.title && <p className="mt-1 text-sm font-medium text-slate-800">{q.title}</p>}
+                          <p className={cn("mt-1 line-clamp-2 text-start text-sm text-primary", q.title && "mt-0.5")}>
                             {truncateSummary(q.content)}
                           </p>
                           {q.response_text && (
                             <p className="mt-2 line-clamp-1 text-start text-xs text-slate-600">
-                              תשובה: {truncateSummary(responseToPlainText(q.response_text), 80)}
+                              תשובה{"\u200E"}: {truncateSummary(responseToPlainText(q.response_text), 80)}
                             </p>
                           )}
                         </CardContent>

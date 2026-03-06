@@ -50,7 +50,8 @@ export function AddTeamMemberModal({
   const [is_respondent, setIsRespondent] = useState(false);
   const [is_proofreader, setIsProofreader] = useState(false);
   const [is_linguistic_editor, setIsLinguisticEditor] = useState(false);
-  const [proofreader_type_id, setProofreaderTypeId] = useState("");
+  const [is_technical_lead, setIsTechnicalLead] = useState(false);
+  const [proofreader_type_ids, setProofreaderTypeIds] = useState<string[]>([]);
   const [communication_preference, setCommunicationPreference] = useState<"whatsapp" | "email" | "both">("email");
   const [phone, setPhone] = useState("");
   const [concurrency_limit, setConcurrencyLimit] = useState(1);
@@ -68,7 +69,8 @@ export function AddTeamMemberModal({
     setIsRespondent(false);
     setIsProofreader(false);
     setIsLinguisticEditor(false);
-    setProofreaderTypeId(proofreaderTypes[0]?.id ?? "");
+    setIsTechnicalLead(false);
+    setProofreaderTypeIds([]);
     setCommunicationPreference("email");
     setPhone("");
     setConcurrencyLimit(1);
@@ -92,6 +94,10 @@ export function AddTeamMemberModal({
       setError("נא להזין סיסמה (לפחות 6 תווים).");
       return;
     }
+    if (is_proofreader && proofreader_type_ids.length === 0) {
+      setError("מגיה/ה חייב/ת שיהיה לפחות סוג הגהה אחד.");
+      return;
+    }
     setPending(true);
     setError(null);
     const result = await createTeamMember({
@@ -102,7 +108,8 @@ export function AddTeamMemberModal({
       is_respondent,
       is_proofreader,
       is_linguistic_editor,
-      proofreader_type_id: is_proofreader ? (proofreader_type_id || null) : null,
+      is_technical_lead,
+      proofreader_type_ids: is_proofreader ? proofreader_type_ids : [],
       communication_preference,
       phone: phone.trim() || null,
       concurrency_limit,
@@ -121,7 +128,7 @@ export function AddTeamMemberModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col gap-4 overflow-hidden" dir="rtl">
+      <DialogContent className="flex max-h-[90vh] w-[95vw] max-w-2xl flex-col gap-4 overflow-hidden" dir="rtl">
         <DialogHeader className="shrink-0">
           <DialogTitle>הוסף איש צוות</DialogTitle>
         </DialogHeader>
@@ -190,25 +197,33 @@ export function AddTeamMemberModal({
                 <Checkbox checked={is_linguistic_editor} onCheckedChange={(v) => setIsLinguisticEditor(!!v)} />
                 <span className="text-sm text-slate-600">עורך/ת לשוני/ת</span>
               </label>
+              <label className="flex cursor-pointer items-center gap-3 justify-start">
+                <Checkbox checked={is_technical_lead} onCheckedChange={(v) => setIsTechnicalLead(!!v)} />
+                <span className="text-sm text-slate-600">אחראי טכני</span>
+              </label>
             </div>
           </div>
 
           {is_proofreader && (
             <div className="space-y-2">
-              <Label className="text-right">סוג מגיה/ה</Label>
-              <Select value={proofreader_type_id} onValueChange={setProofreaderTypeId}>
-                <SelectTrigger className="w-full text-right">
-                  <SelectValue placeholder="בחר/י סוג" />
-                </SelectTrigger>
-                <SelectContent>
-                  {proofreaderTypes.map((pt) => (
-                    <SelectItem key={pt.id} value={pt.id}>{pt.name_he}</SelectItem>
-                  ))}
-                  {proofreaderTypes.length === 0 && (
-                    <SelectItem value="_none" disabled>אין סוגים מוגדרים</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+              <Label className="text-right">סוגי הגהה (אפשר לבחור כמה)</Label>
+              <div className="flex flex-wrap gap-4 justify-end">
+                {proofreaderTypes.map((pt) => (
+                  <label key={pt.id} className="flex cursor-pointer items-center gap-2">
+                    <Checkbox
+                      checked={proofreader_type_ids.includes(pt.id)}
+                      onCheckedChange={(checked) => {
+                        if (checked) setProofreaderTypeIds((prev) => [...prev, pt.id]);
+                        else setProofreaderTypeIds((prev) => prev.filter((id) => id !== pt.id));
+                      }}
+                    />
+                    <span className="text-sm text-slate-700">{pt.name_he}</span>
+                  </label>
+                ))}
+                {proofreaderTypes.length === 0 && (
+                  <span className="text-sm text-slate-500">אין סוגים מוגדרים</span>
+                )}
+              </div>
             </div>
           )}
 
@@ -303,7 +318,7 @@ export function AddTeamMemberModal({
                     </label>
                   ))}
                   {categories.length === 0 && (
-                    <span className="block text-right text-sm text-secondary">אין קטגוריות במערכת. הרץ מיגרציות Supabase (כולל seed קטגוריות).</span>
+                    <span className="block text-right text-sm text-secondary">אין קטגוריות במערכת. הרץ מיגרציות Supabase (כולל seed קטגוריות){"\u200E"}.</span>
                   )}
                 </div>
               </div>
@@ -320,7 +335,7 @@ export function AddTeamMemberModal({
           <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
             ביטול
           </Button>
-          <Button type="button" onClick={handleSubmit} disabled={pending}>
+          <Button type="button" variant="default" className="bg-primary" onClick={handleSubmit} disabled={pending}>
             {pending ? "יוצר…" : "הוסף איש צוות"}
           </Button>
         </DialogFooter>

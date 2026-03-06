@@ -1,6 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { sendPdfToAsker } from "@/lib/email";
-import { requireAdminOrLinguistic } from "@/lib/auth-api";
 import { NextResponse } from "next/server";
 
 const APP_URL =
@@ -9,17 +8,11 @@ const APP_URL =
 
 /**
  * POST: שולח את התשובה (קישור ל-PDF) למייל השואל, מעדכן שלב ל-sent_archived ומעדכן sent_at.
- * דורש אימות: אדמין או עורך לשוני.
  */
 export async function POST(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireAdminOrLinguistic(request);
-  if (!auth.ok) {
-    return NextResponse.json({ error: auth.message }, { status: auth.status });
-  }
-
   const { id } = await params;
   if (!id) {
     return NextResponse.json({ error: "חסר מזהה שאלה" }, { status: 400 });
@@ -52,11 +45,7 @@ export async function POST(
     );
   }
 
-  const crypto = await import("crypto");
-  const askerDownloadToken = crypto.randomBytes(32).toString("hex");
-  const tokenExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
-
-  const downloadUrlForAsker = `${APP_URL}/api/questions/${id}/pdf/download?for=asker&token=${askerDownloadToken}`;
+  const downloadUrlForAsker = `${APP_URL}/api/questions/${id}/pdf/download?for=asker`;
   const questionTitle = (question.title as string | null)?.trim() ?? "";
   const sendResult = await sendPdfToAsker(email, downloadUrlForAsker, questionTitle);
   if (!sendResult.ok) {
@@ -72,8 +61,6 @@ export async function POST(
       stage: "sent_archived",
       sent_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      asker_download_token: askerDownloadToken,
-      asker_download_token_expires_at: tokenExpiresAt,
     })
     .eq("id", id);
 

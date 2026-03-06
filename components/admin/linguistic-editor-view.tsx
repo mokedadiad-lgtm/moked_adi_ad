@@ -5,9 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { QuestionRow } from "@/lib/types";
 import { STAGE_LABELS } from "@/lib/types";
-import { getAuthHeaders } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 function truncate(text: string, max = 80): string {
@@ -21,10 +20,25 @@ interface LinguisticEditorViewProps {
 
 export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const openQuestionId = searchParams.get("open");
+  const openedFromLink = useRef(false);
   const [selected, setSelected] = useState<QuestionRow | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
   const handleSaveSuccess = () => router.refresh();
+
+  // קישור עם ?open=QUESTION_ID — לפתוח ישירות את חלון השאלה
+  useEffect(() => {
+    if (openedFromLink.current || !openQuestionId || questions.length === 0) return;
+    const q = questions.find((x) => x.id === openQuestionId);
+    if (q) {
+      openedFromLink.current = true;
+      setSelected(q);
+      setModalOpen(true);
+      router.replace("/admin/linguistic", { scroll: false });
+    }
+  }, [questions, openQuestionId, router]);
 
   const [pdfPending, setPdfPending] = useState<string | null>(null);
   const [sendPending, setSendPending] = useState<string | null>(null);
@@ -32,12 +46,10 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
   const handleCreatePdf = async (questionId: string) => {
     setPdfPending(questionId);
     try {
-      const headers = await getAuthHeaders();
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 90_000);
       const res = await fetch(`/api/questions/${questionId}/pdf`, {
         method: "POST",
-        headers,
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -46,8 +58,13 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
         alert(data?.error ?? "שגיאה ביצירת PDF");
         return;
       }
-      const data = (await res.json()) as { pdf_url?: string };
+      const data = (await res.json()) as { pdf_url?: string; pdf_generated_at?: string };
       if (data.pdf_url) {
+        setSelected((prev) =>
+          prev?.id === questionId
+            ? { ...prev, pdf_url: data.pdf_url!, pdf_generated_at: data.pdf_generated_at ?? null }
+            : prev
+        );
         router.refresh();
       }
     } catch (err) {
@@ -69,8 +86,7 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
     if (!confirm(`לשלוח את התשובה למייל ${q.asker_email} ולעבור לארכיון?`)) return;
     setSendPending(q.id);
     try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`/api/questions/${q.id}/send`, { method: "POST", headers });
+      const res = await fetch(`/api/questions/${q.id}/send`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         alert(data?.error ?? "שגיאה בשליחה");
@@ -87,7 +103,7 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
   if (questions.length === 0) {
     return (
       <div className="rounded-2xl border border-card-border bg-card p-12 text-start">
-        <p className="text-secondary">אין שאלות בשלב עריכה לשונית או מוכנות לשליחה.</p>
+        <p className="text-secondary">אין שאלות בשלב עריכה לשונית או מוכנות לשליחה{"\u200E"}.</p>
       </div>
     );
   }
@@ -113,19 +129,23 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
                     }}
                   >
                     <p className="text-xs text-secondary">
-                      {q.id.slice(0, 8)}… · {STAGE_LABELS[q.stage]}
+                      {q.short_id ?? `${q.id.slice(0, 8)}…`} · {STAGE_LABELS[q.stage]}
                     </p>
-                    <p className="mt-1 line-clamp-2 text-start text-sm text-primary" dir="rtl">
+                    {q.title && (
+                      <p className="mt-1 text-sm font-medium text-slate-800" dir="rtl">{q.title}</p>
+                    )}
+                    <p className={cn("line-clamp-2 text-start text-sm text-primary", q.title && "mt-0.5")} dir="rtl">
                       {truncate(q.content)}
                     </p>
                     {q.proofreader_note && (
-                      <p className="mt-2 text-xs text-amber-700">הערת מגיה: {truncate(q.proofreader_note, 60)}</p>
+                      <p className="mt-2 text-xs text-amber-700">הערת מגיה{"\u200E"}: {truncate(q.proofreader_note, 60)}</p>
                     )}
                   </div>
-                  <div className="flex shrink-0 flex-wrap gap-2">
+                  <div className="flex shrink-0">
                     <Button
-                      variant="outline"
+                      variant="default"
                       size="sm"
+                      className="bg-primary"
                       onClick={() => {
                         setSelected(q);
                         setModalOpen(true);
@@ -133,47 +153,6 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
                     >
                       ערוך
                     </Button>
-                    {q.pdf_url ? (
-                      <>
-                        <Button variant="outline" size="sm" asChild>
-                          <a href={q.pdf_url!} target="_blank" rel="noopener noreferrer">
-                            צפה ב-PDF
-                          </a>
-                        </Button>
-                        <Button variant="default" size="sm" className="bg-primary" asChild>
-                          <a href={q.pdf_url!} download={`response-${q.id.slice(0, 8)}.pdf`}>
-                            הורד PDF
-                          </a>
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleCreatePdf(q.id)}
-                          disabled={pdfPending === q.id}
-                        >
-                          {pdfPending === q.id ? "מייצר…" : "יצור PDF מחדש"}
-                        </Button>
-                        <Button
-                          variant="default"
-                          size="sm"
-                          className="bg-emerald-600 hover:bg-emerald-700"
-                          onClick={() => handleSendAndArchive(q)}
-                          disabled={sendPending === q.id || !q.asker_email?.trim()}
-                        >
-                          {sendPending === q.id ? "שולח…" : "שלח לשואל וארכב"}
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => handleCreatePdf(q.id)}
-                        disabled={pdfPending === q.id}
-                        className="bg-primary"
-                      >
-                        {pdfPending === q.id ? "מייצר…" : "יצירת PDF"}
-                      </Button>
-                    )}
                   </div>
                 </div>
               </CardContent>
@@ -190,6 +169,11 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
           if (!open) setSelected(null);
         }}
         onSaveSuccess={handleSaveSuccess}
+        showPdfActions
+        onCreatePdf={handleCreatePdf}
+        onSendAndArchive={handleSendAndArchive}
+        pdfPending={selected ? pdfPending === selected.id : false}
+        sendPending={selected ? sendPending === selected.id : false}
       />
     </>
   );

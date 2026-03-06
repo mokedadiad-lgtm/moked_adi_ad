@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { sendAssignmentLinkToRespondent, sendInactivityReminder } from "@/lib/email";
+import { sendAssignmentLinkToRespondent, sendInactivityReminder, sendManualReminderToRespondent } from "@/lib/email";
+import { notifyLobbyNewQuestion, notifyLinguisticNewQuestion } from "@/app/actions/notifications";
 import type { QuestionStage } from "@/lib/types";
+import { ADMIN_TABLE_STAGES } from "@/lib/types";
 
 function revalidateAdminTopics() {
   revalidatePath("/admin/topics");
@@ -28,6 +30,22 @@ export async function getRespondents(): Promise<RespondentOption[]> {
       .eq("is_respondent", true)
       .order("full_name_he");
 
+    if (error) return [];
+    return (data ?? []).map((p) => ({ id: p.id, full_name_he: p.full_name_he ?? null }));
+  } catch {
+    return [];
+  }
+}
+
+/** רשימת מגיהים לסינון בנתונים */
+export async function getProofreadersList(): Promise<RespondentOption[]> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, full_name_he")
+      .eq("is_proofreader", true)
+      .order("full_name_he");
     if (error) return [];
     return (data ?? []).map((p) => ({ id: p.id, full_name_he: p.full_name_he ?? null }));
   } catch {
@@ -78,12 +96,13 @@ export async function getRespondentsWithEligibility(
       .select("assigned_respondent_id, sent_at")
       .in("assigned_respondent_id", ids)
       .eq("stage", "sent_archived")
-      .not("sent_at", "is", null)
-      .order("sent_at", { ascending: false });
+      .not("sent_at", "is", null);
     const lastSentByRespondent: Record<string, string> = {};
     for (const q of lastSent ?? []) {
-      if (q.assigned_respondent_id && q.sent_at && !lastSentByRespondent[q.assigned_respondent_id]) {
-        lastSentByRespondent[q.assigned_respondent_id] = q.sent_at;
+      if (q.assigned_respondent_id && q.sent_at) {
+        const id = q.assigned_respondent_id;
+        const existing = lastSentByRespondent[id];
+        if (!existing || new Date(q.sent_at) > new Date(existing)) lastSentByRespondent[id] = q.sent_at;
       }
     }
 
@@ -127,17 +146,20 @@ export type SendReminderResult = { ok: true } | { ok: false; error: string };
 
 export async function sendReminderToRespondent(questionId: string): Promise<SendReminderResult> {
   try {
+    console.log("[sendReminderToRespondent] started for question:", questionId);
     const supabase = getSupabaseAdmin();
     const { data: q, error: qe } = await supabase
       .from("questions")
-      .select("content, assigned_respondent_id")
+      .select("assigned_respondent_id, topic_id, sub_topic_id, topics(name_he), sub_topics(name_he)")
       .eq("id", questionId)
       .single();
     if (qe || !q?.assigned_respondent_id) return { ok: false, error: "שאלה או משיב לא נמצאו" };
+    const topicName = (q as any)?.topics?.name_he ?? null;
+    const subTopicName = (q as any)?.sub_topics?.name_he ?? null;
     const { data: authUser } = await supabase.auth.admin.getUserById(q.assigned_respondent_id);
     const email = authUser?.user?.email?.trim();
     if (!email) return { ok: false, error: "לא נמצא אימייל למשיב/ה" };
-    const res = await sendInactivityReminder(email, "respondent", q.content?.slice(0, 80));
+    const res = await sendManualReminderToRespondent(email, topicName, subTopicName);
     return res.ok ? { ok: true } : { ok: false, error: res.error };
   } catch (e) {
     return { ok: false, error: safeError((e as Error)?.message) };
@@ -146,6 +168,7 @@ export async function sendReminderToRespondent(questionId: string): Promise<Send
 
 export async function sendReminderToProofreaders(questionId: string): Promise<SendReminderResult> {
   try {
+    console.log("[sendReminderToProofreaders] started for question:", questionId);
     const supabase = getSupabaseAdmin();
     const { data: q, error: qe } = await supabase
       .from("questions")
@@ -154,18 +177,37 @@ export async function sendReminderToProofreaders(questionId: string): Promise<Se
       .single();
     if (qe || !q) return { ok: false, error: "שאלה לא נמצאה" };
     const question = q as { content?: string; proofreader_type_id?: string | null };
-    const builder = supabase.from("profiles").select("id").eq("is_proofreader", true);
-    const { data: profiles } = question.proofreader_type_id
-      ? await builder.eq("proofreader_type_id", question.proofreader_type_id)
-      : await builder;
-    if (!profiles?.length) return { ok: false, error: "לא נמצאו מגיהים רלוונטיים" };
-    const ids = profiles.map((p) => p.id);
+    let profileIds = new Set<string>();
+    const allProof = await supabase.from("profiles").select("id, proofreader_type_id").eq("is_proofreader", true);
+    if (allProof.error) return { ok: false, error: `שגיאה: ${allProof.error.message}` };
+    const allProofreaders = allProof.data ?? [];
+    if (question.proofreader_type_id) {
+      for (const p of allProofreaders) {
+        if (p.proofreader_type_id === question.proofreader_type_id) profileIds.add(p.id);
+      }
+      const { data: fromJunction } = await supabase
+        .from("profile_proofreader_types")
+        .select("profile_id")
+        .eq("proofreader_type_id", question.proofreader_type_id);
+      for (const r of fromJunction ?? []) profileIds.add(r.profile_id);
+    } else {
+      for (const p of allProofreaders) profileIds.add(p.id);
+    }
+    if (profileIds.size === 0) {
+      return { ok: false, error: question.proofreader_type_id
+        ? "לא נמצאו מגיהים בקטגוריה הרלוונטית לשאלה. הוסף מגיה/ה עם הסוג המתאים או סמן סוג הגהה לשאלה."
+        : "לא נמצאו מגיהים במערכת. הוסף מגיה/ה בניהול צוות וסמן סוג הגהה." };
+    }
+    const ids = Array.from(profileIds);
     const emails: string[] = [];
     for (const id of ids) {
       const { data: u } = await supabase.auth.admin.getUserById(id);
       if (u?.user?.email?.trim()) emails.push(u.user.email.trim());
     }
     if (emails.length === 0) return { ok: false, error: "לא נמצא אימייל למגיהים" };
+
+    console.log("[sendReminderToProofreaders] נשלחת תזכורת לכתובות:", emails);
+
     for (const to of emails) {
       await sendInactivityReminder(to, "proofreader", question.content?.slice(0, 80));
     }
@@ -208,14 +250,33 @@ export async function assignQuestion(
 
     if (error) return { ok: false, error: error.message };
 
-    // שליחת מייל למשיב אם ההעדפה היא email או both
+    // שליחת מייל למשיב אם ההעדפה היא email או both (נושא ייחודי לפי משימה כדי שלא יישרך עם הודעות קודמות)
     try {
+      const { data: qRow } = await supabase
+        .from("questions")
+        .select("short_id")
+        .eq("id", questionId)
+        .single();
+      const questionLabel = (qRow as { short_id?: string | null } | null)?.short_id ?? null;
+
+      let topicName: string | null = null;
+      let subTopicName: string | null = null;
+      if (topicId) {
+        const { data: t } = await supabase.from("topics").select("name_he").eq("id", topicId).single();
+        topicName = t?.name_he ?? null;
+      }
+      if (subTopicId) {
+        const { data: s } = await supabase.from("sub_topics").select("name_he").eq("id", subTopicId).single();
+        subTopicName = s?.name_he ?? null;
+      }
+
       const { data: profile } = await supabase
         .from("profiles")
-        .select("full_name_he, admin_note, communication_preference")
+        .select("full_name_he, admin_note, communication_preference, gender")
         .eq("id", respondentId)
         .single();
       const pref = profile?.communication_preference as string | undefined;
+      const respondentGender = profile?.gender as "M" | "F" | null | undefined;
       if (pref === "email" || pref === "both") {
         const { data: authUser } = await supabase.auth.admin.getUserById(respondentId);
         const email = authUser?.user?.email?.trim();
@@ -223,7 +284,12 @@ export async function assignQuestion(
           await sendAssignmentLinkToRespondent(
             email,
             profile?.full_name_he ?? null,
-            profile?.admin_note ?? null
+            profile?.admin_note ?? null,
+            questionLabel,
+            questionId,
+            topicName,
+            subTopicName,
+            respondentGender ?? null
           );
         }
       }
@@ -245,6 +311,7 @@ const VALID_STAGES: QuestionStage[] = [
   "in_proofreading_lobby",
   "in_linguistic_review",
   "ready_for_sending",
+  "pending_manager",
   "sent_archived",
 ];
 
@@ -257,6 +324,13 @@ export async function updateQuestionStage(
   }
   try {
     const supabase = getSupabaseAdmin();
+    // שלב קודם לפני העדכון – כדי למנוע שליחת מיילים כפולה אם לא באמת השתנה
+    const { data: before } = await supabase
+      .from("questions")
+      .select("stage")
+      .eq("id", questionId)
+      .single();
+
     const payload: { stage: QuestionStage; updated_at: string; sent_at?: string } = {
       stage,
       updated_at: new Date().toISOString(),
@@ -269,23 +343,68 @@ export async function updateQuestionStage(
       .update(payload)
       .eq("id", questionId);
     if (error) return { ok: false, error: error.message };
+
+    // שליחת מיילים בהתאם לשינוי סטטוס
+    if (before?.stage !== stage) {
+      if (stage === "in_proofreading_lobby") {
+        // מייל למגיהים כששאלה נכנסת ללובי
+        await notifyLobbyNewQuestion(questionId).catch(() => {});
+      } else if (stage === "in_linguistic_review") {
+        // מייל לעורכים לשוניים כששאלה נכנסת לעריכה לשונית
+        await notifyLinguisticNewQuestion(questionId).catch(() => {});
+      }
+      // לשלב המשיב – המייל הראשוני נשלח דרך assignQuestion, לכן לא שולחים כאן שוב
+    }
+
     revalidatePath("/admin");
+    revalidatePath("/admin/archive");
+    revalidatePath("/admin/trash");
     return { ok: true };
   } catch (e) {
     return { ok: false, error: safeError((e as Error)?.message) };
   }
 }
 
-/** העברה לאשפה (soft delete): מעדכן deleted_at בשאלה */
-export async function deleteQuestion(
-  questionId: string
-): Promise<{ ok: true } | { ok: false; error: string }> {
+export type DeleteQuestionResult = { ok: true } | { ok: false; error: string };
+
+export async function deleteQuestion(questionId: string): Promise<DeleteQuestionResult> {
   try {
     const supabase = getSupabaseAdmin();
     const { error } = await supabase
       .from("questions")
       .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
       .eq("id", questionId);
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/admin");
+    revalidatePath("/admin/trash");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: safeError((e as Error)?.message) };
+  }
+}
+
+export async function restoreQuestion(questionId: string): Promise<UpdateStageResult> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from("questions")
+      .update({ deleted_at: null, updated_at: new Date().toISOString() })
+      .eq("id", questionId);
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/admin");
+    revalidatePath("/admin/trash");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: safeError((e as Error)?.message) };
+  }
+}
+
+export type PermanentlyDeleteQuestionResult = { ok: true } | { ok: false; error: string };
+
+export async function permanentlyDeleteQuestion(questionId: string): Promise<PermanentlyDeleteQuestionResult> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from("questions").delete().eq("id", questionId);
     if (error) return { ok: false, error: error.message };
     revalidatePath("/admin");
     revalidatePath("/admin/trash");
@@ -598,8 +717,11 @@ export interface TeamProfileRow {
   is_respondent: boolean;
   is_proofreader: boolean;
   is_linguistic_editor: boolean;
+  is_technical_lead: boolean;
   proofreader_type_id: string | null;
   proofreader_type_name_he: string | null;
+  /** כל סוגי ההגהה של המגיה (מטבלת צירוף) */
+  proofreader_type_ids: string[];
   communication_preference: "whatsapp" | "email" | "both";
   concurrency_limit: number;
   cooldown_days: number;
@@ -613,7 +735,7 @@ export async function getTeamProfiles(): Promise<TeamProfileRow[]> {
     const { data: profiles, error } = await supabase
     .from("profiles")
     .select(
-      "id, full_name_he, gender, is_respondent, is_proofreader, is_linguistic_editor, proofreader_type_id, communication_preference, concurrency_limit, cooldown_days, admin_note, phone"
+      "id, full_name_he, gender, is_respondent, is_proofreader, is_linguistic_editor, is_technical_lead, proofreader_type_id, communication_preference, concurrency_limit, cooldown_days, admin_note, phone"
     )
     .order("full_name_he");
 
@@ -629,10 +751,17 @@ export async function getTeamProfiles(): Promise<TeamProfileRow[]> {
     }
   }
 
-  const typeIds = [...new Set((profiles ?? []).map((p) => p.proofreader_type_id).filter(Boolean))] as string[];
+  const { data: ppt } = await supabase.from("profile_proofreader_types").select("profile_id, proofreader_type_id");
+  const typeIdsByProfile: Record<string, string[]> = {};
+  for (const id of ids) typeIdsByProfile[id] = [];
+  for (const row of ppt ?? []) {
+    if (typeIdsByProfile[row.profile_id]) typeIdsByProfile[row.profile_id].push(row.proofreader_type_id);
+  }
+  const allTypeIds = [...new Set((profiles ?? []).map((p) => p.proofreader_type_id).filter(Boolean))] as string[];
+  for (const tid of Object.values(typeIdsByProfile).flat()) allTypeIds.push(tid);
   const typeMap: Record<string, string> = {};
-  if (typeIds.length > 0) {
-    const { data: types } = await supabase.from("proofreader_types").select("id, name_he").in("id", typeIds);
+  if (allTypeIds.length > 0) {
+    const { data: types } = await supabase.from("proofreader_types").select("id, name_he").in("id", [...new Set(allTypeIds)]);
     for (const t of types ?? []) typeMap[t.id] = t.name_he;
   }
 
@@ -643,7 +772,11 @@ export async function getTeamProfiles(): Promise<TeamProfileRow[]> {
     if (categoriesByProfile[row.profile_id]) categoriesByProfile[row.profile_id].push(row.category_id);
   }
 
-  return (profiles ?? []).map((p) => ({
+  return (profiles ?? []).map((p) => {
+    const typeIds = typeIdsByProfile[p.id]?.length ? typeIdsByProfile[p.id] : (p.proofreader_type_id ? [p.proofreader_type_id] : []);
+    const primaryId = p.proofreader_type_id ?? typeIds[0] ?? null;
+    const names = typeIds.map((tid) => typeMap[tid]).filter(Boolean);
+    return {
       id: p.id,
       full_name_he: p.full_name_he ?? null,
       email: emailMap[p.id] ?? null,
@@ -652,14 +785,17 @@ export async function getTeamProfiles(): Promise<TeamProfileRow[]> {
       is_respondent: p.is_respondent ?? false,
       is_proofreader: p.is_proofreader ?? false,
       is_linguistic_editor: p.is_linguistic_editor ?? false,
-      proofreader_type_id: p.proofreader_type_id ?? null,
-      proofreader_type_name_he: p.proofreader_type_id ? typeMap[p.proofreader_type_id] ?? null : null,
+      is_technical_lead: (p as { is_technical_lead?: boolean }).is_technical_lead ?? false,
+      proofreader_type_id: primaryId,
+      proofreader_type_name_he: names.length ? names.join(", ") : (primaryId ? typeMap[primaryId] ?? null : null),
+      proofreader_type_ids: typeIds,
       communication_preference: (p.communication_preference ?? "email") as TeamProfileRow["communication_preference"],
       concurrency_limit: p.concurrency_limit ?? 1,
       cooldown_days: p.cooldown_days ?? 0,
       admin_note: p.admin_note ?? null,
       category_ids: categoriesByProfile[p.id] ?? [],
-    }));
+    };
+  });
   } catch {
     return [];
   }
@@ -675,7 +811,9 @@ export async function updateTeamMember(
     is_respondent: boolean;
     is_proofreader: boolean;
     is_linguistic_editor: boolean;
+    is_technical_lead: boolean;
     proofreader_type_id: string | null;
+    proofreader_type_ids: string[];
     communication_preference: "whatsapp" | "email" | "both";
     phone: string | null;
     concurrency_limit: number;
@@ -686,7 +824,8 @@ export async function updateTeamMember(
 ): Promise<UpdateTeamMemberResult> {
   try {
     const supabase = getSupabaseAdmin();
-    const proofreader_type_id = data.is_proofreader ? data.proofreader_type_id : null;
+    const typeIds = (data.proofreader_type_ids ?? []).filter(Boolean);
+    const proofreader_type_id = data.is_proofreader && typeIds.length > 0 ? typeIds[0] : null;
     const { error } = await supabase
       .from("profiles")
       .update({
@@ -695,6 +834,7 @@ export async function updateTeamMember(
         is_respondent: data.is_respondent,
         is_proofreader: data.is_proofreader,
         is_linguistic_editor: data.is_linguistic_editor,
+        is_technical_lead: data.is_technical_lead,
         proofreader_type_id,
         communication_preference: data.communication_preference,
         phone: data.phone?.trim() || null,
@@ -706,6 +846,13 @@ export async function updateTeamMember(
       .eq("id", profileId);
 
     if (error) return { ok: false, error: error.message };
+
+    await supabase.from("profile_proofreader_types").delete().eq("profile_id", profileId);
+    if (typeIds.length > 0) {
+      await supabase.from("profile_proofreader_types").insert(
+        typeIds.map((proofreader_type_id) => ({ profile_id: profileId, proofreader_type_id }))
+      );
+    }
 
     await supabase.from("profile_categories").delete().eq("profile_id", profileId);
     if (data.category_ids.length > 0) {
@@ -729,7 +876,8 @@ export async function createTeamMember(data: {
   is_respondent: boolean;
   is_proofreader: boolean;
   is_linguistic_editor: boolean;
-  proofreader_type_id: string | null;
+  is_technical_lead: boolean;
+  proofreader_type_ids: string[];
   communication_preference: "whatsapp" | "email" | "both";
   phone: string | null;
   concurrency_limit: number;
@@ -749,7 +897,8 @@ export async function createTeamMember(data: {
     const userId = authData.user?.id;
     if (!userId) return { ok: false, error: "לא נוצר משתמש" };
 
-    const proofreader_type_id = data.is_proofreader ? data.proofreader_type_id : null;
+    const typeIds = (data.proofreader_type_ids ?? []).filter(Boolean);
+    const proofreader_type_id = data.is_proofreader && typeIds.length > 0 ? typeIds[0] : null;
     const profileRow = {
       id: userId,
       full_name_he: data.full_name_he || null,
@@ -757,6 +906,7 @@ export async function createTeamMember(data: {
       is_respondent: data.is_respondent,
       is_proofreader: data.is_proofreader,
       is_linguistic_editor: data.is_linguistic_editor,
+      is_technical_lead: data.is_technical_lead,
       proofreader_type_id,
       communication_preference: data.communication_preference,
       phone: data.phone?.trim() || null,
@@ -769,6 +919,12 @@ export async function createTeamMember(data: {
       .upsert(profileRow, { onConflict: "id" });
 
     if (profileError) return { ok: false, error: profileError.message };
+
+    if (typeIds.length > 0) {
+      await supabase.from("profile_proofreader_types").insert(
+        typeIds.map((proofreader_type_id) => ({ profile_id: userId, proofreader_type_id }))
+      );
+    }
 
     if (data.category_ids.length > 0) {
       await supabase.from("profile_categories").insert(
@@ -791,5 +947,343 @@ export async function deleteTeamMember(profileId: string): Promise<DeleteTeamMem
     return { ok: true };
   } catch (e) {
     return { ok: false, error: safeError((e as Error)?.message) };
+  }
+}
+
+/** שאלות שלא עודכנו מעל 5 ימים (עיכוב באותו סטטוס) — לסרגל עיכובים */
+export interface DelayedQuestionItem {
+  id: string;
+  short_id: string | null;
+  title: string | null;
+  stage: QuestionStage;
+}
+
+export async function getDelayedQuestions(): Promise<DelayedQuestionItem[]> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const fiveDaysAgo = new Date();
+    fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+    const iso = fiveDaysAgo.toISOString();
+    const { data, error } = await supabase
+      .from("questions")
+      .select("id, short_id, title, stage")
+      .in("stage", ADMIN_TABLE_STAGES)
+      .is("deleted_at", null)
+      .lt("updated_at", iso)
+      .order("updated_at", { ascending: true });
+    if (error) return [];
+    return (data ?? []).map((r) => ({
+      id: r.id,
+      short_id: r.short_id ?? null,
+      title: r.title ?? null,
+      stage: r.stage as QuestionStage,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** שאלות לפי אימייל שואל — לחלון התראה שימוש חוזר */
+export interface QuestionByEmailItem {
+  id: string;
+  short_id: string | null;
+  title: string | null;
+  stage: QuestionStage;
+  created_at: string;
+}
+
+export async function getQuestionsByEmail(email: string): Promise<QuestionByEmailItem[]> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const e = (email ?? "").trim().toLowerCase();
+    if (!e) return [];
+    const { data, error } = await supabase
+      .from("questions")
+      .select("id, short_id, title, stage, created_at")
+      .ilike("asker_email", e)
+      .order("created_at", { ascending: false });
+    if (error) return [];
+    return (data ?? []).map((r) => ({
+      id: r.id,
+      short_id: r.short_id ?? null,
+      title: r.title ?? null,
+      stage: r.stage as QuestionStage,
+      created_at: r.created_at,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** כמות שאלות לכל אימייל (להתראת שימוש חוזר מעל 5) */
+export async function getEmailCounts(emails: string[]): Promise<Record<string, number>> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const normalized = [...new Set(emails.map((e) => (e ?? "").trim().toLowerCase()).filter(Boolean))];
+    if (normalized.length === 0) return {};
+    const out: Record<string, number> = {};
+    for (const email of normalized) {
+      const { count, error } = await supabase
+        .from("questions")
+        .select("id", { count: "exact", head: true })
+        .ilike("asker_email", email);
+      if (!error && count != null) out[email] = count;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** נתונים לדיאגרמות: שאלות שנכנסו ותשובות שנשלחו לפי יום */
+export interface AnalyticsDayRow {
+  date: string;
+  count: number;
+}
+
+export interface AnalyticsChartData {
+  createdByDay: AnalyticsDayRow[];
+  sentByDay: AnalyticsDayRow[];
+}
+
+/** נתונים לדיאגרמת עוגה: כמות שאלות לפי נושא */
+export interface AnalyticsTopicRow {
+  topic_id: string | null;
+  topic_name_he: string;
+  count: number;
+}
+
+export async function getAnalyticsByTopic(filters: AnalyticsFilters = {}): Promise<AnalyticsTopicRow[]> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const days = Math.min(365, Math.max(7, filters.days ?? 100));
+    const from = new Date();
+    from.setDate(from.getDate() - days + 1);
+    from.setHours(0, 0, 0, 0);
+    const fromIso = from.toISOString();
+
+    let query = supabase
+      .from("questions")
+      .select("topic_id, topics(name_he)")
+      .gte("created_at", fromIso)
+      .is("deleted_at", null);
+
+    if (filters.topicId) query = query.eq("topic_id", filters.topicId);
+    if (filters.subTopicId) query = query.eq("sub_topic_id", filters.subTopicId);
+    if (filters.respondentId) query = query.eq("assigned_respondent_id", filters.respondentId);
+    if (filters.proofreaderId) query = query.eq("assigned_proofreader_id", filters.proofreaderId);
+    if (filters.emailFilter?.trim()) query = query.ilike("asker_email", `%${filters.emailFilter.trim()}%`);
+
+    const { data: rows } = await query;
+    const byTopic: Record<string, number> = {};
+    const nameByTopic: Record<string, string> = { _ללא_נושא_: "ללא נושא" };
+    type TopicRow = { topic_id: string | null; topics?: { name_he: string } | { name_he: string }[] | null };
+    for (const r of (rows ?? []) as TopicRow[]) {
+      const id = r.topic_id ?? "_ללא_נושא_";
+      byTopic[id] = (byTopic[id] ?? 0) + 1;
+      const topicName = r.topics == null ? null : Array.isArray(r.topics) ? r.topics[0]?.name_he : r.topics.name_he;
+      if (id !== "_ללא_נושא_" && topicName && !nameByTopic[id]) nameByTopic[id] = topicName;
+    }
+    const topicIds = Object.keys(byTopic).filter((k) => k !== "_ללא_נושא_");
+    if (topicIds.length > 0 && Object.keys(nameByTopic).length - 1 < topicIds.length) {
+      const { data: topics } = await supabase.from("topics").select("id, name_he").in("id", topicIds);
+      if (topics) for (const t of topics) nameByTopic[t.id] = t.name_he ?? "אחר";
+    }
+    return Object.entries(byTopic)
+      .map(([topic_id, count]) => ({
+        topic_id: topic_id === "_ללא_נושא_" ? null : topic_id,
+        topic_name_he: nameByTopic[topic_id] ?? "אחר",
+        count,
+      }))
+      .sort((a, b) => b.count - a.count);
+  } catch {
+    return [];
+  }
+}
+
+export interface AnalyticsFilters {
+  days?: number;
+  topicId?: string | null;
+  subTopicId?: string | null;
+  respondentId?: string | null;
+  proofreaderId?: string | null;
+  emailFilter?: string | null;
+}
+
+/** שורת שאלה לטבלת הסינון בנתונים — כל השדות הרלוונטיים */
+export interface AnalyticsQuestionRow {
+  id: string;
+  short_id: string | null;
+  title: string | null;
+  content: string;
+  stage: QuestionStage;
+  created_at: string;
+  sent_at: string | null;
+  asker_email: string | null;
+  topic_name_he: string | null;
+  sub_topic_name_he: string | null;
+  respondent_name: string | null;
+  proofreader_name: string | null;
+  response_type: "short" | "detailed" | null;
+  publication_consent: string | null;
+}
+
+const ANALYTICS_QUESTIONS_SELECT =
+  "id, short_id, title, content, stage, created_at, sent_at, asker_email, response_type, publication_consent, assigned_respondent_id, assigned_proofreader_id, topic_id, sub_topic_id, topics(name_he), sub_topics(name_he)";
+
+/** שאלות מסוננות לטבלה — רק הסינון העליון; הדיאגרמות לא תלויות בזה */
+export async function getAnalyticsFilteredQuestions(
+  filters: AnalyticsFilters
+): Promise<AnalyticsQuestionRow[]> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const days = Math.min(365, Math.max(1, filters.days ?? 100));
+    const from = new Date();
+    from.setDate(from.getDate() - days + 1);
+    from.setHours(0, 0, 0, 0);
+    const fromIso = from.toISOString();
+
+    let query = supabase
+      .from("questions")
+      .select(ANALYTICS_QUESTIONS_SELECT)
+      .gte("created_at", fromIso)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    if (filters.topicId) query = query.eq("topic_id", filters.topicId);
+    if (filters.subTopicId) query = query.eq("sub_topic_id", filters.subTopicId);
+    if (filters.respondentId) query = query.eq("assigned_respondent_id", filters.respondentId);
+    if (filters.proofreaderId) query = query.eq("assigned_proofreader_id", filters.proofreaderId);
+    if (filters.emailFilter?.trim()) query = query.ilike("asker_email", `%${filters.emailFilter.trim()}%`);
+
+    const { data: rows, error } = await query;
+    if (error) return [];
+    type Row = Record<string, unknown> & {
+      id: string;
+      short_id: string | null;
+      title: string | null;
+      content: string;
+      stage: QuestionStage;
+      created_at: string;
+      sent_at: string | null;
+      asker_email: string | null;
+      response_type: "short" | "detailed" | null;
+      publication_consent: string | null;
+      assigned_respondent_id: string | null;
+      assigned_proofreader_id: string | null;
+      topics?: { name_he: string } | { name_he: string }[] | null;
+      sub_topics?: { name_he: string } | { name_he: string }[] | null;
+    };
+    const list = (rows ?? []) as Row[];
+    const nameFromRelation = (v: Row["topics"]): string | null =>
+      v == null ? null : Array.isArray(v) ? v[0]?.name_he ?? null : v.name_he ?? null;
+    const respondentIds = [...new Set(list.map((r) => r.assigned_respondent_id).filter(Boolean))] as string[];
+    const proofreaderIds = [...new Set(list.map((r) => r.assigned_proofreader_id).filter(Boolean))] as string[];
+    const profileIds = [...new Set([...respondentIds, ...proofreaderIds])];
+    let profileNames: Record<string, string> = {};
+    if (profileIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name_he")
+        .in("id", profileIds);
+      if (profiles) profileNames = Object.fromEntries(profiles.map((p) => [p.id, p.full_name_he ?? ""]));
+    }
+    return list.map((r) => ({
+      id: r.id,
+      short_id: r.short_id ?? null,
+      title: r.title ?? null,
+      content: r.content,
+      stage: r.stage,
+      created_at: r.created_at,
+      sent_at: r.sent_at ?? null,
+      asker_email: r.asker_email ?? null,
+      topic_name_he: nameFromRelation(r.topics),
+      sub_topic_name_he: nameFromRelation(r.sub_topics),
+      respondent_name: r.assigned_respondent_id ? (profileNames[r.assigned_respondent_id]?.trim() || null) : null,
+      proofreader_name: r.assigned_proofreader_id ? (profileNames[r.assigned_proofreader_id]?.trim() || null) : null,
+      response_type: r.response_type ?? null,
+      publication_consent: r.publication_consent ?? null,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function getAnalyticsChartData(filters: AnalyticsFilters = {}): Promise<AnalyticsChartData> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const days = Math.min(365, Math.max(7, filters.days ?? 100));
+    const from = new Date();
+    from.setDate(from.getDate() - days + 1);
+    from.setHours(0, 0, 0, 0);
+    const fromIso = from.toISOString();
+
+    let createdQuery = supabase
+      .from("questions")
+      .select("created_at")
+      .gte("created_at", fromIso)
+      .is("deleted_at", null);
+    let sentQuery = supabase
+      .from("questions")
+      .select("sent_at")
+      .eq("stage", "sent_archived")
+      .not("sent_at", "is", null)
+      .gte("sent_at", fromIso);
+
+    if (filters.topicId) {
+      createdQuery = createdQuery.eq("topic_id", filters.topicId);
+      sentQuery = sentQuery.eq("topic_id", filters.topicId);
+    }
+    if (filters.subTopicId) {
+      createdQuery = createdQuery.eq("sub_topic_id", filters.subTopicId);
+      sentQuery = sentQuery.eq("sub_topic_id", filters.subTopicId);
+    }
+    if (filters.respondentId) {
+      createdQuery = createdQuery.eq("assigned_respondent_id", filters.respondentId);
+      sentQuery = sentQuery.eq("assigned_respondent_id", filters.respondentId);
+    }
+    if (filters.proofreaderId) {
+      createdQuery = createdQuery.eq("assigned_proofreader_id", filters.proofreaderId);
+      sentQuery = sentQuery.eq("assigned_proofreader_id", filters.proofreaderId);
+    }
+    if (filters.emailFilter?.trim()) {
+      createdQuery = createdQuery.ilike("asker_email", `%${filters.emailFilter.trim()}%`);
+      sentQuery = sentQuery.ilike("asker_email", `%${filters.emailFilter.trim()}%`);
+    }
+
+    const [createdRes, sentRes] = await Promise.all([createdQuery, sentQuery]);
+    const createdRows = (createdRes.data ?? []) as { created_at: string }[];
+    const sentRows = (sentRes.data ?? []) as { sent_at: string | null }[];
+
+    const createdByDay: Record<string, number> = {};
+    const sentByDay: Record<string, number> = {};
+    for (let d = 0; d < days; d++) {
+      const date = new Date(from);
+      date.setDate(date.getDate() + d);
+      const key = date.toISOString().slice(0, 10);
+      createdByDay[key] = 0;
+      sentByDay[key] = 0;
+    }
+    for (const r of createdRows) {
+      const key = r.created_at.slice(0, 10);
+      if (createdByDay[key] != null) createdByDay[key]++;
+    }
+    for (const r of sentRows) {
+      if (!r.sent_at) continue;
+      const key = r.sent_at.slice(0, 10);
+      if (sentByDay[key] != null) sentByDay[key]++;
+    }
+
+    return {
+      createdByDay: Object.entries(createdByDay)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, count]) => ({ date, count })),
+      sentByDay: Object.entries(sentByDay)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, count]) => ({ date, count })),
+    };
+  } catch {
+    return { createdByDay: [], sentByDay: [] };
   }
 }

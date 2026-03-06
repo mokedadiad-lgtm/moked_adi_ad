@@ -16,46 +16,10 @@ import type { QuestionRow } from "@/lib/types";
 import { STAGE_LABELS } from "@/lib/types";
 import { useEffect, useState } from "react";
 
-function formatPdfGeneratedAt(iso: string | null | undefined): string {
-  if (!iso) return "";
-  return new Date(iso).toLocaleDateString("he-IL", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
-}
-function IconEye({ className }: { className?: string }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-function IconDownload({ className }: { className?: string }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" />
-    </svg>
-  );
-}
-function IconFilePlus({ className }: { className?: string }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-      <polyline points="14 2 14 8 20 8" /><line x1="12" x2="12" y1="18" y2="12" /><line x1="9" x2="15" y1="15" y2="15" />
-    </svg>
-  );
-}
-
 const GENDER_LABEL: Record<string, string> = { M: "זכר", F: "נקבה" };
 const RESPONSE_LABEL: Record<string, string> = {
   short: "קצר ולעניין",
   detailed: "תשובה מפורטת",
-};
-const PUB_LABEL: Record<string, string> = {
-  publish: "מסכימה לפרסם",
-  blur: "מסכימה בטשטוש נתונים",
-  none: "לא לפרסום",
 };
 
 function formatDate(iso: string): string {
@@ -68,11 +32,51 @@ function formatDate(iso: string): string {
   });
 }
 
+function formatPdfGeneratedAt(iso: string | null | undefined): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("he-IL", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function IconEye({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+function IconDownload({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" x2="12" y1="15" y2="3" />
+    </svg>
+  );
+}
+function IconFilePlus({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="12" x2="12" y1="18" y2="12" />
+      <line x1="9" x2="15" y1="15" y2="15" />
+    </svg>
+  );
+}
+
 interface QuestionDetailsModalProps {
   question: QuestionRow | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaveSuccess?: () => void;
+  /** כשמופעל, מציג בחלון כפתורי PDF (צפייה, הורדה, יצירה, שליחה) עם אייקונים */
   showPdfActions?: boolean;
   onCreatePdf?: (questionId: string) => void;
   onSendAndArchive?: (question: QuestionRow) => void;
@@ -101,6 +105,7 @@ export function QuestionDetailsModal({
   const [showVersions, setShowVersions] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
   const [responseText, setResponseText] = useState("");
+  const [initialResponse, setInitialResponse] = useState("");
   const [savePending, setSavePending] = useState(false);
   const [showPdfView, setShowPdfView] = useState(false);
 
@@ -128,19 +133,30 @@ export function QuestionDetailsModal({
   }, [open]);
 
   useEffect(() => {
-    if (open && question) setResponseText(question.response_text ?? "");
+    if (open && question) {
+      const value = question.response_text ?? "";
+      setResponseText(value);
+      setInitialResponse(value);
+    }
   }, [open, question?.id, question?.response_text]);
 
   const handleSaveResponse = async () => {
     if (!question) return;
+    const nextTrimmed = responseText.trim();
+    const initialTrimmed = initialResponse.trim();
+    if (nextTrimmed === initialTrimmed) return;
+
     setSavePending(true);
     const supabase = getSupabaseBrowser();
     const { error } = await supabase
       .from("questions")
-      .update({ response_text: responseText.trim() || null, updated_at: new Date().toISOString() })
+      .update({ response_text: nextTrimmed || null, updated_at: new Date().toISOString() })
       .eq("id", question.id);
     setSavePending(false);
-    if (!error) onSaveSuccess?.();
+    if (!error) {
+      setInitialResponse(nextTrimmed);
+      onSaveSuccess?.();
+    }
   };
 
   if (!question) return null;
@@ -149,7 +165,7 @@ export function QuestionDetailsModal({
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="flex max-h-[90vh] flex-col gap-4 overflow-hidden"
+        className="flex max-h-[90vh] w-[95vw] max-w-2xl flex-col gap-4 overflow-hidden"
         dir="rtl"
       >
         <DialogHeader className="shrink-0">
@@ -161,11 +177,11 @@ export function QuestionDetailsModal({
             <div className="space-y-1">
               {question.title && <p className="text-sm font-medium text-slate-800 text-start">{question.title}</p>}
               <p className="text-xs font-medium text-secondary text-start">תוכן השאלה</p>
-              <ScrollArea className="h-[140px] rounded-xl border border-card-border bg-slate-50 p-3 text-sm text-slate-700">
+              <div className="min-h-[2.5rem] max-h-[200px] overflow-y-auto rounded-xl border border-card-border bg-slate-50 p-3 text-sm text-slate-700">
                 <div className="whitespace-pre-wrap text-start" dir="rtl">
                   {question.content}
                 </div>
-              </ScrollArea>
+              </div>
             </div>
 
             {question.stage === "in_linguistic_review" && question.proofreader_note && (
@@ -188,24 +204,25 @@ export function QuestionDetailsModal({
                       className="w-full"
                     />
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="mt-2"
-                    onClick={handleSaveResponse}
-                    disabled={savePending}
-                  >
-                    {savePending ? "שומר…" : "שמור שינויים"}
-                  </Button>
+                  <div className="mt-2 flex justify-end">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+                      onClick={handleSaveResponse}
+                      disabled={savePending || responseText.trim() === initialResponse.trim()}
+                    >
+                      {savePending ? "שומר…" : "שמור שינויים"}
+                    </Button>
+                  </div>
                 </>
               ) : (
                 (question.response_text == null || question.response_text === "") ? (
                   <p className="text-secondary text-sm">—</p>
                 ) : (
-                  <ScrollArea className="h-48 rounded-xl border border-card-border bg-slate-50 p-3 text-sm">
+                  <div className="min-h-[2.5rem] max-h-[12rem] overflow-y-auto rounded-xl border border-card-border bg-slate-50 p-3 text-sm">
                     <ResponseTextView value={question.response_text} />
-                  </ScrollArea>
+                  </div>
                 )
               )}
             </div>
@@ -223,7 +240,9 @@ export function QuestionDetailsModal({
                 </p>
               </div>
               <div>
-                <p className="text-xs text-slate-500">גיל השואלת</p>
+                <p className="text-xs text-slate-500">
+                  {question.asker_gender === "F" ? "גיל השואלת" : "גיל השואל"}
+                </p>
                 <p className="font-medium text-primary">
                   {question.asker_age ?? "—"}
                 </p>
@@ -245,68 +264,18 @@ export function QuestionDetailsModal({
                 </p>
               </div>
               <div>
-                <p className="text-xs text-slate-500">הסכמת פרסום</p>
+                <p className="text-xs text-slate-500">נושא / תת־נושא (להגהה)</p>
                 <p className="font-medium text-primary">
-                  {question.publication_consent
-                    ? PUB_LABEL[question.publication_consent] ?? "—"
+                  {(question.topic_name_he || question.sub_topic_name_he)
+                    ? [question.topic_name_he, question.sub_topic_name_he]
+                        .filter(Boolean)
+                        .join(" › ")
                     : "—"}
                 </p>
               </div>
-              {question.respondent_name && (
-                <div className="col-span-2">
-                  <p className="text-xs text-slate-500">משיב/ה משובץ/ת</p>
-                  <p className="font-medium text-primary">
-                    {question.respondent_name}
-                  </p>
-                </div>
-              )}
-              {(question.topic_name_he || question.sub_topic_name_he) && (
-                <div className="col-span-2">
-                  <p className="text-xs text-slate-500">נושא / תת־נושא (להגהה)</p>
-                  <p className="font-medium text-primary">
-                    {[question.topic_name_he, question.sub_topic_name_he]
-                      .filter(Boolean)
-                      .join(" › ")}
-                  </p>
-                </div>
-              )}
             </div>
 
-            {showPdfActions && question && (
-              <div className="rounded-xl border border-card-border bg-slate-50/60 p-3">
-                <p className="text-xs font-medium text-slate-600 mb-2">מסמך PDF</p>
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  {question.pdf_generated_at && (
-                    <p className="text-xs text-red-600 font-medium">
-                      נוצר לאחרונה: {formatPdfGeneratedAt(question.pdf_generated_at)}
-                    </p>
-                  )}
-                  <div className="flex flex-wrap gap-2 items-center">
-                    {question.pdf_url ? (
-                      <>
-                        <Button variant="default" size="sm" className="gap-2 bg-red-600 text-white hover:bg-red-700" onClick={() => setShowPdfView(true)}>
-                          <IconEye className="h-4 w-4 shrink-0" /> צפייה
-                        </Button>
-                        <Button variant="default" size="sm" className="gap-2 bg-red-600 text-white hover:bg-red-700" asChild>
-                          <a href={`/api/questions/${question.id}/pdf/download?for=archive`} download>
-                            <IconDownload className="h-4 w-4 shrink-0" /> הורדה
-                          </a>
-                        </Button>
-                        <Button variant="default" size="sm" className="gap-2 bg-red-600 text-white hover:bg-red-700" onClick={() => onCreatePdf?.(question.id)} disabled={pdfPending}>
-                          <IconFilePlus className="h-4 w-4 shrink-0" /> {pdfPending ? "מייצר…" : "יצירת PDF מחדש"}
-                        </Button>
-                      </>
-                    ) : (
-                      <Button variant="default" size="sm" className="gap-2 bg-red-600 text-white hover:bg-red-700" onClick={() => onCreatePdf?.(question.id)} disabled={pdfPending}>
-                        <IconFilePlus className="h-4 w-4 shrink-0" /> {pdfPending ? "מייצר…" : "יצירת PDF"}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {versions.length > 0 && (
+            {canEdit && versions.length > 0 && (
               <div>
                 <button
                   type="button"
@@ -334,12 +303,72 @@ export function QuestionDetailsModal({
                 )}
               </div>
             )}
+
+            {showPdfActions && question && (
+              <div className="rounded-xl border border-card-border bg-slate-50/60 p-3">
+                <p className="text-xs font-medium text-slate-600 mb-2">מסמך PDF</p>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {question.pdf_generated_at && (
+                    <p className="text-xs text-red-600 font-medium">
+                      נוצר לאחרונה: {formatPdfGeneratedAt(question.pdf_generated_at)}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-2 items-center">
+                {question.pdf_url ? (
+                  <>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="gap-2 bg-red-600 text-white hover:bg-red-700"
+                      onClick={() => setShowPdfView(true)}
+                    >
+                      <IconEye className="h-4 w-4 shrink-0" />
+                      צפייה
+                    </Button>
+                    <Button variant="default" size="sm" className="gap-2 bg-red-600 text-white hover:bg-red-700" asChild>
+                      <a href={`/api/questions/${question.id}/pdf/download?for=archive`} download>
+                        <IconDownload className="h-4 w-4 shrink-0" />
+                        הורדה
+                      </a>
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="gap-2 bg-red-600 text-white hover:bg-red-700"
+                      onClick={() => onCreatePdf?.(question.id)}
+                      disabled={pdfPending}
+                    >
+                      <IconFilePlus className="h-4 w-4 shrink-0" />
+                      {pdfPending ? "מייצר…" : "יצירת PDF מחדש"}
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="gap-2 bg-red-600 text-white hover:bg-red-700"
+                    onClick={() => onCreatePdf?.(question.id)}
+                    disabled={pdfPending}
+                  >
+                    <IconFilePlus className="h-4 w-4 shrink-0" />
+                    {pdfPending ? "מייצר…" : "יצירת PDF"}
+                  </Button>
+                )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </DialogContent>
     </Dialog>
 
-    <PdfViewModal open={showPdfView} onOpenChange={setShowPdfView} questionId={question?.id ?? null} forParam="archive" />
+    <PdfViewModal
+      open={showPdfView}
+      onOpenChange={setShowPdfView}
+      questionId={question?.id ?? null}
+      forParam="archive"
+    />
     </>
   );
 }

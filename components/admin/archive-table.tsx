@@ -231,7 +231,7 @@ export function ArchiveTable({ questions }: ArchiveTableProps) {
           </Button>
           <Button
             onClick={handleReturnToActive}
-            disabled={!returnSelectedStage || returnSelectedStage === "sent_archived" || (returnModalQuestion && pendingId === returnModalQuestion.id)}
+            disabled={!returnSelectedStage || returnSelectedStage === "sent_archived" || !!(returnModalQuestion && pendingId === returnModalQuestion.id)}
           >
             {returnModalQuestion && pendingId === returnModalQuestion.id ? "מעדכן…" : "החזר לפעיל"}
           </Button>

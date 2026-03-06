@@ -10,7 +10,6 @@ import {
   getTopicsWithSubTopics,
   updateQuestionStage,
 } from "@/app/admin/actions";
-import { getAuthHeaders } from "@/lib/supabase/client";
 import type { RespondentWithEligibility, TopicOption } from "@/app/admin/actions";
 import { Button } from "@/components/ui/button";
 import {
@@ -291,8 +290,7 @@ export function AdminQuestionStageModal({
     if (!question) return;
     setSendPending(true);
     try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`/api/questions/${question.id}/send`, { method: "POST", headers });
+      const res = await fetch(`/api/questions/${question.id}/send`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           setFeedback({

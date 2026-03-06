@@ -122,7 +122,7 @@ export async function sendPdfToAsker(
 
   const { error } = await resend.emails.send({
     from: FROM_EMAIL,
-    reply_to: REPLY_TO_EMAIL,
+    replyTo: REPLY_TO_EMAIL,
     to: [to.trim()],
     subject: "התשובה לשאלתך",
     html: htmlWithNote,
@@ -173,7 +173,7 @@ export async function sendAssignmentLinkToRespondent(
   });
   const { error } = await resend.emails.send({
     from: FROM_EMAIL,
-    reply_to: REPLY_TO_EMAIL,
+    replyTo: REPLY_TO_EMAIL,
     to: [to.trim()],
     subject: `נשלחה אליך שאלה חדשה${subjectSuffix}`,
     html,
@@ -211,7 +211,7 @@ export async function sendNewQuestionInLobbyToProofreaders(
   const subjectSuffix = (questionLabel ?? questionId) ? ` – משימה ${questionLabel ?? questionId}` : "";
   const { error } = await resend.emails.send({
     from: FROM_EMAIL,
-    reply_to: REPLY_TO_EMAIL,
+    replyTo: REPLY_TO_EMAIL,
     to: toEmails.map((e) => e.trim()).filter(Boolean),
     subject: `שאלה חדשה בלובי ההגהה${subjectSuffix}`,
     html,
@@ -249,7 +249,7 @@ export async function sendToLinguisticEditor(
   const subjectSuffix = (questionLabel ?? questionId) ? ` – משימה ${questionLabel ?? questionId}` : "";
   const { error } = await resend.emails.send({
     from: FROM_EMAIL,
-    reply_to: REPLY_TO_EMAIL,
+    replyTo: REPLY_TO_EMAIL,
     to: toEmails.map((e) => e.trim()).filter(Boolean),
     subject: `שאלה ממתינה לעריכה לשונית${subjectSuffix}`,
     html,
@@ -284,7 +284,7 @@ export async function sendInactivityReminder(
   });
   const { error } = await resend.emails.send({
     from: FROM_EMAIL,
-    reply_to: REPLY_TO_EMAIL,
+    replyTo: REPLY_TO_EMAIL,
     to: [to.trim()],
     subject: `תזכורת: משימה ממתינה כבר 5 ימים${preview}`,
     html,
@@ -318,7 +318,7 @@ export async function sendManualReminderToRespondent(
   });
   const { error } = await resend.emails.send({
     from: FROM_EMAIL,
-    reply_to: REPLY_TO_EMAIL,
+    replyTo: REPLY_TO_EMAIL,
     to: [to.trim()],
     subject: "תזכורת: שאלה ממתינה למענה",
     html,
@@ -352,7 +352,7 @@ export async function sendLobbySummaryToProofreaders(
   });
   const { error } = await resend.emails.send({
     from: FROM_EMAIL,
-    reply_to: REPLY_TO_EMAIL,
+    replyTo: REPLY_TO_EMAIL,
     to: toEmails.map((e) => e.trim()).filter(Boolean),
     subject: `סיכום לובי: ${count} משימה/ות ממתינות${proofreaderTypeName ? ` – ${proofreaderTypeName}` : ""}`,
     html,

@@ -51,7 +51,8 @@ export function TeamMemberEditModal({
   const [is_respondent, setIsRespondent] = useState(false);
   const [is_proofreader, setIsProofreader] = useState(false);
   const [is_linguistic_editor, setIsLinguisticEditor] = useState(false);
-  const [proofreader_type_id, setProofreaderTypeId] = useState<string>("");
+  const [is_technical_lead, setIsTechnicalLead] = useState(false);
+  const [proofreader_type_ids, setProofreaderTypeIds] = useState<string[]>([]);
   const [communication_preference, setCommunicationPreference] = useState<"whatsapp" | "email" | "both">("email");
   const [phone, setPhone] = useState("");
   const [concurrency_limit, setConcurrencyLimit] = useState(1);
@@ -70,7 +71,8 @@ export function TeamMemberEditModal({
       setIsRespondent(profile.is_respondent);
       setIsProofreader(profile.is_proofreader);
       setIsLinguisticEditor(profile.is_linguistic_editor);
-      setProofreaderTypeId(profile.proofreader_type_id ?? proofreaderTypes[0]?.id ?? "");
+      setIsTechnicalLead(profile.is_technical_lead ?? false);
+      setProofreaderTypeIds(profile.proofreader_type_ids?.length ? profile.proofreader_type_ids : (profile.proofreader_type_id ? [profile.proofreader_type_id] : []));
       setCommunicationPreference(profile.communication_preference ?? "email");
       setPhone(profile.phone ?? "");
       setConcurrencyLimit(profile.concurrency_limit ?? 1);
@@ -84,6 +86,10 @@ export function TeamMemberEditModal({
 
   const handleSubmit = async () => {
     if (!profile) return;
+    if (is_proofreader && proofreader_type_ids.length === 0) {
+      setError("מגיה/ה חייב/ת שיהיה לפחות סוג הגהה אחד.");
+      return;
+    }
     setPending(true);
     setError(null);
     const result = await updateTeamMember(profile.id, {
@@ -92,7 +98,9 @@ export function TeamMemberEditModal({
       is_respondent,
       is_proofreader,
       is_linguistic_editor,
-      proofreader_type_id: is_proofreader ? (proofreader_type_id || null) : null,
+      is_technical_lead,
+      proofreader_type_id: null,
+      proofreader_type_ids: is_proofreader ? proofreader_type_ids : [],
       communication_preference,
       phone: phone.trim() || null,
       concurrency_limit,
@@ -127,7 +135,7 @@ export function TeamMemberEditModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col gap-4 overflow-hidden" dir="rtl">
+      <DialogContent className="flex max-h-[90vh] w-[95vw] max-w-2xl flex-col gap-4 overflow-hidden" dir="rtl">
         <DialogHeader className="shrink-0">
           <DialogTitle>עריכת איש צוות</DialogTitle>
         </DialogHeader>
@@ -173,28 +181,33 @@ export function TeamMemberEditModal({
                 <Checkbox checked={is_linguistic_editor} onCheckedChange={(v) => setIsLinguisticEditor(!!v)} />
                 <span className="text-sm text-slate-600">עורך/ת לשוני/ת</span>
               </label>
+              <label className="flex cursor-pointer items-center gap-3 justify-start">
+                <Checkbox checked={is_technical_lead} onCheckedChange={(v) => setIsTechnicalLead(!!v)} />
+                <span className="text-sm text-slate-600">אחראי טכני</span>
+              </label>
             </div>
           </div>
 
           {is_proofreader && (
             <div className="space-y-2">
-              <Label className="text-right">סוג מגיה/ה</Label>
-              <Select
-                value={proofreader_type_id}
-                onValueChange={setProofreaderTypeId}
-              >
-                <SelectTrigger className="w-full text-right">
-                  <SelectValue placeholder="בחר/י סוג" />
-                </SelectTrigger>
-                <SelectContent>
-                  {proofreaderTypes.map((pt) => (
-                    <SelectItem key={pt.id} value={pt.id}>{pt.name_he}</SelectItem>
-                  ))}
-                  {proofreaderTypes.length === 0 && (
-                    <SelectItem value="_none" disabled>אין סוגים מוגדרים</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+              <Label className="text-right">סוגי הגהה (אפשר לבחור כמה)</Label>
+              <div className="flex flex-wrap gap-4 justify-end">
+                {proofreaderTypes.map((pt) => (
+                  <label key={pt.id} className="flex cursor-pointer items-center gap-2">
+                    <Checkbox
+                      checked={proofreader_type_ids.includes(pt.id)}
+                      onCheckedChange={(checked) => {
+                        if (checked) setProofreaderTypeIds((prev) => [...prev, pt.id]);
+                        else setProofreaderTypeIds((prev) => prev.filter((id) => id !== pt.id));
+                      }}
+                    />
+                    <span className="text-sm text-slate-700">{pt.name_he}</span>
+                  </label>
+                ))}
+                {proofreaderTypes.length === 0 && (
+                  <span className="text-sm text-slate-500">אין סוגים מוגדרים</span>
+                )}
+              </div>
             </div>
           )}
 
@@ -285,7 +298,7 @@ export function TeamMemberEditModal({
                     </label>
                   ))}
                   {categories.length === 0 && (
-                    <span className="block text-right text-sm text-secondary">אין קטגוריות במערכת. הרץ מיגרציות Supabase (כולל seed קטגוריות).</span>
+                    <span className="block text-right text-sm text-secondary">אין קטגוריות במערכת. הרץ מיגרציות Supabase (כולל seed קטגוריות){"\u200E"}.</span>
                   )}
                 </div>
               </div>
@@ -318,7 +331,7 @@ export function TeamMemberEditModal({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               ביטול
             </Button>
-            <Button type="button" onClick={handleSubmit} disabled={pending}>
+            <Button type="button" variant="default" className="bg-primary" onClick={handleSubmit} disabled={pending}>
               {pending ? "שומר…" : "שמור שינויים"}
             </Button>
           </div>
