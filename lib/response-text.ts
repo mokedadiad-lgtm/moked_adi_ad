@@ -1,0 +1,115 @@
+const FOOTNOTES_MARKER = "data-footnotes-json";
+
+export interface ParsedResponse {
+  bodyHtml: string;
+  footnotes: { id: string; text: string }[];
+}
+
+/**
+ * Parses stored response (HTML + data-footnotes-json) into body HTML and ordered footnotes.
+ * Safe to run in Node (no DOM).
+ */
+export function parseResponseRich(value: string | null | undefined): ParsedResponse {
+  if (!value || !value.trim()) return { bodyHtml: "", footnotes: [] };
+  let body = value;
+  let footnotes: { id: string; text: string }[] = [];
+  const fnMatch = body.match(/data-footnotes-json="([^"]*)"/);
+  if (fnMatch) {
+    try {
+      const decoded = fnMatch[1].replace(/&quot;/g, '"');
+      footnotes = JSON.parse(decoded) as { id: string; text: string }[];
+    } catch {
+      // ignore
+    }
+    body = body.replace(/<div\s+[^>]*data-footnotes-json[^>]*>[\s\S]*?<\/div>/i, "").trim();
+  }
+  return { bodyHtml: body, footnotes };
+}
+
+const ALLOWED_TAGS = new Set(["p", "div", "h2", "h3", "strong", "b", "sup", "span", "br"]);
+
+/** Decode HTML entities so PDF/text doesn't show &amp; # etc. */
+function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, n) => String.fromCharCode(parseInt(n, 16)))
+    .replace(/&nbsp;/g, " ");
+}
+
+/**
+ * Sanitize HTML to only allow tags used by the rich editor. Strips attributes.
+ */
+export function sanitizeResponseHtml(html: string): string {
+  if (!html.trim()) return "";
+  return html
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    .replace(/<style\b[\s\S]*?<\/style>/gi, "")
+    .replace(/<(\/?)([a-z0-9]+)(\s[^>]*)?>/gi, (_, slash, tag) =>
+      ALLOWED_TAGS.has(tag.toLowerCase()) ? `<${slash}${tag.toLowerCase()}>` : ""
+    );
+}
+
+/**
+ * Converts stored response to plain text for display (e.g. list summary).
+ * Safe to run in Node (no DOM).
+ */
+export function responseToPlainText(value: string | null | undefined): string {
+  const { bodyHtml, footnotes } = parseResponseRich(value);
+  let body = bodyHtml
+    .replace(/<\/p>|<\/div>|<\/h2>|<\/h3>|<\/h1>|<\/li>|<\/br\s*\/?>/gi, "\n")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\n /g, "\n")
+    .replace(/ \n/g, "\n")
+    .replace(/\n{2,}/g, "\n\n")
+    .trim();
+  body = decodeHtmlEntities(body);
+  if (footnotes.length === 0) return body;
+  const notes = footnotes
+    .map((fn, i) => `${i + 1}. ${decodeHtmlEntities((fn.text ?? "").trim())}`)
+    .filter((s) => s.length > 2);
+  return notes.length ? `${body}\n\nהערות שוליים:\n${notes.join("\n")}` : body;
+}
+
+/** For PDF: body and footnotes as separate strings so we can render RTL correctly. */
+export function responseToStructured(value: string | null | undefined): {
+  bodyPlain: string;
+  footnotes: string[];
+} {
+  const { bodyHtml, footnotes } = parseResponseRich(value);
+  let body = bodyHtml
+    .replace(/<\/p>|<\/div>|<\/h2>|<\/h3>|<\/h1>|<\/li>|<\/br\s*\/?>/gi, "\n")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\n /g, "\n")
+    .replace(/ \n/g, "\n")
+    .replace(/\n{2,}/g, "\n\n")
+    .trim();
+  body = decodeHtmlEntities(body);
+  const noteLines = footnotes
+    .map((fn, i) => `${i + 1}. ${decodeHtmlEntities((fn.text ?? "").trim())}`)
+    .filter((s) => s.length > 2);
+  return { bodyPlain: body, footnotes: noteLines };
+}
+
+const SUP_FN_REF = /<sup\s[^>]*data-fn-id="[^"]*"[^>]*>\[(\d+)\]<\/sup>/gi;
+
+/**
+ * For PDF: preserves body structure (p, h2, h3, etc.) and converts footnote refs
+ * to superscript numbers without brackets. Returns HTML safe to inject and footnote lines.
+ */
+export function responseToStructuredForPdf(value: string | null | undefined): {
+  bodyHtmlForPdf: string;
+  footnotes: string[];
+} {
+  const { bodyHtml, footnotes } = parseResponseRich(value);
+  const body = bodyHtml.replace(SUP_FN_REF, (_, num) => `<sup class="fn-ref">${num}</sup>`);
+  const noteLines = footnotes
+    .map((fn, i) => `${i + 1}. ${decodeHtmlEntities((fn.text ?? "").trim())}`)
+    .filter((s) => s.length > 2);
+  return { bodyHtmlForPdf: body, footnotes: noteLines };
+}

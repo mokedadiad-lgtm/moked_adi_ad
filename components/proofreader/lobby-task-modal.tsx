@@ -1,0 +1,241 @@
+"use client";
+
+import { notifyLinguisticNewQuestion } from "@/app/actions/notifications";
+import { RichTextEditor } from "@/components/respondent/rich-text-editor";
+import { ResponseTextView } from "@/components/response-text-view";
+import { getSupabaseBrowser } from "@/lib/supabase/client";
+import type { LobbyQuestion } from "@/components/proofreader/proofreader-dashboard";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
+import { useEffect, useState } from "react";
+
+interface LobbyTaskModalProps {
+  question: LobbyQuestion | null;
+  userId: string | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onActionDone: () => void;
+}
+
+export function LobbyTaskModal({
+  question,
+  userId,
+  open,
+  onOpenChange,
+  onActionDone,
+}: LobbyTaskModalProps) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [returnNote, setReturnNote] = useState("");
+  const [showReturnNote, setShowReturnNote] = useState(false);
+  const [responseText, setResponseText] = useState("");
+
+  const isMine = question && userId && question.assigned_proofreader_id === userId;
+
+  useEffect(() => {
+    if (open && question) setResponseText(question.response_text ?? "");
+  }, [open, question?.id, question?.response_text]);
+
+  const reset = () => {
+    setError(null);
+    setReturnNote("");
+    setShowReturnNote(false);
+  };
+
+  const handleSaveResponse = () => {
+    if (!responseText.trim()) return;
+    runUpdate({ response_text: responseText.trim() });
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) reset();
+    onOpenChange(next);
+  };
+
+  const runUpdate = async (
+    updates: Record<string, unknown>,
+    onSuccess?: () => void
+  ) => {
+    if (!question) return;
+    setPending(true);
+    setError(null);
+    const supabase = getSupabaseBrowser();
+    const { error: e } = await supabase
+      .from("questions")
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq("id", question.id);
+    setPending(false);
+    if (e) {
+      setError(e.message);
+      return;
+    }
+    onSuccess?.();
+    onActionDone();
+  };
+
+  const handleClaim = () => runUpdate({ assigned_proofreader_id: userId });
+
+  const handleRelease = () => runUpdate({ assigned_proofreader_id: null });
+
+  const notifyLinguistic = () => {
+    if (question) notifyLinguisticNewQuestion(question.id).catch(() => {});
+  };
+
+  const handleDoneToLinguistic = () =>
+    runUpdate(
+      {
+        stage: "in_linguistic_review",
+        assigned_proofreader_id: null,
+        proofreader_note: null,
+      },
+      notifyLinguistic
+    );
+
+  const handleReturnToAdmin = () => {
+    if (showReturnNote) {
+      runUpdate(
+        {
+          stage: "in_linguistic_review",
+          assigned_proofreader_id: null,
+          proofreader_note: returnNote.trim() || null,
+        },
+        notifyLinguistic
+      );
+      return;
+    }
+    setShowReturnNote(true);
+  };
+
+  if (!question) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        className="flex max-h-[90vh] max-w-2xl flex-col gap-4 overflow-hidden"
+        dir="rtl"
+      >
+        <DialogHeader className="shrink-0">
+          <DialogTitle>{isMine ? "משימה שלי" : "משימה בתור"}</DialogTitle>
+        </DialogHeader>
+
+        <div className="min-h-0 flex-1 overflow-y-auto space-y-4 text-start">
+          <div>
+            <p className="mb-1 text-xs font-medium text-secondary">תוכן השאלה</p>
+            <ScrollArea className="h-24 rounded-xl border border-card-border bg-slate-50 p-3 text-sm text-start">
+              <div className="whitespace-pre-wrap" dir="rtl">{question.content}</div>
+            </ScrollArea>
+          </div>
+          <div>
+            <p className="mb-1 text-xs font-medium text-secondary">תשובת המשיב/ה</p>
+            {isMine ? (
+              <>
+                <div className="rounded-xl border border-card-border bg-slate-50 p-3 text-sm">
+                  <RichTextEditor
+                    key={question.id}
+                    value={responseText}
+                    onChange={setResponseText}
+                    placeholder="ערוך כאן את התשובה (כותרות, מודגש, הערות שוליים)."
+                    disabled={pending}
+                    className="w-full"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={handleSaveResponse}
+                  disabled={pending}
+                >
+                  {pending ? "שומר…" : "שמור שינויים"}
+                </Button>
+              </>
+            ) : (
+              <ScrollArea className="h-80 rounded-xl border border-card-border bg-slate-50 p-3 text-sm">
+                <ResponseTextView value={question.response_text} />
+              </ScrollArea>
+            )}
+          </div>
+
+          {showReturnNote && (
+            <div>
+              <p className="text-xs font-medium text-secondary mb-1">הערה למנהל (אופציונלי)</p>
+              <Textarea
+                value={returnNote}
+                onChange={(e) => setReturnNote(e.target.value)}
+                placeholder="למשל: צריך הבהרה לגבי..."
+                className="min-h-[80px] text-start"
+                disabled={pending}
+              />
+            </div>
+          )}
+
+          {error && (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+              {error}
+            </p>
+          )}
+        </div>
+
+        <DialogFooter className="shrink-0 flex-wrap gap-2">
+          {!isMine ? (
+            <Button
+              type="button"
+              onClick={handleClaim}
+              disabled={pending || !userId}
+            >
+              {pending ? "שומר…" : "תפוס משימה"}
+            </Button>
+          ) : (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleRelease}
+                disabled={pending}
+              >
+                שחרר (החזר לתור)
+              </Button>
+              {!showReturnNote ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleReturnToAdmin}
+                  disabled={pending}
+                >
+                  החזר למנהל (עם הערה)
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  onClick={handleReturnToAdmin}
+                  disabled={pending}
+                >
+                  {pending ? "שולח…" : "שלח למנהל"}
+                </Button>
+              )}
+              <Button
+                type="button"
+                onClick={handleDoneToLinguistic}
+                disabled={pending}
+              >
+                {pending ? "שומר…" : "סיים והעבר לעריכה לשונית"}
+              </Button>
+            </>
+          )}
+          <Button type="button" variant="ghost" onClick={() => handleOpenChange(false)}>
+            סגור
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
