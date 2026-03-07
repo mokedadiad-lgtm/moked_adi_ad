@@ -407,6 +407,13 @@ export function LoginForm() {
           >
             שכחתי סיסמה
           </button>
+          <p className="mt-4 pt-4 border-t border-slate-200 text-center text-sm text-slate-600">
+            <a href="/" className="text-primary font-medium underline hover:no-underline">
+              טופס שליחת שאלה
+            </a>
+            {" "}
+            (למשתמשים)
+          </p>
         </form>
       </CardContent>
     </Card>
