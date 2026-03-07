@@ -107,14 +107,14 @@ export function ArchiveTable({ questions }: ArchiveTableProps) {
               <TableHead>נושא | תת נושא</TableHead>
               <TableHead>סטטוס</TableHead>
               <TableHead>תאריך סיום טיפול</TableHead>
-              <TableHead className="text-end">PDF</TableHead>
-              <TableHead className="text-end">החזרה לסטטוס פעיל</TableHead>
+              <TableHead>PDF</TableHead>
+              <TableHead>החזרה לסטטוס פעיל</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {questions.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-start text-secondary">
+                <TableCell colSpan={6} className="py-8 text-center text-secondary">
                   אין שאלות בארכיון
                 </TableCell>
               </TableRow>
@@ -131,7 +131,7 @@ export function ArchiveTable({ questions }: ArchiveTableProps) {
                     <TableCell className="font-mono text-xs text-secondary" onClick={(e) => e.stopPropagation()}>
                       {q.short_id ?? `${q.id.slice(0, 8)}…`}
                     </TableCell>
-                    <TableCell className="max-w-[320px] text-start">
+                    <TableCell className="max-w-[320px]">
                       <p className="text-sm font-medium text-slate-800">{q.title || "—"}</p>
                       <p className="text-xs text-slate-600">{topicSub}</p>
                     </TableCell>
@@ -146,8 +146,8 @@ export function ArchiveTable({ questions }: ArchiveTableProps) {
                     <TableCell className="text-sm text-secondary" onClick={(e) => e.stopPropagation()}>
                       {q.sent_at ? formatDate(q.sent_at) : "—"}
                     </TableCell>
-                    <TableCell className="text-end" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex flex-nowrap items-center justify-end gap-1">
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-nowrap items-center justify-center gap-1">
                         <Button
                           size="sm"
                           variant="outline"
@@ -169,7 +169,7 @@ export function ArchiveTable({ questions }: ArchiveTableProps) {
                         </Button>
                       </div>
                     </TableCell>
-                    <TableCell className="text-end" onClick={(e) => e.stopPropagation()}>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <Button
                         size="sm"
                         variant="outline"

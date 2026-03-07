@@ -1,9 +1,61 @@
 /**
  * ייצור PDF מ-HTML באמצעות Puppeteer. העברית והשורות מוצגים נכון.
+ * גופני Heebo מוטמעים כ-base64 ב-HTML כדי שהטקסט ייצא תמיד תקין (ללא תלות ברשת).
  */
+import path from "path";
+import fs from "fs";
 import { buildPdfHtml } from "./pdf-html-template";
 
+const CDN_BASE = "https://cdn.jsdelivr.net/npm/@fontsource/heebo@5.2.8/files";
+const FONT_400 = "heebo-hebrew-400-normal.woff";
+const FONT_700 = "heebo-hebrew-700-normal.woff";
+
 export type PdfHtmlOptions = Parameters<typeof buildPdfHtml>[0];
+
+/** מחזיר CSS של @font-face עם גופני Heebo כ-base64 (מקבצים מקומיים או CDN) */
+async function getHeeboFontFaceCss(): Promise<string> {
+  const cwd = process.cwd();
+  const publicDir = path.join(cwd, "public", "fonts");
+  const dest400 = path.join(publicDir, FONT_400);
+  const dest700 = path.join(publicDir, FONT_700);
+
+  let base64_400: string;
+  let base64_700: string;
+
+  if (fs.existsSync(dest400) && fs.existsSync(dest700)) {
+    base64_400 = fs.readFileSync(dest400, "base64");
+    base64_700 = fs.readFileSync(dest700, "base64");
+  } else {
+    const [res400, res700] = await Promise.all([
+      fetch(`${CDN_BASE}/${FONT_400}`),
+      fetch(`${CDN_BASE}/${FONT_700}`),
+    ]);
+    if (!res400.ok || !res700.ok) return "";
+    const [buf400, buf700] = await Promise.all([
+      res400.arrayBuffer(),
+      res700.arrayBuffer(),
+    ]);
+    base64_400 = Buffer.from(buf400).toString("base64");
+    base64_700 = Buffer.from(buf700).toString("base64");
+  }
+
+  return `
+@font-face {
+  font-family: 'Heebo';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(data:font/woff;base64,${base64_400}) format('woff');
+}
+@font-face {
+  font-family: 'Heebo';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(data:font/woff;base64,${base64_700}) format('woff');
+}
+`;
+}
 
 export async function renderPdfFromHtml(options: PdfHtmlOptions): Promise<Buffer> {
   const puppeteer = await import("puppeteer").catch(() => null);
@@ -11,7 +63,9 @@ export async function renderPdfFromHtml(options: PdfHtmlOptions): Promise<Buffer
     throw new Error("puppeteer not installed. Run: npm install puppeteer");
   }
 
-  const html = buildPdfHtml(options);
+  const fontFaceCss = await getHeeboFontFaceCss().catch(() => undefined);
+  const html = buildPdfHtml({ ...options, fontFaceCss });
+
   const browser = await puppeteer.default.launch({
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
@@ -20,15 +74,20 @@ export async function renderPdfFromHtml(options: PdfHtmlOptions): Promise<Buffer
   try {
     const page = await browser.newPage();
     await page.setContent(html, {
-      waitUntil: "networkidle0",
+      waitUntil: fontFaceCss ? "domcontentloaded" : "networkidle0",
       timeout: 20000,
     });
-    // Wait for web fonts (Heebo) to load so PDF text renders correctly
-    await page.evaluate(async () => {
-      if ("fonts" in document && typeof (document as Document & { fonts: { ready: Promise<void> } }).fonts?.ready?.then === "function") {
-        await (document as Document & { fonts: { ready: Promise<void> } }).fonts.ready;
-      }
-    }).catch(() => {});
+    if (!fontFaceCss) {
+      await page.evaluate(async () => {
+        if ("fonts" in document && typeof (document as Document & { fonts: { ready: Promise<void> } }).fonts?.ready?.then === "function") {
+          await (document as Document & { fonts: { ready: Promise<void> } }).fonts.ready;
+        }
+      }).catch(() => {});
+    } else {
+      await page.evaluate(async () => {
+        await (document as Document & { fonts: { ready: Promise<void> } }).fonts?.ready;
+      }).catch(() => {});
+    }
     await page.emulateMediaType("print");
     const pdfBuffer = await page.pdf({
       format: "A4",

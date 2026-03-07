@@ -87,7 +87,7 @@ export function TeamTable({ profiles, categories, proofreaderTypes }: TeamTableP
             <TableBody>
               {profiles.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-start text-secondary">
+                  <TableCell colSpan={5} className="py-8 text-center text-secondary">
                     אין אנשי צוות במערכת
                   </TableCell>
                 </TableRow>

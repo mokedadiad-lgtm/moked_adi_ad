@@ -75,7 +75,7 @@ export function TrashTable({ questions }: TrashTableProps) {
           <TableBody>
             {questions.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-8 text-start text-secondary">
+                <TableCell colSpan={5} className="py-8 text-center text-secondary">
                   אין שאלות באשפה
                 </TableCell>
               </TableRow>

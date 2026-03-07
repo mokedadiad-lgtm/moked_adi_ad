@@ -3,14 +3,17 @@ import { sanitizeResponseHtml } from "./response-text";
 /**
  * תבנית HTML ל-PDF: עברית RTL, גופן Heebo, ב"ה, שאלה, תשובה (מבנה + כותרות), קו והערות שוליים.
  * מיועד לרינדור בדפדפן (Puppeteer) כדי שהעברית תוצג נכון.
+ * אם מועבר fontFaceCss (גופנים מוטמעים base64) – אין תלות ברשת והטקסט יצא תקין.
  */
 export function buildPdfHtml(options: {
   questionContent: string;
   bodyHtmlForPdf: string;
   footnotes: string[];
   createdAt?: string;
+  /** אופציונלי: @font-face עם גופני Heebo כ-base64 – מונע בעיות כשגופנים לא נטענים מהרשת */
+  fontFaceCss?: string;
 }): string {
-  const { questionContent, bodyHtmlForPdf, footnotes, createdAt } = options;
+  const { questionContent, bodyHtmlForPdf, footnotes, createdAt, fontFaceCss } = options;
   const safeBody = sanitizeResponseHtml(bodyHtmlForPdf);
 
   const footnotesHtml =
@@ -32,9 +35,9 @@ export function buildPdfHtml(options: {
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&display=swap" rel="stylesheet">
+  ${fontFaceCss ? "" : '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&display=swap" rel="stylesheet">'}
   <style>
+    ${fontFaceCss ? fontFaceCss : ""}
     @page { size: A4; margin: 0; }
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
