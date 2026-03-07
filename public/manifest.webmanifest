@@ -2,7 +2,7 @@
   "name": "אסק מי+ – מענה אנונימי",
   "short_name": "אסק מי+",
   "description": "מערכת שאלות ותשובות אנונימיות – עדי עד",
-  "start_url": "/",
+  "start_url": "/login",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#f8fafc",
