@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -408,9 +409,9 @@ export function LoginForm() {
             שכחתי סיסמה
           </button>
           <p className="mt-4 pt-4 border-t border-slate-200 text-center text-sm text-slate-600">
-            <a href="/" className="text-primary font-medium underline hover:no-underline">
+            <Link href="/" className="text-primary font-medium underline hover:no-underline">
               טופס שליחת שאלה
-            </a>
+            </Link>
             {" "}
             (למשתמשים)
           </p>
