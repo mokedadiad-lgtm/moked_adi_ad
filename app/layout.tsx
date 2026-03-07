@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     title: "אסק מי+",
   },
   icons: {
-    apple: "/icon.svg",
+    apple: "/icon-192.png",
   },
   other: {
     "mobile-web-app-capable": "yes",
