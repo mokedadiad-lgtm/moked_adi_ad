@@ -46,11 +46,12 @@ export async function POST(
   }
 
   const { bodyHtmlForPdf, footnotes } = responseToStructuredForPdf(question.response_text ?? null);
+  const pdfGeneratedAt = new Date().toISOString();
   const pdfOptions = {
     questionContent: question.content,
     bodyHtmlForPdf,
     footnotes,
-    createdAt: question.created_at ?? undefined,
+    createdAt: pdfGeneratedAt,
   };
 
   let buffer: Buffer;
@@ -99,7 +100,6 @@ export async function POST(
   const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(filename);
   const baseUrl = urlData.publicUrl;
   const pdfUrl = `${baseUrl}?v=${Date.now()}`;
-  const pdfGeneratedAt = new Date().toISOString();
 
   const updatePayload: { pdf_url: string; updated_at: string; pdf_generated_at: string; stage?: string } = {
     pdf_url: pdfUrl,

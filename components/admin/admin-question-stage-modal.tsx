@@ -508,6 +508,9 @@ export function AdminQuestionStageModal({
 
               {question.stage === "ready_for_sending" && (
                 <div className="flex flex-wrap justify-center gap-2 text-right">
+                  <Button variant="default" size="sm" className="bg-primary" asChild title="גישה לעריכה לשונית">
+                    <Link href={`/admin/linguistic?open=${question.id}`}>גישה לעריכה לשונית</Link>
+                  </Button>
                   {question.pdf_url ? (
                     <>
                       <Button

@@ -6,7 +6,7 @@ import { ADMIN_TABLE_STAGES } from "@/lib/types";
 import { AdminDashboard } from "@/components/admin/admin-dashboard";
 
 const BASE_SELECT =
-  "id, short_id, stage, title, content, created_at, asker_email, asker_age, asker_gender, response_type, publication_consent, assigned_respondent_id, assigned_proofreader_id, response_text, proofreader_note, pdf_url, proofreader_type_id";
+  "id, short_id, stage, title, content, created_at, asker_email, asker_age, asker_gender, response_type, publication_consent, assigned_respondent_id, assigned_proofreader_id, response_text, proofreader_note, pdf_url, pdf_generated_at, proofreader_type_id";
 const EXTENDED_SELECT = `${BASE_SELECT}, topic_id, sub_topic_id, topics(name_he), sub_topics(name_he)`;
 
 type TopicRef = { name_he: string } | { name_he: string }[] | null | undefined;
@@ -23,6 +23,7 @@ type QuestionRowRaw = Omit<QuestionRow, "short_id"> & {
   response_text?: string | null;
   proofreader_note?: string | null;
   pdf_url?: string | null;
+  pdf_generated_at?: string | null;
   proofreader_type_id?: string | null;
 };
 
@@ -88,6 +89,7 @@ async function getActiveQuestions(): Promise<QuestionRow[]> {
     response_text: r.response_text ?? null,
     proofreader_note: r.proofreader_note ?? null,
     pdf_url: r.pdf_url ?? null,
+    pdf_generated_at: (r as { pdf_generated_at?: string | null }).pdf_generated_at ?? null,
     proofreader_type_id: r.proofreader_type_id ?? null,
   }));
 

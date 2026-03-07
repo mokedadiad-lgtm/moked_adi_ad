@@ -11,12 +11,25 @@ const heebo = Heebo({
 export const metadata: Metadata = {
   title: "מערכת שאלות ותשובות",
   description: "מערכת ניהול שאלות אנונימיות",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "אסק מי+",
+  },
+  icons: {
+    apple: "/icon.svg",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
+  themeColor: "#4f46e5",
 };
 
 export default function RootLayout({
