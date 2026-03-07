@@ -148,7 +148,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       )}
       <main
         className={cn(
-          "min-h-screen flex-1 min-w-0 pb-8 pe-4 ps-4 md:pe-8",
+          "font-sans min-h-screen flex-1 min-w-0 pb-8 pe-4 ps-4 md:pe-8",
           hasSidebar ? "pt-14 md:pt-6 md:ps-[17rem]" : "pt-4 md:pt-6"
         )}
       >

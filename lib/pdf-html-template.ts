@@ -33,20 +33,23 @@ export function buildPdfHtml(options: {
 <head>
   <meta charset="utf-8">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    @page { size: A4; margin: 0; }
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
     body {
       font-family: 'Heebo', sans-serif;
-      font-size: 13px;
-      line-height: 1.75;
+      font-size: 14px;
+      line-height: 1.7;
       color: #1F2937;
       background: #F9FAFB;
       display: flex;
       flex-direction: column;
       min-height: 297mm;
       padding: 0 44px;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
     }
     .header {
       background: #EEF2FF;
@@ -101,17 +104,21 @@ export function buildPdfHtml(options: {
       text-align: justify;
       color: #6B7280;
       padding: 0 3cm;
-      font-size: 13px;
-      line-height: 1.75;
+      font-size: 14px;
+      line-height: 1.7;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
     }
     .body {
       text-align: justify;
       padding: 0 1cm;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
     }
-    .body p, .body div { margin: 0 0 8px; text-align: justify; }
+    .body p, .body div { margin: 0 0 10px; text-align: justify; }
     .body p:last-child, .body div:last-child { margin-bottom: 0; }
-    .body h2 { font-size: 15px; font-weight: 700; color: #374151; margin: 18px 0 8px; text-align: justify; }
-    .body h3 { font-size: 14px; font-weight: 700; color: #4B5563; margin: 14px 0 6px; text-align: justify; }
+    .body h2 { font-size: 16px; font-weight: 700; color: #374151; margin: 18px 0 8px; text-align: justify; }
+    .body h3 { font-size: 15px; font-weight: 700; color: #4B5563; margin: 14px 0 6px; text-align: justify; }
     .body sup {
       font-size: 0.75em;
       vertical-align: super;

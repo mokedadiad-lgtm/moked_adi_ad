@@ -102,7 +102,7 @@ function BarChart({
           <>
             {/* Y-axis grid */}
             <div
-              className="absolute inset-x-4 top-4 bottom-10 flex flex-col justify-between border-slate-200/60 pr-2 text-end"
+              className="font-sans absolute inset-x-4 top-4 bottom-10 flex flex-col justify-between border-slate-200/60 pr-2 text-end"
               style={{ borderRightWidth: 1 }}
               aria-hidden
             >
@@ -141,7 +141,7 @@ function BarChart({
             </div>
             {/* X-axis labels */}
             <div
-              className="mt-2 flex justify-between gap-1 pr-12 text-[10px] text-slate-500"
+              className="font-sans mt-2 flex justify-between gap-1 pr-12 text-[10px] text-slate-500"
               style={{ marginRight: "2.5rem" }}
               dir="ltr"
             >
@@ -257,7 +257,7 @@ function CombinedInOutChart({
         style={{ minHeight: CHART_HEIGHT + 48 }}
       >
         <div
-          className="absolute inset-x-4 top-4 bottom-10 flex flex-col justify-between border-slate-200/60 pr-2 text-end"
+          className="font-sans absolute inset-x-4 top-4 bottom-10 flex flex-col justify-between border-slate-200/60 pr-2 text-end"
           style={{ borderRightWidth: 1 }}
           aria-hidden
         >
@@ -303,7 +303,7 @@ function CombinedInOutChart({
           })}
         </div>
         <div
-          className="mt-2 flex justify-between gap-1 pr-12 text-[10px] text-slate-500"
+          className="font-sans mt-2 flex justify-between gap-1 pr-12 text-[10px] text-slate-500"
           style={{ marginRight: "2.5rem" }}
           dir="ltr"
         >
@@ -364,7 +364,7 @@ export function AnalyticsView({
   );
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="font-sans space-y-6" dir="rtl">
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">סינון לטבלת הנתונים</CardTitle>

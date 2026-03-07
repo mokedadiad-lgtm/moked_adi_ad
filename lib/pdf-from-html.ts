@@ -21,13 +21,20 @@ export async function renderPdfFromHtml(options: PdfHtmlOptions): Promise<Buffer
     const page = await browser.newPage();
     await page.setContent(html, {
       waitUntil: "networkidle0",
-      timeout: 15000,
+      timeout: 20000,
     });
+    // Wait for web fonts (Heebo) to load so PDF text renders correctly
+    await page.evaluate(async () => {
+      if ("fonts" in document && typeof (document as Document & { fonts: { ready: Promise<void> } }).fonts?.ready?.then === "function") {
+        await (document as Document & { fonts: { ready: Promise<void> } }).fonts.ready;
+      }
+    }).catch(() => {});
     await page.emulateMediaType("print");
     const pdfBuffer = await page.pdf({
       format: "A4",
       printBackground: true,
       margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      preferCSSPageSize: true,
     });
     return Buffer.from(pdfBuffer);
   } finally {
