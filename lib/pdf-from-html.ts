@@ -58,18 +58,43 @@ async function getHeeboFontFaceCss(): Promise<string> {
 }
 
 export async function renderPdfFromHtml(options: PdfHtmlOptions): Promise<Buffer> {
-  const puppeteer = await import("puppeteer").catch(() => null);
-  if (!puppeteer?.default) {
-    throw new Error("puppeteer not installed. Run: npm install puppeteer");
-  }
-
+  const isVercel = process.env.VERCEL === "1";
   const fontFaceCss = await getHeeboFontFaceCss().catch(() => undefined);
   const html = buildPdfHtml({ ...options, fontFaceCss });
 
-  const browser = await puppeteer.default.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
+  interface BrowserLike {
+    newPage(): Promise<{
+      setContent(html: string, opts?: object): Promise<void>;
+      evaluate(fn: () => Promise<void>): Promise<void>;
+      emulateMediaType(type: string): Promise<void>;
+      pdf(opts: object): Promise<Buffer | Uint8Array>;
+    }>;
+    close(): Promise<void>;
+  }
+  let browser: BrowserLike;
+  if (isVercel) {
+    const chromium = await import("@sparticuz/chromium").catch(() => null);
+    const puppeteerCore = await import("puppeteer-core").catch(() => null);
+    if (!chromium?.default || !puppeteerCore?.default) {
+      throw new Error(
+        "On Vercel, @sparticuz/chromium and puppeteer-core are required for PDF. Install: npm install @sparticuz/chromium puppeteer-core"
+      );
+    }
+    browser = (await puppeteerCore.default.launch({
+      args: [...chromium.default.args, "--no-sandbox", "--disable-setuid-sandbox"],
+      executablePath: await chromium.default.executablePath(),
+      headless: true,
+    })) as BrowserLike;
+  } else {
+    const puppeteer = await import("puppeteer").catch(() => null);
+    if (!puppeteer?.default) {
+      throw new Error("puppeteer not installed. Run: npm install puppeteer");
+    }
+    browser = (await puppeteer.default.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    })) as BrowserLike;
+  }
 
   try {
     const page = await browser.newPage();
