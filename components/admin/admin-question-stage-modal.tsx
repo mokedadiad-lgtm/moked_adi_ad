@@ -36,6 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import type { QuestionRow, QuestionStage } from "@/lib/types";
 import { STAGE_LABELS, STAGE_ORDER } from "@/lib/types";
 import { PdfViewModal } from "@/components/admin/pdf-view-modal";
@@ -118,6 +119,8 @@ export function AdminQuestionStageModal({
   const [addTopicPending, setAddTopicPending] = useState(false);
   const [addSubTopicOpen, setAddSubTopicOpen] = useState(false);
   const [newSubTopicName, setNewSubTopicName] = useState("");
+  /** כשמוסיפים תת-נושא משורת שיבוץ: אינדקס השורה; null = מהטופס הראשי (החלפת משיב) */
+  const [addSubTopicForSlotIndex, setAddSubTopicForSlotIndex] = useState<number | null>(null);
   const [addSubTopicPending, setAddSubTopicPending] = useState(false);
   const [reminderPending, setReminderPending] = useState<"respondent" | "proofreader" | null>(null);
   const [sendConfirmOpen, setSendConfirmOpen] = useState(false);
@@ -146,6 +149,10 @@ export function AdminQuestionStageModal({
   const [addSubTopicIdForNew, setAddSubTopicIdForNew] = useState("");
   const [addRespondentId, setAddRespondentId] = useState("");
   const [addRespondentPending, setAddRespondentPending] = useState(false);
+  const [assignMessage, setAssignMessage] = useState("");
+  const [addRespondentMessage, setAddRespondentMessage] = useState("");
+  /** רשימת שיבוצים שמחכים לשליחה (משיב + נושא) – נשלחים together בלחיצה אחת */
+  const [assignmentSlots, setAssignmentSlots] = useState<{ topicId: string; subTopicId: string; respondentId: string; message: string }[]>([]);
   const selectedTopic = topicsList.find((t) => t.id === topicId);
   const subTopics = selectedTopic?.sub_topics ?? [];
 
@@ -165,6 +172,7 @@ export function AdminQuestionStageModal({
     if (!open) {
       setChangeStatusModalOpen(false);
       setAssignTopicModalOpen(false);
+      setAssignmentSlots([]);
     }
   }, [open]);
 
@@ -202,15 +210,23 @@ export function AdminQuestionStageModal({
     return () => { cancelled = true; };
   }, [assignTopicModalOpen, assignTopicId]);
 
-  const loadEligibility = useCallback(async () => {
+  const loadEligibility = useCallback(async (topic?: string) => {
     if (!question?.id || !open) return;
-    const list = await getRespondentsWithEligibility(question.id, topicId || undefined);
+    const list = await getRespondentsWithEligibility(question.id, topic || undefined);
     setRespondentsWithEligibility(list);
-  }, [question?.id, open, topicId]);
+  }, [question?.id, open]);
+
+  const effectiveTopicForEligibility = questionAnswers.length > 0 ? topicId : (assignmentSlots[0]?.topicId ?? "");
 
   useEffect(() => {
-    if (open && question?.stage === "waiting_assignment") loadEligibility();
-  }, [open, question?.stage, loadEligibility]);
+    if (open && question?.stage === "waiting_assignment") loadEligibility(effectiveTopicForEligibility);
+  }, [open, question?.stage, loadEligibility, effectiveTopicForEligibility]);
+
+  useEffect(() => {
+    if (open && question?.stage === "waiting_assignment" && questionAnswers.length === 0 && assignmentSlots.length === 0) {
+      setAssignmentSlots([{ topicId: "", subTopicId: "", respondentId: "", message: "" }]);
+    }
+  }, [open, question?.stage, questionAnswers.length, assignmentSlots.length]);
 
   const loadQuestionAnswers = useCallback(async () => {
     if (!question?.id || !open) return;
@@ -297,50 +313,79 @@ export function AdminQuestionStageModal({
   };
 
   const handleAddSubTopic = async () => {
-    if (!newSubTopicName.trim() || !topicId) return;
+    const topicToUse = addSubTopicForSlotIndex !== null
+      ? assignmentSlots[addSubTopicForSlotIndex]?.topicId
+      : topicId;
+    if (!newSubTopicName.trim() || !topicToUse) return;
     setAddSubTopicPending(true);
     setAssignError(null);
-    const result = await createSubTopic({ topic_id: topicId, name_he: newSubTopicName.trim() });
+    const result = await createSubTopic({ topic_id: topicToUse, name_he: newSubTopicName.trim() });
     setAddSubTopicPending(false);
     if (result.ok) {
       const updated = await getTopicsWithSubTopics();
       setTopicsList(updated);
-      setSubTopicId(result.id);
+      if (addSubTopicForSlotIndex !== null) {
+        const idx = addSubTopicForSlotIndex;
+        setAssignmentSlots((prev) => prev.map((s, i) => (i === idx ? { ...s, subTopicId: result.id } : s)));
+      } else {
+        setSubTopicId(result.id);
+      }
       setNewSubTopicName("");
       setAddSubTopicOpen(false);
+      setAddSubTopicForSlotIndex(null);
       router.refresh();
     } else setAssignError(result.error);
   };
 
   const handleAssign = async () => {
-    if (!question || !respondentId) return;
-    setAssignPending(true);
-    setAssignError(null);
+    if (!question) return;
     const hasExisting = questionAnswers.length > 0;
-    let result;
     if (hasExisting) {
+      if (!respondentId) return;
+      setAssignPending(true);
+      setAssignError(null);
       const target = questionAnswers[0]!;
-      result = await replaceQuestionAssignment(
+      const result = await replaceQuestionAssignment(
         target.id,
         respondentId,
         topicId || undefined,
-        subTopicId || undefined
+        subTopicId || undefined,
+        assignMessage.trim() || null
       );
-    } else {
-      result = await assignQuestion(
+      setAssignPending(false);
+      if (result.ok) {
+        loadQuestionAnswers();
+        onSuccess?.();
+        router.refresh();
+        setRespondentId("");
+        setAssignMessage("");
+      } else setAssignError(result.error ?? "שגיאה");
+      return;
+    }
+    const toSend = assignmentSlots.filter((s) => s.respondentId);
+    if (toSend.length === 0) return;
+    setAssignPending(true);
+    setAssignError(null);
+    let lastError: string | null = null;
+    for (const slot of toSend) {
+      const result = await assignQuestion(
         question.id,
-        respondentId,
-        topicId || undefined,
-        subTopicId || undefined
+        slot.respondentId,
+        slot.topicId || undefined,
+        slot.subTopicId || undefined,
+        slot.message || null
       );
+      if (!result.ok) lastError = result.error ?? "שגיאה";
     }
     setAssignPending(false);
-    if (result.ok) {
+    if (!lastError) {
+      setAssignmentSlots([]);
+      setRespondentId("");
+      setAssignMessage("");
       loadQuestionAnswers();
       onSuccess?.();
       router.refresh();
-      setRespondentId("");
-    } else setAssignError(result.error ?? "שגיאה");
+    } else setAssignError(lastError);
   };
 
   const handleAddRespondentForAnswer = async () => {
@@ -351,7 +396,8 @@ export function AdminQuestionStageModal({
       question.id,
       addRespondentId,
       addTopicIdForNew || undefined,
-      addSubTopicIdForNew || undefined
+      addSubTopicIdForNew || undefined,
+      addRespondentMessage.trim() || null
     );
     setAddRespondentPending(false);
     if (result.ok) {
@@ -359,6 +405,7 @@ export function AdminQuestionStageModal({
       setAddTopicIdForNew("");
       setAddSubTopicIdForNew("");
       setAddRespondentId("");
+      setAddRespondentMessage("");
       loadQuestionAnswers();
       onSuccess?.();
       router.refresh();
@@ -518,101 +565,234 @@ export function AdminQuestionStageModal({
             <div className="space-y-3 p-3 px-2 sm:ps-4 sm:pe-3">
               {question.stage === "waiting_assignment" && (
                 <div className="space-y-4 text-right">
-                  <p className="text-xs font-medium text-slate-600">חלק השאלה שהמשיב/ה יתייחס/ת אליו (נושא ותת-נושא)</p>
-                  {/* שורה: נושא + הוסף נושא */}
-                  <div className="flex flex-row flex-wrap items-end justify-start gap-2 sm:gap-3" dir="rtl">
-                    <div className="space-y-1 min-w-0 flex-1">
-                      <Label className="block text-right">נושא</Label>
-                      <Select
-                        value={topicId || "__none__"}
-                        onValueChange={(v) => {
-                          setTopicId(v === "__none__" ? "" : v);
-                          setSubTopicId("");
-                          loadEligibility();
-                        }}
-                      >
-                        <SelectTrigger className="w-full min-w-0 sm:min-w-[140px] text-right">
-                          <SelectValue placeholder="בחר/י נושא" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">ללא נושא</SelectItem>
-                          {topicsList.map((t) => (
-                            <SelectItem key={t.id} value={t.id}>
-                              {t.name_he}
-                              {t.proofreader_type_name_he ? ` (${t.proofreader_type_name_he})` : ""}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Button type="button" variant="default" size="sm" className="shrink-0 bg-primary" onClick={() => { setAddTopicOpen(true); loadProofreaderTypes(); }}>
-                      הוסף נושא
-                    </Button>
-                  </div>
-                  {/* שורה: תת-נושא + הוסף תת-נושא */}
-                  <div className="flex flex-row flex-wrap items-end justify-start gap-2 sm:gap-3" dir="rtl">
-                    <div className="space-y-1 min-w-0 flex-1">
-                      <Label className="block text-right">תת-נושא</Label>
-                      <Select value={subTopicId || "__none__"} onValueChange={(v) => setSubTopicId(v === "__none__" ? "" : v)}>
-                        <SelectTrigger className="w-full min-w-0 sm:min-w-[140px] text-right">
-                          <SelectValue placeholder="תת-נושא" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">ללא</SelectItem>
-                          {subTopics.map((s) => (
-                            <SelectItem key={s.id} value={s.id}>{s.name_he}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Button type="button" variant="default" size="sm" className="shrink-0 bg-primary" onClick={() => setAddSubTopicOpen(true)} disabled={!topicId}>
-                      הוסף תת-נושא
-                    </Button>
-                  </div>
-                  {/* בחירת משיב + כפתור אישור */}
-                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-nowrap sm:items-end text-right" dir="rtl">
-                    <div className="space-y-1 min-w-0 flex-1 w-full sm:w-auto">
-                      <Label className="text-right">בחירת משיב/ה</Label>
-                      {sortedRespondents.length === 0 ? (
-                        <p className="text-sm text-pink-700">אין משיבים במערכת</p>
-                      ) : (
-                        <Select value={respondentId} onValueChange={setRespondentId}>
-                          <SelectTrigger className="h-10 w-full min-w-0 text-right">
-                            <SelectValue placeholder="בחר/י משיב/ה" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {sortedRespondents.map((r) => (
-                              <SelectItem key={r.id} value={r.id}>
-                                <span className={cn(r.eligible ? "text-green-700" : "text-red-700")}>
-                                  {r.full_name_he || `משיב (${r.id.slice(0, 8)}…)`}
-                                  {!r.eligible && r.reason && ` (${r.reason})`}
-                                </span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </div>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      className="h-10 w-full sm:w-auto shrink-0 bg-green-600 text-white hover:bg-green-700"
-                      onClick={handleAssign}
-                      disabled={assignPending || !respondentId || sortedRespondents.length === 0}
-                      title={questionAnswers.length > 0 ? "החלפת משיב קיים" : "אישור ושליחה למשיב"}
-                    >
-                      {assignPending ? (
-                        "שולח…"
-                      ) : questionAnswers.length > 0 ? (
-                        <>החלף משיב</>
-                      ) : (
-                        <>
-                          <span className="sm:hidden">שליחה למשיב</span>
-                          <span className="hidden sm:inline">אישור ושליחה למשיב</span>
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                  {questionAnswers.length === 0 ? (
+                    <>
+                      <p className="text-xs font-medium text-slate-600">לכל שיבוץ: בחר/י נושא, תת-נושא, משיב/ה והודעה. הוסף/י שורות עבור משיבים נוספים.</p>
+                      {assignmentSlots.map((slot, idx) => {
+                        const slotTopic = topicsList.find((t) => t.id === slot.topicId);
+                        const slotSubTopics = slotTopic?.sub_topics ?? [];
+                        return (
+                          <div key={idx} className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-3" dir="rtl">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-xs font-semibold text-slate-700">משיב/ה {idx + 1}</p>
+                              {assignmentSlots.length > 1 && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-slate-600"
+                                  onClick={() => setAssignmentSlots((prev) => prev.filter((_, i) => i !== idx))}
+                                >
+                                  הסר שורה
+                                </Button>
+                              )}
+                            </div>
+                            <div className="flex flex-row flex-wrap items-end justify-start gap-2 sm:gap-3">
+                              <div className="space-y-1 min-w-0 flex-1">
+                                <Label className="block text-right text-xs">נושא</Label>
+                                <Select
+                                  value={slot.topicId || "__none__"}
+                                  onValueChange={(v) => {
+                                    const val = v === "__none__" ? "" : v;
+                                    setAssignmentSlots((prev) => prev.map((s, i) => (i === idx ? { ...s, topicId: val, subTopicId: "" } : s)));
+                                    if (idx === 0) loadEligibility(val);
+                                  }}
+                                >
+                                  <SelectTrigger className="w-full min-w-0 sm:min-w-[140px] text-right h-9">
+                                    <SelectValue placeholder="בחר/י נושא" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">ללא נושא</SelectItem>
+                                    {topicsList.map((t) => (
+                                      <SelectItem key={t.id} value={t.id}>
+                                        {t.name_he}
+                                        {t.proofreader_type_name_he ? ` (${t.proofreader_type_name_he})` : ""}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <Button type="button" variant="default" size="sm" className="shrink-0 bg-primary h-9" onClick={() => { setAddTopicOpen(true); loadProofreaderTypes(); }}>
+                                הוסף נושא
+                              </Button>
+                            </div>
+                            <div className="flex flex-row flex-wrap items-end justify-start gap-2 sm:gap-3">
+                              <div className="space-y-1 min-w-0 flex-1">
+                                <Label className="block text-right text-xs">תת-נושא</Label>
+                                <Select
+                                  value={slot.subTopicId ? String(slot.subTopicId) : "__none__"}
+                                  onValueChange={(v) => setAssignmentSlots((prev) => prev.map((s, i) => (i === idx ? { ...s, subTopicId: v === "__none__" ? "" : v } : s)))}
+                                >
+                                  <SelectTrigger className="w-full min-w-0 sm:min-w-[140px] text-right h-9">
+                                    <SelectValue placeholder="תת-נושא" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">ללא</SelectItem>
+                                    {slotSubTopics.map((s) => (
+                                      <SelectItem key={s.id} value={s.id}>{s.name_he}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <Button type="button" variant="default" size="sm" className="shrink-0 bg-primary h-9" onClick={() => { setAddSubTopicForSlotIndex(idx); setAddSubTopicOpen(true); }} disabled={!slot.topicId}>
+                                הוסף תת-נושא
+                              </Button>
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="block text-right text-xs">משיב/ה</Label>
+                              {sortedRespondents.length === 0 ? (
+                                <p className="text-sm text-pink-700">אין משיבים במערכת</p>
+                              ) : (
+                                <Select
+                                  value={slot.respondentId}
+                                  onValueChange={(v) => setAssignmentSlots((prev) => prev.map((s, i) => (i === idx ? { ...s, respondentId: v } : s)))}
+                                >
+                                  <SelectTrigger className="w-full text-right h-9">
+                                    <SelectValue placeholder="בחר/י משיב/ה" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {sortedRespondents.map((r) => (
+                                      <SelectItem key={r.id} value={r.id}>
+                                        <span className={cn(r.eligible ? "text-green-700" : "text-red-700")}>
+                                          {r.full_name_he || `משיב (${r.id.slice(0, 8)}…)`}
+                                          {!r.eligible && r.reason && ` (${r.reason})`}
+                                        </span>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="block text-right text-xs">הודעה מצורפת למשיב/ה (אופציונלי)</Label>
+                              <Textarea
+                                value={slot.message}
+                                onChange={(e) => setAssignmentSlots((prev) => prev.map((s, i) => (i === idx ? { ...s, message: e.target.value } : s)))}
+                                rows={2}
+                                className="text-right text-xs"
+                                placeholder="הערה שתצורף במייל…"
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div className="flex flex-wrap gap-2" dir="rtl">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setAssignmentSlots((prev) => [...prev, { topicId: "", subTopicId: "", respondentId: "", message: "" }])}
+                          title="פתיחת שורת שדות לשיבוץ משיב/ה נוסף/ת"
+                        >
+                          שלח למשיב נוסף
+                        </Button>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="bg-green-600 text-white hover:bg-green-700"
+                          onClick={handleAssign}
+                          disabled={assignPending || sortedRespondents.length === 0 || assignmentSlots.every((s) => !s.respondentId)}
+                          title="שליחה לכל המשיבים שבחרת"
+                        >
+                          {assignPending ? "שולח…" : `אישור ושליחה ל־${assignmentSlots.filter((s) => s.respondentId).length} משיבים`}
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs font-medium text-slate-600">חלק השאלה שהמשיב/ה יתייחס/ת אליו (נושא ותת-נושא)</p>
+                      <div className="flex flex-row flex-wrap items-end justify-start gap-2 sm:gap-3" dir="rtl">
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <Label className="block text-right">נושא</Label>
+                          <Select
+                            value={topicId || "__none__"}
+                            onValueChange={(v) => {
+                              setTopicId(v === "__none__" ? "" : v);
+                              setSubTopicId("");
+                              loadEligibility(v === "__none__" ? "" : v);
+                            }}
+                          >
+                            <SelectTrigger className="w-full min-w-0 sm:min-w-[140px] text-right">
+                              <SelectValue placeholder="בחר/י נושא" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">ללא נושא</SelectItem>
+                              {topicsList.map((t) => (
+                                <SelectItem key={t.id} value={t.id}>
+                                  {t.name_he}
+                                  {t.proofreader_type_name_he ? ` (${t.proofreader_type_name_he})` : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button type="button" variant="default" size="sm" className="shrink-0 bg-primary" onClick={() => { setAddTopicOpen(true); loadProofreaderTypes(); }}>
+                          הוסף נושא
+                        </Button>
+                      </div>
+                      <div className="flex flex-row flex-wrap items-end justify-start gap-2 sm:gap-3" dir="rtl">
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <Label className="block text-right">תת-נושא</Label>
+                          <Select value={subTopicId || "__none__"} onValueChange={(v) => setSubTopicId(v === "__none__" ? "" : v)}>
+                            <SelectTrigger className="w-full min-w-0 sm:min-w-[140px] text-right">
+                              <SelectValue placeholder="תת-נושא" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">ללא</SelectItem>
+                              {subTopics.map((s) => (
+                                <SelectItem key={s.id} value={s.id}>{s.name_he}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button type="button" variant="default" size="sm" className="shrink-0 bg-primary" onClick={() => setAddSubTopicOpen(true)} disabled={!topicId}>
+                          הוסף תת-נושא
+                        </Button>
+                      </div>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:flex-nowrap sm:items-end text-right" dir="rtl">
+                        <div className="space-y-1 min-w-0 flex-1 w-full sm:w-auto">
+                          <Label className="text-right">בחירת משיב/ה</Label>
+                          {sortedRespondents.length === 0 ? (
+                            <p className="text-sm text-pink-700">אין משיבים במערכת</p>
+                          ) : (
+                            <Select value={respondentId} onValueChange={setRespondentId}>
+                              <SelectTrigger className="h-10 w-full min-w-0 text-right">
+                                <SelectValue placeholder="בחר/י משיב/ה" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {sortedRespondents.map((r) => (
+                                  <SelectItem key={r.id} value={r.id}>
+                                    <span className={cn(r.eligible ? "text-green-700" : "text-red-700")}>
+                                      {r.full_name_he || `משיב (${r.id.slice(0, 8)}…)`}
+                                      {!r.eligible && r.reason && ` (${r.reason})`}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="h-10 w-full sm:w-auto shrink-0 bg-green-600 text-white hover:bg-green-700"
+                          onClick={handleAssign}
+                          disabled={assignPending || !respondentId || sortedRespondents.length === 0}
+                          title="החלפת משיב קיים"
+                        >
+                          {assignPending ? "שולח…" : <>החלף משיב</>}
+                        </Button>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-right text-xs">הודעה מצורפת למשיב/ה (אופציונלי)</Label>
+                        <Textarea
+                          value={assignMessage}
+                          onChange={(e) => setAssignMessage(e.target.value)}
+                          rows={2}
+                          className="text-right text-xs"
+                          placeholder="הערה קצרה שתצורף במייל למשיב/ה…"
+                        />
+                      </div>
                   {questionAnswers.length > 0 && (
                     <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-2 text-right">
                       <p className="text-xs font-semibold text-slate-600">שיבוצים קיימים — לאיזה חלק של השאלה כל משיב/ה מתייחס/ת</p>
@@ -647,7 +827,7 @@ export function AdminQuestionStageModal({
                           <div className="flex flex-row flex-wrap items-end justify-start gap-2">
                             <div className="space-y-1 min-w-0 flex-1">
                               <Label className="block text-right text-xs">נושא</Label>
-                              <Select value={addTopicIdForNew || "__none__"} onValueChange={(v) => { setAddTopicIdForNew(v === "__none__" ? "" : v); setAddSubTopicIdForNew(""); loadEligibility(); }}>
+                              <Select value={addTopicIdForNew || "__none__"} onValueChange={(v) => { const val = v === "__none__" ? "" : v; setAddTopicIdForNew(val); setAddSubTopicIdForNew(""); loadEligibility(val); }}>
                                 <SelectTrigger className="w-full min-w-0 text-right h-9">
                                   <SelectValue placeholder="בחר/י נושא" />
                                 </SelectTrigger>
@@ -719,9 +899,21 @@ export function AdminQuestionStageModal({
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => { setAddRespondentForAnswer(null); setAddTopicIdForNew(""); setAddSubTopicIdForNew(""); setAddRespondentId(""); }}>ביטול</Button>
                           </div>
+                          <div className="space-y-1">
+                            <Label className="text-right text-xs">הודעה מצורפת למשיב/ה (אופציונלי)</Label>
+                            <Textarea
+                              value={addRespondentMessage}
+                              onChange={(e) => setAddRespondentMessage(e.target.value)}
+                              rows={2}
+                              className="text-right text-xs"
+                              placeholder="הודעה שתצורף למייל למשיב/ה הנוסף/ת…"
+                            />
+                          </div>
                         </div>
                       )}
                     </div>
+                  )}
+                    </>
                   )}
                   {assignError && <p className="text-sm text-red-600">{assignError}</p>}
                 </div>
@@ -999,7 +1191,7 @@ export function AdminQuestionStageModal({
       </Dialog>
 
       {/* חלון הוספת תת-נושא */}
-      <Dialog open={addSubTopicOpen} onOpenChange={setAddSubTopicOpen}>
+      <Dialog open={addSubTopicOpen} onOpenChange={(open) => { setAddSubTopicOpen(open); if (!open) setAddSubTopicForSlotIndex(null); }}>
         <DialogContent className="max-w-sm rounded-2xl border border-card-border bg-card px-5 py-4 text-center shadow-soft" dir="rtl">
           <DialogHeader>
             <DialogTitle className="text-center">הוסף תת-נושא</DialogTitle>

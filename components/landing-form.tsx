@@ -101,7 +101,7 @@ export function LandingForm() {
     <>
       <div className="mb-5 text-center">
         <p className="mb-1.5 text-2xl font-bold tracking-tight text-slate-800 md:text-3xl">
-          ברוכה הבאה למוקד האסק-מי פלוס
+          ברוכה הבאה למוקד אסק-מי פלוס
         </p>
         <p className="text-sm leading-relaxed text-slate-600">
           כאן ניתן להשאיר את השאלה שלך ואנו נשתדל לענות עליה בעז&quot;ה.
@@ -300,7 +300,7 @@ export function LandingForm() {
         <p className="text-center text-xs leading-relaxed text-slate-600">
           {form.watch("asker_gender") === "M"
             ? "פעמים רבות השאלות שאנו נשאלים יכולות לסייע למתמודדים נוספים. אתה חשוב לנו ולעולם לא נפרסם את השאלה שלך אם לא תסכים."
-            : "פעמים רבות השאלות שאנו נשאלים יכולות לסייע למתמודדות נוספות. את חשוב לנו ולעולם לא נפרסם את השאלה שלך אם לא תסכימי."}
+            : "פעמים רבות השאלות שאנו נשאלים יכולות לסייע למתמודדות נוספות. את חשובה לנו ולעולם לא נפרסם את השאלה שלך אם לא תסכימי."}
         </p>
         <p className="text-center text-xs leading-relaxed text-slate-600">
           {form.watch("asker_gender") === "M"

@@ -29,7 +29,7 @@ export function buildPdfHtml(options: {
 
   const dateStr = createdAt ? formatHebrewDateLetters(createdAt) : "";
 
-  const footerText = `<span class="footer-line1">האסק מי+ – מענה אנונימי מטעם ארגון "עדי עד"</span><br><span class="footer-line2">אתר עדי עד: www.adeyad.org</span><br>המידע בתשובה זו הינו כללי ואינו מהווה תחליף לייעוץ מקצועי אישי.`;
+  const footerText = `<span class="footer-line1">אסק מי פלוס – מענה אנונימי מטעם ארגון "עדי עד"</span><br><span class="footer-line2">אתר עדי עד: www.adeyad.org</span><br>המידע בתשובה זו הינו כללי ואינו מהווה תחליף לייעוץ מקצועי אישי.`;
 
   return `<!DOCTYPE html>
 <html lang="he" dir="rtl">

@@ -54,7 +54,7 @@ async function getLinguisticQuestions(): Promise<QuestionRow[]> {
   try {
     const qaRes = await supabase
       .from("question_answers")
-      .select(`${QA_SELECT}, questions!inner(id, short_id, title, content, created_at, asker_email, asker_age, asker_gender, response_type, publication_consent, deleted_at, answers_merged_at), topics(name_he), sub_topics(name_he)`)
+      .select(`${QA_SELECT}, questions!inner(id, short_id, title, content, created_at, asker_email, asker_age, asker_gender, response_type, publication_consent, deleted_at, answers_merged_at, response_text, pdf_url, pdf_generated_at), topics(name_he), sub_topics(name_he)`)
       .in("stage", stages)
       .order("created_at", { ascending: false });
     qaRows = ((qaRes.data ?? []) as unknown as typeof qaRows).filter((r) => !r.deleted_at);
@@ -111,8 +111,8 @@ async function getLinguisticQuestions(): Promise<QuestionRow[]> {
         : null;
     fromQa.push({
       id: q?.id ?? questionId,
-      // בשלב העריכה הלשונית עובדים על טקסט מאוחד בשאלה עצמה, לא על תשובה ספציפית
-      answer_id: null,
+      // כשיש תשובה אחת – שומרים ל-question_answers כדי ש־PDF ורענון יראו את העדכון
+      answer_id: rows.length === 1 ? first.id : null,
       short_id: q?.short_id ?? null,
       stage: first.stage as QuestionRow["stage"],
       title: q?.title ?? null,
@@ -128,7 +128,7 @@ async function getLinguisticQuestions(): Promise<QuestionRow[]> {
       sub_topic_id: first.sub_topic_id ?? null,
       topic_name_he: nameFromRelation(first.topics),
       sub_topic_name_he: nameFromRelation(first.sub_topics),
-      response_text: qData?.response_text ?? null,
+      response_text: qData?.answers_merged_at ? (qData?.response_text ?? null) : (first.response_text ?? qData?.response_text ?? null),
       proofreader_note: first.proofreader_note ?? null,
       pdf_url: qData?.pdf_url ?? null,
       pdf_generated_at: qData?.pdf_generated_at ?? null,

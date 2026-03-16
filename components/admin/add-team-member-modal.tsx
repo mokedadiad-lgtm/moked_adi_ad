@@ -58,7 +58,6 @@ export function AddTeamMemberModal({
   const [phone, setPhone] = useState("");
   const [concurrency_limit, setConcurrencyLimit] = useState(1);
   const [cooldown_days, setCooldownDays] = useState(0);
-  const [admin_note, setAdminNote] = useState("");
   const [category_ids, setCategoryIds] = useState<string[]>([]);
   const [topic_ids, setTopicIds] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
@@ -78,7 +77,6 @@ export function AddTeamMemberModal({
     setPhone("");
     setConcurrencyLimit(1);
     setCooldownDays(0);
-    setAdminNote("");
     setCategoryIds([]);
     setTopicIds([]);
     setError(null);
@@ -118,7 +116,6 @@ export function AddTeamMemberModal({
       phone: phone.trim() || null,
       concurrency_limit,
       cooldown_days,
-      admin_note: admin_note.trim() || null,
       category_ids,
       topic_ids: is_respondent ? topic_ids : [],
     });
@@ -290,18 +287,6 @@ export function AddTeamMemberModal({
                         disabled={pending}
                       />
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="add-admin_note">הערת מנהל (לשיבוץ)</Label>
-                    <Textarea
-                      id="add-admin_note"
-                      value={admin_note}
-                      onChange={(e) => setAdminNote(e.target.value)}
-                      placeholder="הנחיה אישית למשיב/ה..."
-                      rows={2}
-                      className="text-right"
-                      disabled={pending}
-                    />
                   </div>
                 </>
               )}

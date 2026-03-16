@@ -98,6 +98,48 @@ export function responseToStructured(value: string | null | undefined): {
 
 const SUP_FN_REF = /<sup\s[^>]*data-fn-id="[^"]*"[^>]*>\[(\d+)\]<\/sup>/gi;
 
+const DATA_FN_ID = /data-fn-id="([^"]+)"/gi;
+
+/** מחזיר את רשימת מזהי ההערות לפי סדר הופעה ב-bodyHtml */
+export function getFootnoteIdsInOrder(bodyHtml: string): string[] {
+  const ids: string[] = [];
+  let m: RegExpExecArray | null;
+  DATA_FN_ID.lastIndex = 0;
+  while ((m = DATA_FN_ID.exec(bodyHtml)) !== null) ids.push(m[1]!);
+  return ids;
+}
+
+/**
+ * מחליף מזהי הערות שוליים ב-body וברשימת ההערות ב-prefix ייחודי (למיזוג כמה תשובות בלי התנגשויות).
+ */
+export function rewriteFootnoteIds(
+  bodyHtml: string,
+  footnotes: { id: string; text: string }[],
+  prefix: string
+): { bodyHtml: string; footnotes: { id: string; text: string }[] } {
+  const fnMap = new Map(footnotes.map((f) => [f.id, f.text ?? ""]));
+  const orderedIds = getFootnoteIdsInOrder(bodyHtml);
+  if (orderedIds.length === 0) return { bodyHtml, footnotes: [] };
+  const newBodyHtml = bodyHtml.replace(/data-fn-id="([^"]+)"/gi, (_, id: string) => `data-fn-id="${prefix}${id}"`);
+  const newFootnotes = orderedIds.map((id) => ({ id: `${prefix}${id}`, text: fnMap.get(id) ?? "" }));
+  return { bodyHtml: newBodyHtml, footnotes: newFootnotes };
+}
+
+/**
+ * בונה את המחרוזת השמורה (HTML + data-footnotes-json) מגוף ומערך הערות.
+ * לשימוש במיזוג תשובות – שומר עיצוב וערות שוליים.
+ */
+export function buildStoredResponse(
+  bodyHtml: string,
+  footnotes: { id: string; text: string }[]
+): string {
+  const fnMap = new Map(footnotes.map((f) => [f.id, f.text ?? ""]));
+  const orderedIds = getFootnoteIdsInOrder(bodyHtml);
+  const arr = orderedIds.map((id) => ({ id, text: fnMap.get(id) ?? "" }));
+  const json = JSON.stringify(arr).replace(/"/g, "&quot;");
+  return `${bodyHtml}<div data-footnotes-json="${json}" style="display:none"></div>`;
+}
+
 /**
  * For PDF: preserves body structure (p, h2, h3, etc.) and converts footnote refs
  * to superscript numbers without brackets. Returns HTML safe to inject and footnote lines.

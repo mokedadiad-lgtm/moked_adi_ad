@@ -43,6 +43,9 @@ export function ProofreaderDashboard() {
   const [selected, setSelected] = useState<LobbyQuestion | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isProofreader, setIsProofreader] = useState(false);
+  const [showAllForAdmin, setShowAllForAdmin] = useState(true);
   const searchParams = useSearchParams();
   const openQuestionId = searchParams.get("open");
   const openedFromLink = useRef(false);
@@ -71,6 +74,18 @@ export function ProofreaderDashboard() {
       return;
     }
     setUserId(user.id);
+    setIsAdmin(isAdminOrTechLead);
+    setIsProofreader(!!profile?.is_proofreader);
+
+    // מנהלים: במצב "כל המשימות" נשתמש ב-API עם service role כדי לא להיתקע על RLS
+    if (isAdminOrTechLead && showAllForAdmin) {
+      const res = await fetch("/api/admin/proofreader-lobby-tasks");
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; tasks?: LobbyQuestion[] };
+      setQuestions(data.ok && data.tasks ? data.tasks : []);
+      setLoading(false);
+      return;
+    }
+
     const [qaRes, qRes] = await Promise.all([
       supabase
         .from("question_answers")
@@ -110,7 +125,7 @@ export function ProofreaderDashboard() {
     const legacy = legacyRows.filter((q) => !fromQaIds.has(q.id));
     setQuestions([...fromQa, ...legacy]);
     setLoading(false);
-  }, [router]);
+  }, [router, showAllForAdmin]);
 
   useEffect(() => {
     fetchQuestions();
@@ -136,6 +151,10 @@ export function ProofreaderDashboard() {
   };
 
   const mine = userId ? questions.filter((q) => q.assigned_proofreader_id === userId) : [];
+  const takenByOthers =
+    userId && (showAllForAdmin || !isAdmin || !isProofreader)
+      ? questions.filter((q) => q.assigned_proofreader_id && q.assigned_proofreader_id !== userId)
+      : [];
   const available = questions.filter((q) => !q.assigned_proofreader_id);
 
   const openModal = (q: LobbyQuestion) => {
@@ -169,6 +188,26 @@ export function ProofreaderDashboard() {
     <>
       <PageHeader title="לובי הגהה">
         <RoleSwitcher />
+        {isAdmin && isProofreader && (
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant={showAllForAdmin ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowAllForAdmin(true)}
+            >
+              כל המשימות
+            </Button>
+            <Button
+              type="button"
+              variant={!showAllForAdmin ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowAllForAdmin(false)}
+            >
+              רק המשימות שלי
+            </Button>
+          </div>
+        )}
         {!hasSidebar && (
           <Button variant="outline" size="sm" onClick={handleLogout}>
             התנתקות
@@ -210,19 +249,16 @@ export function ProofreaderDashboard() {
               </section>
             )}
 
-            <section>
-              <h2 className="mb-3 text-start text-sm font-medium text-secondary">בתור ({available.length})</h2>
-              {available.length === 0 && mine.length === 0 ? (
-                <div className="rounded-2xl border border-card-border bg-card p-12 text-start shadow-soft">
-                  <p className="text-lg font-medium text-primary">אין משימות בהמתנה</p>
-                  <p className="mt-2 text-secondary">משימות חדשות יופיעו כאן כשמשיבים ישלחו תשובות{"\u200E"}.</p>
-                </div>
-              ) : (
+            {(showAllForAdmin || !isAdmin || !isProofreader) && takenByOthers.length > 0 && (
+              <section>
+                <h2 className="mb-3 text-start text-sm font-medium text-secondary">
+                  נתפסו ע״י מגיהים אחרים ({takenByOthers.length})
+                </h2>
                 <ul className="space-y-3">
-                  {available.map((q) => (
+                  {takenByOthers.map((q) => (
                     <li key={q.answer_id ?? q.id}>
                       <Card
-                        className="cursor-pointer transition-shadow hover:shadow-md"
+                        className="cursor-pointer border-amber-200 bg-amber-50/50 transition-shadow hover:shadow-md"
                         onClick={() => openModal(q)}
                       >
                         <CardContent className="p-4">
@@ -236,13 +272,54 @@ export function ProofreaderDashboard() {
                               תשובה{"\u200E"}: {truncateSummary(responseToPlainText(q.response_text), 80)}
                             </p>
                           )}
+                          {q.assigned_proofreader_id && (
+                            <p className="mt-2 text-start text-[11px] text-slate-500">
+                              נתפס על ידי: {q.assigned_proofreader_id.slice(0, 8)}…
+                            </p>
+                          )}
                         </CardContent>
                       </Card>
                     </li>
                   ))}
                 </ul>
-              )}
-            </section>
+              </section>
+            )}
+
+            {showAllForAdmin || !isAdmin || !isProofreader ? (
+              <section>
+                <h2 className="mb-3 text-start text-sm font-medium text-secondary">בתור ({available.length})</h2>
+                {available.length === 0 && mine.length === 0 ? (
+                  <div className="rounded-2xl border border-card-border bg-card p-12 text-start shadow-soft">
+                    <p className="text-lg font-medium text-primary">אין משימות בהמתנה</p>
+                    <p className="mt-2 text-secondary">משימות חדשות יופיעו כאן כשמשיבים ישלחו תשובות{"\u200E"}.</p>
+                  </div>
+                ) : (
+                  <ul className="space-y-3">
+                    {available.map((q) => (
+                      <li key={q.answer_id ?? q.id}>
+                        <Card
+                          className="cursor-pointer transition-shadow hover:shadow-md"
+                          onClick={() => openModal(q)}
+                        >
+                          <CardContent className="p-4">
+                            <p className="text-xs text-secondary">{formatDate(q.created_at)}</p>
+                            {q.title && <p className="mt-1 text-sm font-medium text-slate-800">{q.title}</p>}
+                            <p className={cn("mt-1 line-clamp-2 text-start text-sm text-primary", q.title && "mt-0.5")}>
+                              {truncateSummary(q.content)}
+                            </p>
+                            {q.response_text && (
+                              <p className="mt-2 line-clamp-1 text-start text-xs text-slate-600">
+                                תשובה{"\u200E"}: {truncateSummary(responseToPlainText(q.response_text), 80)}
+                              </p>
+                            )}
+                          </CardContent>
+                        </Card>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            ) : null}
           </>
         )}
       </main>

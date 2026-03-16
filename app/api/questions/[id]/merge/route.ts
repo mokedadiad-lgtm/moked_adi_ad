@@ -1,10 +1,17 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { responseToPlainText } from "@/lib/response-text";
+import {
+  parseResponseRich,
+  getFootnoteIdsInOrder,
+  buildStoredResponse,
+  rewriteFootnoteIds,
+} from "@/lib/response-text";
 import { NextResponse } from "next/server";
+
+const ANSWER_SEP = '<div class="answer-sep" style="margin:1em 0; padding:0.5em 0; border-top:1px solid #ccc; text-align:center;">——</div>';
 
 /**
  * POST: מיזוג כל התשובות של השאלה ל-response_text אחד ב-questions.
- * נדרש לפני יצירת PDF כשהשאלה נשלחה למספר משיבים.
+ * שומר HTML (מודגש, כותרות, הערות שוליים) – לא ממיר ל-plain text.
  */
 export async function POST(
   _request: Request,
@@ -16,9 +23,10 @@ export async function POST(
   }
 
   const supabase = getSupabaseAdmin();
+  // טוענים רק עמודות שנדרשות למיזוג – בלי join, כדי לקבל שורה אחת לכל question_answer
   const { data: answers, error: fetchErr } = await supabase
     .from("question_answers")
-    .select("response_text, assigned_respondent_id, topics(name_he), sub_topics(name_he), deleted_at")
+    .select("id, response_text, deleted_at")
     .eq("question_id", id)
     .in("stage", ["in_linguistic_review", "ready_for_sending", "sent_archived"])
     .order("created_at", { ascending: true });
@@ -27,10 +35,8 @@ export async function POST(
     return NextResponse.json({ error: "שגיאה בטעינת תשובות" }, { status: 500 });
   }
   const list = ((answers ?? []) as {
+    id: string;
     response_text: string | null;
-    assigned_respondent_id: string | null;
-    topics?: { name_he?: string } | null;
-    sub_topics?: { name_he?: string } | null;
     deleted_at?: string | null;
   }[]).filter((a) => !a.deleted_at);
 
@@ -41,29 +47,33 @@ export async function POST(
     );
   }
 
-  let respondentNames: Record<string, string> = {};
-  const respondentIds = [...new Set(list.map((a) => a.assigned_respondent_id).filter(Boolean))] as string[];
-  if (respondentIds.length > 0) {
-    const { data: profs } = await supabase.from("profiles").select("id, full_name_he").in("id", respondentIds);
-    if (profs) respondentNames = Object.fromEntries(profs.map((p) => [p.id, p.full_name_he ?? ""]));
+  const bodyParts: string[] = [];
+  const allFootnotes: { id: string; text: string }[] = [];
+
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i]!;
+    const { bodyHtml, footnotes } = parseResponseRich(a.response_text ?? null);
+    const trimmed = bodyHtml.trim();
+    if (i === 0) {
+      const orderedIds = getFootnoteIdsInOrder(trimmed);
+      const fnMap = new Map(footnotes.map((f) => [f.id, f.text ?? ""]));
+      for (const fid of orderedIds) allFootnotes.push({ id: fid, text: fnMap.get(fid) ?? "" });
+      bodyParts.push(trimmed);
+    } else {
+      const prefix = `m${i + 1}-`;
+      const { bodyHtml: rewrittenBody, footnotes: rewrittenFns } = rewriteFootnoteIds(trimmed, footnotes, prefix);
+      bodyParts.push(rewrittenBody);
+      allFootnotes.push(...rewrittenFns);
+    }
   }
 
-  const parts: string[] = [];
-  for (const a of list) {
-    const titleParts = [a.topics?.name_he, a.sub_topics?.name_he].filter(Boolean);
-    const title = titleParts.length ? titleParts.join(" · ") : null;
-    const subTitle = a.assigned_respondent_id ? respondentNames[a.assigned_respondent_id]?.trim() : null;
-    const heading = [title, subTitle].filter(Boolean).join(" — ");
-    const body = responseToPlainText(a.response_text ?? null);
-    if (heading) parts.push(heading + "\n\n" + body);
-    else parts.push(body);
-  }
-  const mergedText = parts.join("\n\n——\n\n");
+  const mergedBodyHtml = bodyParts.join(ANSWER_SEP);
+  const mergedStored = buildStoredResponse(mergedBodyHtml, allFootnotes);
 
   const { error: updateErr } = await supabase
     .from("questions")
     .update({
-      response_text: mergedText,
+      response_text: mergedStored,
       answers_merged_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })

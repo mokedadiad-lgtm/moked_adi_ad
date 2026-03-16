@@ -123,8 +123,24 @@ export function RichTextEditor({
     [capture]
   );
 
-  const setHeading = useCallback(() => {
-    exec("formatBlock", "h2");
+  /** כותרת: אם הסמן בתוך כותרת (h2/h3) – מבטל; אחרת הופך את הבלוק לכותרת */
+  const toggleHeading = useCallback(() => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    let node: Node | null = sel.anchorNode;
+    let isInsideHeading = false;
+    while (node && ref.current) {
+      if (node === ref.current) break;
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const tag = (node as Element).tagName;
+        if (tag === "H2" || tag === "H3" || tag === "H1") {
+          isInsideHeading = true;
+          break;
+        }
+      }
+      node = node.parentNode;
+    }
+    exec("formatBlock", isInsideHeading ? "p" : "h2");
   }, [exec]);
 
   const insertFootnote = useCallback(() => {
@@ -170,10 +186,10 @@ export function RichTextEditor({
         </button>
         <button
           type="button"
-          onClick={setHeading}
+          onClick={toggleHeading}
           disabled={disabled}
           className="rounded px-2 py-1 text-sm hover:bg-slate-200 disabled:opacity-50"
-          title="השחר את הטקסט הרצוי ולחץ על כפתור זה להפיכתו לכותרת"
+          title="הפוך לכותרת / אם הסמן בכותרת – בטל כותרת"
         >
           כותרת
         </button>

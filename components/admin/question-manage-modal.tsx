@@ -63,6 +63,7 @@ export function QuestionManageModal({
   const [topicsList, setTopicsList] = useState<TopicOption[]>(topics);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [managerMessage, setManagerMessage] = useState("");
 
   const [showAddTopic, setShowAddTopic] = useState(false);
   const [newTopicName, setNewTopicName] = useState("");
@@ -131,7 +132,8 @@ export function QuestionManageModal({
       question.id,
       respondentId,
       topicId || undefined,
-      subTopicId || undefined
+      subTopicId || undefined,
+      managerMessage.trim() || null
     );
     setPending(false);
     if (result.ok) {
@@ -139,6 +141,7 @@ export function QuestionManageModal({
       setRespondentId("");
       setTopicId("");
       setSubTopicId("");
+      setManagerMessage("");
       router.refresh();
     } else {
       setError(result.error);
@@ -315,6 +318,18 @@ export function QuestionManageModal({
                 </SelectContent>
               </Select>
             )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="assign-manager-message">הודעה מצורפת למשיב/ה (אופציונלי)</Label>
+            <Textarea
+              id="assign-manager-message"
+              value={managerMessage}
+              onChange={(e) => setManagerMessage(e.target.value)}
+              placeholder="הערה קצרה שתצורף למייל למשיב/ה…"
+              rows={2}
+              className="text-right"
+            />
           </div>
 
           {error && (

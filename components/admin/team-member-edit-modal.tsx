@@ -59,7 +59,6 @@ export function TeamMemberEditModal({
   const [phone, setPhone] = useState("");
   const [concurrency_limit, setConcurrencyLimit] = useState(1);
   const [cooldown_days, setCooldownDays] = useState(0);
-  const [admin_note, setAdminNote] = useState("");
   const [category_ids, setCategoryIds] = useState<string[]>([]);
   const [topic_ids, setTopicIds] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
@@ -80,7 +79,6 @@ export function TeamMemberEditModal({
       setPhone(profile.phone ?? "");
       setConcurrencyLimit(profile.concurrency_limit ?? 1);
       setCooldownDays(profile.cooldown_days ?? 0);
-      setAdminNote(profile.admin_note ?? "");
       setCategoryIds(profile.category_ids ?? []);
       setTopicIds(profile.topic_ids ?? []);
       setError(null);
@@ -109,7 +107,6 @@ export function TeamMemberEditModal({
       phone: phone.trim() || null,
       concurrency_limit,
       cooldown_days,
-      admin_note: admin_note.trim() || null,
       category_ids,
       topic_ids: is_respondent ? topic_ids : [],
     });
@@ -271,17 +268,6 @@ export function TeamMemberEditModal({
                         className="text-right"
                       />
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="admin_note">הערת מנהל (לשיבוץ)</Label>
-                    <Textarea
-                      id="admin_note"
-                      value={admin_note}
-                      onChange={(e) => setAdminNote(e.target.value)}
-                      placeholder="הנחיה אישית למשיב/ה..."
-                      rows={2}
-                      className="text-right"
-                    />
                   </div>
                 </>
               )}

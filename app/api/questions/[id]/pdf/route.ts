@@ -22,10 +22,8 @@ function mergeAnswersForPdf(
   let offset = 0;
   for (const a of answers) {
     const { bodyHtmlForPdf, footnotes } = responseToStructuredForPdf(a.response_text ?? null);
-    const titleParts = [a.topic_name_he, a.sub_topic_name_he].filter(Boolean);
-    const title = titleParts.length ? titleParts.join(" · ") : null;
-    const subTitle = a.respondent_name ? `משיב/ה: ${a.respondent_name}` : null;
-    const heading = [title, subTitle].filter(Boolean).join(" — ");
+    // לא מציגים כותרת עם נושא/תת-נושא או שם המשיב/ה בתחילת התשובה ב-PDF
+    const heading = null;
     const renumberedBody = bodyHtmlForPdf.replace(
       /<sup[^>]*class="fn-ref"[^>]*>(\d+)<\/sup>/gi,
       (_, n) => `<sup class="fn-ref">${Number(n) + offset}</sup>`
@@ -119,6 +117,7 @@ export async function POST(
   let footnotes: string[];
   let mergedPlainForArchive: string | null = null;
 
+  // כשמספר תשובות > 1 – משתמשים רק במיזוג שבוצע לפני העריכה הלשונית (merge API). אין שלב מיזוג נפרד ל-PDF.
   if (answers.length > 1) {
     if (!question.answers_merged_at) {
       return NextResponse.json(
@@ -215,6 +214,19 @@ export async function POST(
   }
 
   await supabase.from("questions").update(updatePayload).eq("id", id);
+
+  // לוח הבקרה מציג סטטוס מתוך question_answers – מעדכנים גם שם כדי שהשאלה תעבור ל"מוכן לשליחה"
+  await supabase
+    .from("question_answers")
+    .update({
+      stage: "ready_for_sending",
+      pdf_url: pdfUrl,
+      pdf_generated_at: pdfGeneratedAt,
+      updated_at: pdfGeneratedAt,
+    })
+    .eq("question_id", id)
+    .in("stage", ["in_linguistic_review", "ready_for_sending"])
+    .is("deleted_at", null);
 
   return NextResponse.json({ pdf_url: pdfUrl, pdf_generated_at: pdfGeneratedAt });
 }

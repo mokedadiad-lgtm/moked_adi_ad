@@ -53,7 +53,9 @@ export function RespondentDashboard() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<RespondentQuestion | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [isAdminViewing, setIsAdminViewing] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isRespondent, setIsRespondent] = useState(false);
+  const [showAllForAdmin, setShowAllForAdmin] = useState(true);
   const openedFromLink = useRef(false);
 
   const fetchQuestions = useCallback(async () => {
@@ -65,62 +67,147 @@ export function RespondentDashboard() {
     }
     const { data: profile } = await supabase
       .from("profiles")
-      .select("is_admin, is_technical_lead")
+      .select("is_admin, is_technical_lead, is_respondent")
       .eq("id", user.id)
       .single();
     const isAdminOrTechLead = profile?.is_admin === true || profile?.is_technical_lead === true;
-    setIsAdminViewing(isAdminOrTechLead);
+    const isResp = profile?.is_respondent === true;
+    setIsAdmin(isAdminOrTechLead);
+    setIsRespondent(isResp);
 
-    // למנהלים: להציג את כל השאלות אצל משיבים; למשיבים: רק את המשימות שלהם
-    let qaQuery = supabase
-      .from("question_answers")
-      .select("id, question_id, response_text, proofreader_type_id, deleted_at, questions(id, title, content, created_at, asker_age, asker_gender, response_type, publication_consent)")
-      .eq("stage", "with_respondent")
-      .order("created_at", { ascending: true });
-    let qQuery = supabase
-      .from("questions")
-      .select("id, title, content, created_at, asker_age, asker_gender, response_type, publication_consent, response_text")
-      .eq("stage", "with_respondent")
-      .order("created_at", { ascending: true });
-
-    if (!isAdminOrTechLead) {
-      qaQuery = qaQuery.eq("assigned_respondent_id", user.id);
-      qQuery = qQuery.eq("assigned_respondent_id", user.id);
+    // אם המשתמש הוא מנהל (עם או בלי תפקיד משיב) ובחר "כל המשימות" – נשתמש ב-API עם service role
+    if (isAdminOrTechLead && (!isResp || showAllForAdmin)) {
+      const res = await fetch("/api/admin/respondent-tasks");
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        tasks?: RespondentQuestion[];
+      };
+      if (!data.ok || !data.tasks) {
+        setQuestions([]);
+      } else {
+        setQuestions(data.tasks);
+      }
+      setLoading(false);
+      return;
     }
 
-    const [qaRes, qRes] = await Promise.all([qaQuery, qQuery]);
+    // אם המשתמש הוא גם מנהל וגם משיב אבל בחר "רק המשימות שלי" – נשתמש גם ב-API המנהלי,
+    // אבל נסנן רק למשימות ששויכו אליו (assigned_respondent_id).
+    if (isAdminOrTechLead && isResp && !showAllForAdmin) {
+      const res = await fetch("/api/admin/respondent-tasks");
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        tasks?: (RespondentQuestion & { assigned_respondent_id?: string | null })[];
+      };
+      if (!data.ok || !data.tasks) {
+        setQuestions([]);
+      } else {
+        setQuestions(
+          data.tasks.filter((t) => t.assigned_respondent_id && t.assigned_respondent_id === user.id)
+        );
+      }
+      setLoading(false);
+      return;
+    }
 
-    const qaRows = (qaRes.data ?? []) as unknown as {
+    // אחרת – תצוגת משיב רגילה: רק המשימות של המשתמש הנוכחי (RLS),
+    // עם שליפת השאלות בבקשה נפרדת כדי להימנע מבעיות הרשאה על join.
+    const { data: qaData } = await supabase
+      .from("question_answers")
+      .select("id, question_id, response_text, proofreader_type_id, deleted_at")
+      .eq("stage", "with_respondent")
+      .eq("assigned_respondent_id", user.id)
+      .order("created_at", { ascending: true });
+
+    const qaRows = (qaData ?? []) as {
       id: string;
       question_id: string;
       response_text?: string | null;
       proofreader_type_id?: string | null;
       deleted_at?: string | null;
-      questions: { id: string; title?: string | null; content: string; created_at: string; asker_age?: string | null; asker_gender?: string | null; response_type?: string | null; publication_consent?: string | null } | { id: string; title?: string | null; content: string; created_at: string; asker_age?: string | null; asker_gender?: string | null; response_type?: string | null; publication_consent?: string | null }[] | null;
     }[];
     const activeQa = qaRows.filter((r) => !r.deleted_at);
-    const legacyRows = (qRes.data ?? []) as RespondentQuestion[];
-    const fromQaIds = new Set(activeQa.map((r) => r.question_id));
+    const questionIds = [...new Set(activeQa.map((r) => r.question_id))];
+
+    const { data: qData } = await supabase
+      .from("questions")
+      .select(
+        "id, title, content, created_at, asker_age, asker_gender, response_type, publication_consent"
+      )
+      .in("id", questionIds.length > 0 ? questionIds : ["00000000-0000-0000-0000-000000000000"]);
+
+    const qMap = new Map<
+      string,
+      {
+        id: string;
+        title?: string | null;
+        content: string;
+        created_at: string;
+        asker_age?: string | null;
+        asker_gender?: string | null;
+        response_type?: string | null;
+        publication_consent?: string | null;
+      }
+    >();
+    for (const q of qData ?? []) {
+      qMap.set((q as { id: string }).id, q as any);
+    }
+
     const fromQa: RespondentQuestion[] = activeQa.map((r) => {
-      const q = Array.isArray(r.questions) ? r.questions[0] : r.questions;
+      const q = qMap.get(r.question_id);
       return {
         id: q?.id ?? r.question_id,
         answer_id: r.id,
         proofreader_type_id: r.proofreader_type_id ?? null,
-        title: q?.title ?? null,
-        content: q?.content ?? "",
-        created_at: q?.created_at ?? "",
-        asker_age: q?.asker_age ?? null,
-        asker_gender: (q?.asker_gender === "M" || q?.asker_gender === "F" ? q.asker_gender : null) as "M" | "F" | null,
-        response_type: (q?.response_type === "short" || q?.response_type === "detailed" ? q.response_type : null) as "short" | "detailed" | null,
-        publication_consent: (q?.publication_consent === "publish" || q?.publication_consent === "blur" || q?.publication_consent === "none" ? q.publication_consent : null) as "publish" | "blur" | "none" | null,
+        title: (q as { title?: string | null } | undefined)?.title ?? null,
+        content: (q as { content?: string } | undefined)?.content ?? "",
+        created_at: (q as { created_at?: string } | undefined)?.created_at ?? "",
+        asker_age: (q as { asker_age?: string | null } | undefined)?.asker_age ?? null,
+        asker_gender:
+          (q as { asker_gender?: string | null } | undefined)?.asker_gender === "M" ||
+          (q as { asker_gender?: string | null } | undefined)?.asker_gender === "F"
+            ? ((q as { asker_gender?: string | null }).asker_gender as "M" | "F")
+            : null,
+        response_type:
+          (q as { response_type?: string | null } | undefined)?.response_type === "short" ||
+          (q as { response_type?: string | null } | undefined)?.response_type === "detailed"
+            ? ((q as { response_type?: string | null }).response_type as "short" | "detailed")
+            : null,
+        publication_consent:
+          (q as { publication_consent?: string | null } | undefined)?.publication_consent ===
+            "publish" ||
+          (q as { publication_consent?: string | null } | undefined)?.publication_consent ===
+            "blur" ||
+          (q as { publication_consent?: string | null } | undefined)?.publication_consent ===
+            "none"
+            ? ((q as { publication_consent?: string | null }).publication_consent as
+                | "publish"
+                | "blur"
+                | "none")
+            : null,
         response_text: r.response_text ?? null,
       };
     });
+
+    // שאלות ישנות (ללא question_answers) — נשארות כמו קודם
+    const { data: legacyData } = await supabase
+      .from("questions")
+      .select(
+        "id, title, content, created_at, asker_age, asker_gender, response_type, publication_consent, response_text"
+      )
+      .eq("stage", "with_respondent")
+      .eq("assigned_respondent_id", user.id)
+      .order("created_at", { ascending: true });
+
+    const legacyRows = (legacyData ?? []) as RespondentQuestion[];
+    const fromQaIds = new Set(activeQa.map((r) => r.question_id));
     const legacy = legacyRows.filter((q) => !fromQaIds.has(q.id));
+
     setQuestions([...fromQa, ...legacy]);
     setLoading(false);
-  }, [router]);
+  }, [router, showAllForAdmin]);
 
   useEffect(() => {
     fetchQuestions();
@@ -178,6 +265,26 @@ export function RespondentDashboard() {
     <>
       <PageHeader title="שולחן עבודה - משיבים">
         <RoleSwitcher />
+        {isAdmin && isRespondent && (
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant={showAllForAdmin ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowAllForAdmin(true)}
+            >
+              כל המשימות
+            </Button>
+            <Button
+              type="button"
+              variant={!showAllForAdmin ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowAllForAdmin(false)}
+            >
+              רק המשימות שלי
+            </Button>
+          </div>
+        )}
         {!hasSidebar && (
           <Button variant="outline" size="sm" onClick={handleLogout}>
             התנתקות
@@ -191,10 +298,12 @@ export function RespondentDashboard() {
         ) : questions.length === 0 ? (
           <div className="rounded-2xl border border-card-border bg-card p-12 text-start shadow-soft">
             <p className="text-lg font-medium text-primary">
-              {isAdminViewing ? "תצוגת אזור משיב (מנהל/ת)" : "איזה יופי, שולחן העבודה שלך נקי!"}
+              {isAdmin && showAllForAdmin
+                ? "תצוגת אזור משיב (מנהל/ת)"
+                : "איזה יופי, שולחן העבודה שלך נקי!"}
             </p>
             <p className="mt-2 text-secondary">
-              {isAdminViewing
+              {isAdmin && showAllForAdmin
                 ? "כדי לראות איך משיב רואה שאלות משובצות: הוסף משיב/ה בניהול צוות, שייך/י אליו/ה שאלה בלוח הבקרה (עפרון → שמור ושלח למשיב), ואז התנתק והתחבר עם האימייל והסיסמה של המשיב/ה — או פתח חלון גלישה פרטית והתחבר שם כמשיב/ה."
                 : "אין לך שאלות פתוחות כרגע\u200E."}
             </p>

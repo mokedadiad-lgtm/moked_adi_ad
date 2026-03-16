@@ -1,5 +1,6 @@
 "use client";
 
+import { saveLinguisticResponse } from "@/app/admin/actions";
 import { QuestionDetailsModal } from "@/components/admin/question-details-modal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,6 +47,18 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
       router.replace("/admin/linguistic", { scroll: false });
     }
   }, [questions, openQuestionId, router]);
+
+  // אחרי רענון — לעדכן את השאלה הנבחרת מהשרת. לא לדרוס pdf_url אם בשרת עדיין אין (cache) ויש לנו מקומית.
+  useEffect(() => {
+    if (!selected?.id || questions.length === 0) return;
+    const updated = questions.find((q) => q.id === selected.id);
+    if (!updated || updated === selected) return;
+    if (selected.pdf_url && !updated.pdf_url) {
+      setSelected((prev) => (prev?.id === updated.id ? { ...updated, pdf_url: prev.pdf_url, pdf_generated_at: prev.pdf_generated_at ?? null } : prev));
+      return;
+    }
+    setSelected(updated);
+  }, [questions, selected?.id]);
 
   const [pdfPending, setPdfPending] = useState<string | null>(null);
   const [mergePending, setMergePending] = useState<string | null>(null);
@@ -224,6 +237,10 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
           if (!open) setSelected(null);
         }}
         onSaveSuccess={handleSaveSuccess}
+        onSaveResponse={async (questionId, answerId, responseText) => {
+          const r = await saveLinguisticResponse(questionId, answerId, responseText);
+          return r.ok ? { ok: true } : { ok: false, error: r.error };
+        }}
         showPdfActions
         onCreatePdf={handleCreatePdf}
         onSendAndArchive={handleSendAndArchive}

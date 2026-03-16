@@ -125,6 +125,7 @@ async function getActiveQuestions(): Promise<QuestionRow[]> {
   for (const r of qaRows) {
     answersCountByQuestion[r.question_id] = (answersCountByQuestion[r.question_id] ?? 0) + 1;
   }
+
   const fromAnswer = (r: QuestionAnswerRaw): QuestionRow => {
     const q = Array.isArray(r.questions) ? r.questions[0] : r.questions;
     return {
@@ -155,7 +156,50 @@ async function getActiveQuestions(): Promise<QuestionRow[]> {
     };
   };
 
-  const answerRows = qaRows.map(fromAnswer);
+  const notReadyForSending = qaRows.filter((r) => r.stage !== "ready_for_sending");
+  const readyForSendingRows = qaRows.filter((r) => r.stage === "ready_for_sending");
+  const byQuestionIdReady = new Map<string, QuestionAnswerRaw[]>();
+  for (const r of readyForSendingRows) {
+    const list = byQuestionIdReady.get(r.question_id) ?? [];
+    list.push(r);
+    byQuestionIdReady.set(r.question_id, list);
+  }
+
+  const answerRows: QuestionRow[] = [...notReadyForSending.map(fromAnswer)];
+  for (const [, group] of byQuestionIdReady) {
+    const first = group[0]!;
+    const q = Array.isArray(first.questions) ? first.questions[0] : first.questions;
+    const respondentNames = [...new Set(group.map((r) => r.assigned_respondent_id).filter(Boolean).map((id) => profileNames[id as string]?.trim()).filter(Boolean))];
+    const proofreaderNames = [...new Set(group.map((r) => r.assigned_proofreader_id).filter(Boolean).map((id) => profileNames[id as string]?.trim()).filter(Boolean))];
+    const topicNames = [...new Set(group.map((r) => nameFromRelation(r.topics)).filter(Boolean))];
+    const subTopicNames = [...new Set(group.map((r) => nameFromRelation(r.sub_topics)).filter(Boolean))];
+    answerRows.push({
+      id: first.question_id,
+      answer_id: group.length === 1 ? first.id : null,
+      short_id: q?.short_id ?? null,
+      answers_count: group.length,
+      stage: "ready_for_sending" as const,
+      title: q?.title ?? null,
+      content: q?.content ?? "",
+      created_at: q?.created_at ?? first.created_at,
+      asker_email: q?.asker_email ?? null,
+      asker_age: q?.asker_age ?? null,
+      asker_gender: (q?.asker_gender as "M" | "F" | null) ?? null,
+      response_type: q?.response_type ?? null,
+      publication_consent: (q?.publication_consent as QuestionRow["publication_consent"]) ?? null,
+      respondent_name: respondentNames.length ? respondentNames.join(" · ") : null,
+      proofreader_name: proofreaderNames.length ? proofreaderNames.join(" · ") : null,
+      topic_id: first.topic_id ?? null,
+      sub_topic_id: first.sub_topic_id ?? null,
+      topic_name_he: topicNames.length ? topicNames.join(" · ") : null,
+      sub_topic_name_he: subTopicNames.length ? subTopicNames.join(" · ") : null,
+      response_text: first.response_text ?? null,
+      proofreader_note: first.proofreader_note ?? null,
+      pdf_url: first.pdf_url ?? null,
+      pdf_generated_at: first.pdf_generated_at ?? null,
+      proofreader_type_id: first.proofreader_type_id ?? null,
+    });
+  }
 
   const fromLegacy = (r: QuestionRowRaw): QuestionRow => ({
     id: r.id,

@@ -86,6 +86,8 @@ interface QuestionDetailsModalProps {
   needsMerge?: boolean;
   onMerge?: (questionId: string) => void;
   mergePending?: boolean;
+  /** כשמועבר — שמירה דרך שרת (עוקף RLS). מומלץ במסך העריכה הלשונית. */
+  onSaveResponse?: (questionId: string, answerId: string | null, responseText: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 interface ResponseVersion {
@@ -107,6 +109,7 @@ export function QuestionDetailsModal({
   needsMerge,
   onMerge,
   mergePending,
+  onSaveResponse,
 }: QuestionDetailsModalProps) {
   const [versions, setVersions] = useState<ResponseVersion[]>([]);
   const [showVersions, setShowVersions] = useState(false);
@@ -114,6 +117,7 @@ export function QuestionDetailsModal({
   const [responseText, setResponseText] = useState("");
   const [initialResponse, setInitialResponse] = useState("");
   const [savePending, setSavePending] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [showPdfView, setShowPdfView] = useState(false);
 
   useEffect(() => {
@@ -132,28 +136,45 @@ export function QuestionDetailsModal({
     const supabase = getSupabaseBrowser();
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
-      supabase.from("profiles").select("is_admin, is_technical_lead").eq("id", user.id).single().then(({ data }) => {
-        const p = data as { is_admin?: boolean; is_technical_lead?: boolean } | null;
-        setCanEdit(p?.is_admin === true || p?.is_technical_lead === true);
+      supabase.from("profiles").select("is_admin, is_technical_lead, is_linguistic_editor").eq("id", user.id).single().then(({ data }) => {
+        const p = data as { is_admin?: boolean; is_technical_lead?: boolean; is_linguistic_editor?: boolean } | null;
+        setCanEdit(p?.is_admin === true || p?.is_technical_lead === true || (!!onSaveResponse && p?.is_linguistic_editor === true));
       });
     });
-  }, [open]);
+  }, [open, onSaveResponse]);
 
   useEffect(() => {
     if (open && question) {
       const value = question.response_text ?? "";
       setResponseText(value);
       setInitialResponse(value);
+      setSaveError(null);
     }
   }, [open, question?.id, question?.response_text]);
 
-  const handleSaveResponse = async () => {
-    if (!question) return;
+  /** מחזיר true אם השמירה הצליחה או שלא היו שינויים, false אם אירעה שגיאה */
+  const handleSaveResponse = async (): Promise<boolean> => {
+    if (!question) return false;
     const nextTrimmed = responseText.trim();
     const initialTrimmed = initialResponse.trim();
-    if (nextTrimmed === initialTrimmed) return;
+    if (nextTrimmed === initialTrimmed) {
+      setSaveError(null);
+      return true;
+    }
 
     setSavePending(true);
+    setSaveError(null);
+    if (onSaveResponse) {
+      const result = await onSaveResponse(question.id, question.answer_id ?? null, nextTrimmed);
+      setSavePending(false);
+      if (result.ok) {
+        setInitialResponse(nextTrimmed);
+        onSaveSuccess?.();
+        return true;
+      }
+      setSaveError(result.error ?? "שגיאה בשמירה");
+      return false;
+    }
     const supabase = getSupabaseBrowser();
     const { error } = question.answer_id
       ? await supabase
@@ -168,7 +189,20 @@ export function QuestionDetailsModal({
     if (!error) {
       setInitialResponse(nextTrimmed);
       onSaveSuccess?.();
+      return true;
     }
+    setSaveError(error.message);
+    return false;
+  };
+
+  const handleCreatePdfClick = async () => {
+    if (!question || !onCreatePdf) return;
+    const hasUnsaved = responseText.trim() !== initialResponse.trim();
+    if (hasUnsaved && canEdit) {
+      const saved = await handleSaveResponse();
+      if (!saved) return;
+    }
+    onCreatePdf(question.id);
   };
 
   if (!question) return null;
@@ -202,31 +236,55 @@ export function QuestionDetailsModal({
                 <p className="whitespace-pre-wrap text-start text-amber-900">{question.proofreader_note}</p>
               </div>
             )}
+            {canEdit && needsMerge && (
+              <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4 text-right" dir="rtl">
+                <p className="text-sm font-semibold text-amber-900 mb-1">יש יותר מתשובה אחת לשאלה זו</p>
+                <p className="text-xs text-amber-800 mb-3">נא לבצע מיזוג לפני עריכה לשונית ויצירת PDF. המיזוג מאחד את כל התשובות לתשובה אחת שתופיע בעורך.</p>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="bg-amber-600 text-white hover:bg-amber-700"
+                  onClick={() => onMerge?.(question.id)}
+                  disabled={mergePending}
+                >
+                  {mergePending ? "ממזג…" : "מיזוג תשובות"}
+                </Button>
+              </div>
+            )}
             <div dir="rtl">
               <p className="text-xs font-medium text-secondary mb-1 text-start">תשובה (לעריכה לשונית)</p>
               {canEdit ? (
                 <>
-                  <div className="rounded-xl border border-card-border bg-slate-50 p-3 text-sm">
-                    <RichTextEditor
-                      key={question.id}
-                      value={responseText}
-                      onChange={setResponseText}
-                      placeholder="ערוך כאן את התשובה."
-                      disabled={savePending}
-                      className="w-full"
-                    />
-                  </div>
-                  <div className="mt-2 flex justify-end">
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
-                      onClick={handleSaveResponse}
-                      disabled={savePending || responseText.trim() === initialResponse.trim()}
-                    >
-                      {savePending ? "שומר…" : "שמור שינויים"}
-                    </Button>
-                  </div>
+                  {needsMerge ? (
+                    <p className="text-sm text-slate-500 py-2">לאחר מיזוג התשובות תופיע כאן התשובה המאוחדת לעריכה.</p>
+                  ) : (
+                    <>
+                      <div className="rounded-xl border border-card-border bg-slate-50 p-3 text-sm">
+                        <RichTextEditor
+                          key={question.id}
+                          value={responseText}
+                          onChange={(v) => { setResponseText(v); setSaveError(null); }}
+                          placeholder="ערוך כאן את התשובה."
+                          disabled={savePending}
+                          className="w-full"
+                        />
+                      </div>
+                      {saveError && (
+                        <p className="mt-1 text-sm text-red-600" role="alert">{saveError}</p>
+                      )}
+                      <div className="mt-2 flex justify-end">
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+                          onClick={handleSaveResponse}
+                          disabled={savePending || responseText.trim() === initialResponse.trim()}
+                        >
+                          {savePending ? "שומר…" : "שמור שינויים"}
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </>
               ) : (
                 (question.response_text == null || question.response_text === "") ? (
@@ -321,16 +379,7 @@ export function QuestionDetailsModal({
                 <p className="text-xs font-medium text-slate-600 mb-2">מסמך PDF</p>
                 {needsMerge && (
                   <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-right">
-                    <p className="text-xs text-amber-800">יש יותר מתשובה אחת. יש לבצע מיזוג לפני יצירת PDF.</p>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      className="mt-2 bg-amber-600 text-white hover:bg-amber-700"
-                      onClick={() => onMerge?.(question.id)}
-                      disabled={mergePending}
-                    >
-                      {mergePending ? "ממזג…" : "מיזוג תשובות"}
-                    </Button>
+                    <p className="text-xs text-amber-800">יש יותר מתשובה אחת. נא לבצע מיזוג (למעלה) לפני עריכה לשונית ויצירת PDF.</p>
                   </div>
                 )}
                 <div className="flex flex-wrap items-center justify-end gap-2">
@@ -361,7 +410,7 @@ export function QuestionDetailsModal({
                       variant="default"
                       size="sm"
                       className="gap-2 bg-red-600 text-white hover:bg-red-700"
-                      onClick={() => onCreatePdf?.(question.id)}
+                      onClick={handleCreatePdfClick}
                       disabled={pdfPending || needsMerge}
                     >
                       <IconFilePlus className="h-4 w-4 shrink-0" />
@@ -373,7 +422,7 @@ export function QuestionDetailsModal({
                     variant="default"
                     size="sm"
                     className="gap-2 bg-red-600 text-white hover:bg-red-700"
-                    onClick={() => onCreatePdf?.(question.id)}
+                    onClick={handleCreatePdfClick}
                     disabled={pdfPending || needsMerge}
                   >
                     <IconFilePlus className="h-4 w-4 shrink-0" />

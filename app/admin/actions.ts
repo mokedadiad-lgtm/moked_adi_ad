@@ -301,7 +301,8 @@ export async function assignQuestion(
   questionId: string,
   respondentId: string,
   topicId?: string | null,
-  subTopicId?: string | null
+  subTopicId?: string | null,
+  managerMessage?: string | null
 ): Promise<AssignResult> {
   try {
     const supabase = getSupabaseAdmin();
@@ -347,7 +348,7 @@ export async function assignQuestion(
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("full_name_he, admin_note, communication_preference, gender")
+        .select("full_name_he, communication_preference, gender")
         .eq("id", respondentId)
         .single();
       const pref = profile?.communication_preference as string | undefined;
@@ -359,7 +360,7 @@ export async function assignQuestion(
           await sendAssignmentLinkToRespondent(
             email,
             profile?.full_name_he ?? null,
-            profile?.admin_note ?? null,
+            managerMessage?.trim() || null,
             questionLabel,
             questionId,
             topicName,
@@ -383,7 +384,8 @@ export async function replaceQuestionAssignment(
   answerId: string,
   respondentId: string,
   topicId?: string | null,
-  subTopicId?: string | null
+  subTopicId?: string | null,
+  managerMessage?: string | null
 ): Promise<AssignResult> {
   try {
     const supabase = getSupabaseAdmin();
@@ -441,7 +443,7 @@ export async function replaceQuestionAssignment(
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("full_name_he, admin_note, communication_preference, gender")
+        .select("full_name_he, communication_preference, gender")
         .eq("id", respondentId)
         .single();
       const pref = profile?.communication_preference as string | undefined;
@@ -453,7 +455,7 @@ export async function replaceQuestionAssignment(
           await sendAssignmentLinkToRespondent(
             email,
             profile?.full_name_he ?? null,
-            profile?.admin_note ?? null,
+            managerMessage?.trim() || null,
             questionLabel,
             questionId,
             topicName,
@@ -1080,7 +1082,6 @@ export interface TeamProfileRow {
   communication_preference: "whatsapp" | "email" | "both";
   concurrency_limit: number;
   cooldown_days: number;
-  admin_note: string | null;
   category_ids: string[];
   /** נושאים שמשויכים למשיב/ה (רק למשיבים) */
   topic_ids: string[];
@@ -1092,7 +1093,7 @@ export async function getTeamProfiles(): Promise<TeamProfileRow[]> {
     const { data: profiles, error } = await supabase
     .from("profiles")
     .select(
-      "id, full_name_he, gender, is_respondent, is_proofreader, is_linguistic_editor, is_technical_lead, proofreader_type_id, communication_preference, concurrency_limit, cooldown_days, admin_note, phone"
+      "id, full_name_he, gender, is_respondent, is_proofreader, is_linguistic_editor, is_technical_lead, proofreader_type_id, communication_preference, concurrency_limit, cooldown_days, phone"
     )
     .order("full_name_he");
 
@@ -1156,7 +1157,6 @@ export async function getTeamProfiles(): Promise<TeamProfileRow[]> {
       communication_preference: (p.communication_preference ?? "email") as TeamProfileRow["communication_preference"],
       concurrency_limit: p.concurrency_limit ?? 1,
       cooldown_days: p.cooldown_days ?? 0,
-      admin_note: p.admin_note ?? null,
       category_ids: categoriesByProfile[p.id] ?? [],
       topic_ids: topicsByProfile[p.id] ?? [],
     };
@@ -1183,7 +1183,6 @@ export async function updateTeamMember(
     phone: string | null;
     concurrency_limit: number;
     cooldown_days: number;
-    admin_note: string | null;
     category_ids: string[];
     topic_ids: string[];
   }
@@ -1206,7 +1205,6 @@ export async function updateTeamMember(
         phone: data.phone?.trim() || null,
         concurrency_limit: data.concurrency_limit,
         cooldown_days: data.cooldown_days,
-        admin_note: data.admin_note || null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", profileId);
@@ -1254,20 +1252,45 @@ export async function createTeamMember(data: {
   phone: string | null;
   concurrency_limit: number;
   cooldown_days: number;
-  admin_note: string | null;
   category_ids: string[];
   topic_ids: string[];
 }): Promise<CreateTeamMemberResult> {
   try {
     const supabase = getSupabaseAdmin();
+    const normalizedEmail = data.email.trim().toLowerCase();
+
+    // מנסים ליצור משתמש חדש ב-auth; אם כבר קיים, נאתר אותו לפי האימייל ונמשיך ליצירת פרופיל
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: data.email.trim(),
+      email: normalizedEmail,
       password: data.password,
       email_confirm: true,
     });
 
-    if (authError) return { ok: false, error: authError.message };
-    const userId = authData.user?.id;
+    let userId = authData.user?.id as string | undefined;
+
+    if (authError) {
+      const message = authError.message || "";
+      const isAlreadyRegistered =
+        message.includes("already registered") ||
+        message.includes("User already exists") ||
+        message.includes("User already registered");
+
+      // אם זו לא שגיאה של "משתמש כבר קיים" – מחזירים שגיאה רגילה
+      if (!isAlreadyRegistered) {
+        return { ok: false, error: authError.message };
+      }
+
+      // המשתמש כבר קיים ב-auth – מחפשים אותו לפי אימייל
+      const { data: listData, error: listError } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      if (listError) {
+        return { ok: false, error: authError.message };
+      }
+      const existing = (listData?.users ?? []).find(
+        (u) => u.email && u.email.trim().toLowerCase() === normalizedEmail
+      );
+      userId = existing?.id;
+    }
+
     if (!userId) return { ok: false, error: "לא נוצר משתמש" };
 
     const typeIds = (data.proofreader_type_ids ?? []).filter(Boolean);
@@ -1285,7 +1308,6 @@ export async function createTeamMember(data: {
       phone: data.phone?.trim() || null,
       concurrency_limit: data.concurrency_limit,
       cooldown_days: data.cooldown_days,
-      admin_note: data.admin_note || null,
     };
     const { error: profileError } = await supabase
       .from("profiles")
@@ -1664,4 +1686,28 @@ export async function getAnalyticsChartData(filters: AnalyticsFilters = {}): Pro
   } catch {
     return { createdByDay: [], sentByDay: [] };
   }
+}
+
+/** שמירת תשובה מעורך לשוני – משתמש ב-service role כדי לעבור RLS (גם למגיהים לשוניים). */
+export async function saveLinguisticResponse(
+  questionId: string,
+  answerId: string | null,
+  responseText: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = getSupabaseAdmin();
+  const trimmed = responseText.trim();
+  if (answerId) {
+    const { error } = await supabase
+      .from("question_answers")
+      .update({ response_text: trimmed || null, updated_at: new Date().toISOString() })
+      .eq("id", answerId);
+    if (error) return { ok: false, error: error.message };
+  } else {
+    const { error } = await supabase
+      .from("questions")
+      .update({ response_text: trimmed || null, updated_at: new Date().toISOString() })
+      .eq("id", questionId);
+    if (error) return { ok: false, error: error.message };
+  }
+  return { ok: true };
 }
