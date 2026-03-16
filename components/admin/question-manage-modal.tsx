@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import type { QuestionRow } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
