@@ -13,6 +13,9 @@ import { AnswerModal } from "./answer-modal";
 
 export interface RespondentQuestion {
   id: string;
+  /** When task is from question_answers, for list key and RPC */
+  answer_id?: string | null;
+  proofreader_type_id?: string | null;
   title?: string | null;
   content: string;
   created_at: string;
@@ -65,20 +68,57 @@ export function RespondentDashboard() {
       .select("is_admin, is_technical_lead")
       .eq("id", user.id)
       .single();
-    setIsAdminViewing(profile?.is_admin === true || profile?.is_technical_lead === true);
+    const isAdminOrTechLead = profile?.is_admin === true || profile?.is_technical_lead === true;
+    setIsAdminViewing(isAdminOrTechLead);
 
-    const { data, error } = await supabase
+    // למנהלים: להציג את כל השאלות אצל משיבים; למשיבים: רק את המשימות שלהם
+    let qaQuery = supabase
+      .from("question_answers")
+      .select("id, question_id, response_text, proofreader_type_id, deleted_at, questions(id, title, content, created_at, asker_age, asker_gender, response_type, publication_consent)")
+      .eq("stage", "with_respondent")
+      .order("created_at", { ascending: true });
+    let qQuery = supabase
       .from("questions")
       .select("id, title, content, created_at, asker_age, asker_gender, response_type, publication_consent, response_text")
       .eq("stage", "with_respondent")
-      .eq("assigned_respondent_id", user.id)
       .order("created_at", { ascending: true });
 
-    if (error) {
-      setQuestions([]);
-    } else {
-      setQuestions((data ?? []) as RespondentQuestion[]);
+    if (!isAdminOrTechLead) {
+      qaQuery = qaQuery.eq("assigned_respondent_id", user.id);
+      qQuery = qQuery.eq("assigned_respondent_id", user.id);
     }
+
+    const [qaRes, qRes] = await Promise.all([qaQuery, qQuery]);
+
+    const qaRows = (qaRes.data ?? []) as unknown as {
+      id: string;
+      question_id: string;
+      response_text?: string | null;
+      proofreader_type_id?: string | null;
+      deleted_at?: string | null;
+      questions: { id: string; title?: string | null; content: string; created_at: string; asker_age?: string | null; asker_gender?: string | null; response_type?: string | null; publication_consent?: string | null } | { id: string; title?: string | null; content: string; created_at: string; asker_age?: string | null; asker_gender?: string | null; response_type?: string | null; publication_consent?: string | null }[] | null;
+    }[];
+    const activeQa = qaRows.filter((r) => !r.deleted_at);
+    const legacyRows = (qRes.data ?? []) as RespondentQuestion[];
+    const fromQaIds = new Set(activeQa.map((r) => r.question_id));
+    const fromQa: RespondentQuestion[] = activeQa.map((r) => {
+      const q = Array.isArray(r.questions) ? r.questions[0] : r.questions;
+      return {
+        id: q?.id ?? r.question_id,
+        answer_id: r.id,
+        proofreader_type_id: r.proofreader_type_id ?? null,
+        title: q?.title ?? null,
+        content: q?.content ?? "",
+        created_at: q?.created_at ?? "",
+        asker_age: q?.asker_age ?? null,
+        asker_gender: (q?.asker_gender === "M" || q?.asker_gender === "F" ? q.asker_gender : null) as "M" | "F" | null,
+        response_type: (q?.response_type === "short" || q?.response_type === "detailed" ? q.response_type : null) as "short" | "detailed" | null,
+        publication_consent: (q?.publication_consent === "publish" || q?.publication_consent === "blur" || q?.publication_consent === "none" ? q.publication_consent : null) as "publish" | "blur" | "none" | null,
+        response_text: r.response_text ?? null,
+      };
+    });
+    const legacy = legacyRows.filter((q) => !fromQaIds.has(q.id));
+    setQuestions([...fromQa, ...legacy]);
     setLoading(false);
   }, [router]);
 
@@ -162,7 +202,7 @@ export function RespondentDashboard() {
         ) : (
           <ul className="space-y-4">
             {questions.map((q) => (
-              <li key={q.id}>
+              <li key={q.answer_id ?? q.id}>
                 <Card
                   className="cursor-pointer transition-shadow hover:shadow-md"
                   onClick={() => openModal(q)}

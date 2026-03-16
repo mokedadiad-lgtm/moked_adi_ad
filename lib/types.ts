@@ -68,4 +68,10 @@ export interface QuestionRow {
   /** סוג הגהה (מהנושא) — לפירוט בכרטיס לובי ההגהה */
   proofreader_type_id?: string | null;
   deleted_at?: string | null;
+  /** כשהשורה מהטבלה מגיעה מ-question_answers — מזהה התשובה (למודל ולפעולות) */
+  answer_id?: string | null;
+  /** מתי בוצע מיזוג תשובות (לשאלה עם כמה תשובות); עד אז לא ניתן ליצור PDF */
+  answers_merged_at?: string | null;
+  /** מספר תשובות (question_answers) לשאלה — להצגת כפתור מיזוג וחסימת PDF */
+  answers_count?: number;
 }

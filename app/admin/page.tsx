@@ -32,32 +32,85 @@ function nameFromRelation(v: TopicRef): string | null {
   return Array.isArray(v) ? v[0]?.name_he ?? null : v.name_he ?? null;
 }
 
+const QA_SELECT =
+  "id, question_id, topic_id, sub_topic_id, assigned_respondent_id, assigned_proofreader_id, stage, response_text, proofreader_note, pdf_url, pdf_generated_at, proofreader_type_id, created_at, deleted_at";
+
+type QuestionAnswerRaw = {
+  id: string;
+  question_id: string;
+  topic_id?: string | null;
+  sub_topic_id?: string | null;
+  assigned_respondent_id?: string | null;
+  assigned_proofreader_id?: string | null;
+  stage: string;
+  response_text?: string | null;
+  proofreader_note?: string | null;
+  pdf_url?: string | null;
+  pdf_generated_at?: string | null;
+  proofreader_type_id?: string | null;
+  created_at: string;
+  deleted_at?: string | null;
+  questions?: {
+    short_id?: string | null;
+    title?: string | null;
+    content: string;
+    created_at: string;
+    asker_email?: string | null;
+    asker_age?: string | null;
+    asker_gender?: string | null;
+    response_type?: string | null;
+    publication_consent?: string | null;
+    deleted_at?: string | null;
+  } | null;
+  topics?: TopicRef;
+  sub_topics?: TopicRef;
+};
+
 async function getActiveQuestions(): Promise<QuestionRow[]> {
   const supabase = getSupabaseAdmin();
 
-  const { data, error } = await supabase
+  let qaRows: QuestionAnswerRaw[] = [];
+  try {
+    const qaRes = await supabase
+      .from("question_answers")
+      .select(
+        `${QA_SELECT}, questions!inner(short_id, title, content, created_at, asker_email, asker_age, asker_gender, response_type, publication_consent, deleted_at), topics(name_he), sub_topics(name_he)`
+      )
+      .in("stage", ADMIN_TABLE_STAGES)
+      .order("created_at", { ascending: false });
+    qaRows = ((qaRes.data ?? []) as unknown as QuestionAnswerRaw[]).filter((r) => {
+      // מסתירים גם תשובות שנמחקו (deleted_at ב-question_answers) וגם שאלות שנמחקו (deleted_at ב-questions)
+      if (r.deleted_at) return false;
+      const q = Array.isArray(r.questions) ? r.questions[0] : r.questions;
+      return !q?.deleted_at;
+    });
+  } catch {
+    // question_answers table may not exist before migration
+  }
+
+  const legacyRes = await supabase
     .from("questions")
     .select(EXTENDED_SELECT)
     .in("stage", ADMIN_TABLE_STAGES)
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
-  let rows: QuestionRowRaw[];
-  if (error) {
-    const { data: fallbackData, error: fallbackError } = await supabase
-      .from("questions")
-      .select(BASE_SELECT)
-      .in("stage", ADMIN_TABLE_STAGES)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false });
-    if (fallbackError) return [];
-    rows = (fallbackData ?? []) as QuestionRowRaw[];
-  } else {
-    rows = (data ?? []) as QuestionRowRaw[];
-  }
+  const legacyQuestions = (legacyRes.data ?? []) as QuestionRowRaw[];
+  const questionIdsWithAnswers = new Set(qaRows.map((r) => r.question_id));
+  const legacyRows = legacyQuestions.filter((q: { id: string }) => !questionIdsWithAnswers.has(q.id));
 
-  const respondentIds = [...new Set(rows.map((r) => r.assigned_respondent_id).filter(Boolean))] as string[];
-  const proofreaderIds = [...new Set(rows.map((r) => r.assigned_proofreader_id).filter(Boolean))] as string[];
+  const respondentIds = [
+    ...new Set([
+      ...qaRows.map((r) => r.assigned_respondent_id).filter(Boolean),
+      ...legacyRows.map((r) => r.assigned_respondent_id).filter(Boolean),
+    ]),
+  ] as string[];
+  const proofreaderIds = [
+    ...new Set([
+      ...qaRows.map((r) => r.assigned_proofreader_id).filter(Boolean),
+      ...legacyRows.map((r) => r.assigned_proofreader_id).filter(Boolean),
+    ]),
+  ] as string[];
   const allProfileIds = [...new Set([...respondentIds, ...proofreaderIds])];
   let profileNames: Record<string, string> = {};
   if (allProfileIds.length > 0) {
@@ -68,7 +121,43 @@ async function getActiveQuestions(): Promise<QuestionRow[]> {
     if (profiles) profileNames = Object.fromEntries(profiles.map((p) => [p.id, p.full_name_he ?? ""]));
   }
 
-  const withEmail = rows.map((r) => ({
+  const answersCountByQuestion: Record<string, number> = {};
+  for (const r of qaRows) {
+    answersCountByQuestion[r.question_id] = (answersCountByQuestion[r.question_id] ?? 0) + 1;
+  }
+  const fromAnswer = (r: QuestionAnswerRaw): QuestionRow => {
+    const q = Array.isArray(r.questions) ? r.questions[0] : r.questions;
+    return {
+      id: r.question_id,
+      answer_id: r.id,
+      short_id: q?.short_id ?? null,
+      answers_count: answersCountByQuestion[r.question_id] ?? 1,
+      stage: r.stage as QuestionRow["stage"],
+      title: q?.title ?? null,
+      content: q?.content ?? "",
+      created_at: q?.created_at ?? r.created_at,
+      asker_email: q?.asker_email ?? null,
+      asker_age: q?.asker_age ?? null,
+      asker_gender: (q?.asker_gender as "M" | "F" | null) ?? null,
+      response_type: q?.response_type ?? null,
+      publication_consent: (q?.publication_consent as QuestionRow["publication_consent"]) ?? null,
+      respondent_name: r.assigned_respondent_id ? (profileNames[r.assigned_respondent_id]?.trim() || null) : null,
+      proofreader_name: r.assigned_proofreader_id ? (profileNames[r.assigned_proofreader_id]?.trim() || null) : null,
+      topic_id: r.topic_id ?? null,
+      sub_topic_id: r.sub_topic_id ?? null,
+      topic_name_he: nameFromRelation(r.topics),
+      sub_topic_name_he: nameFromRelation(r.sub_topics),
+      response_text: r.response_text ?? null,
+      proofreader_note: r.proofreader_note ?? null,
+      pdf_url: r.pdf_url ?? null,
+      pdf_generated_at: r.pdf_generated_at ?? null,
+      proofreader_type_id: r.proofreader_type_id ?? null,
+    };
+  };
+
+  const answerRows = qaRows.map(fromAnswer);
+
+  const fromLegacy = (r: QuestionRowRaw): QuestionRow => ({
     id: r.id,
     short_id: r.short_id ?? null,
     stage: r.stage,
@@ -91,9 +180,13 @@ async function getActiveQuestions(): Promise<QuestionRow[]> {
     pdf_url: r.pdf_url ?? null,
     pdf_generated_at: (r as { pdf_generated_at?: string | null }).pdf_generated_at ?? null,
     proofreader_type_id: r.proofreader_type_id ?? null,
-  }));
+  });
 
-  return withEmail;
+  const legacyMapped = legacyRows.map(fromLegacy);
+  const combined = [...answerRows, ...legacyMapped].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+  return combined;
 }
 
 export const revalidate = 0;

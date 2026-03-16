@@ -1,12 +1,13 @@
-import { getCategories, getProofreaderTypes, getTeamProfiles } from "@/app/admin/actions";
+import { getCategories, getProofreaderTypes, getTeamProfiles, getTopicsWithSubTopics } from "@/app/admin/actions";
 import { TeamTable } from "@/components/admin/team-table";
 import { PageHeader } from "@/components/page-header";
 
 export default async function AdminTeamPage() {
-  const [profiles, categories, proofreaderTypes] = await Promise.all([
+  const [profiles, categories, proofreaderTypes, topics] = await Promise.all([
     getTeamProfiles(),
     getCategories(),
     getProofreaderTypes(),
+    getTopicsWithSubTopics(),
   ]);
 
   return (
@@ -16,6 +17,7 @@ export default async function AdminTeamPage() {
         profiles={profiles}
         categories={categories}
         proofreaderTypes={proofreaderTypes}
+        topics={topics}
       />
     </div>
   );

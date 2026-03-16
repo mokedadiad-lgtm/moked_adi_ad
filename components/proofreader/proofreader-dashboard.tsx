@@ -13,6 +13,8 @@ import { LobbyTaskModal } from "./lobby-task-modal";
 
 export interface LobbyQuestion {
   id: string;
+  /** When task is from question_answers */
+  answer_id?: string | null;
   title?: string | null;
   content: string;
   response_text: string | null;
@@ -69,17 +71,44 @@ export function ProofreaderDashboard() {
       return;
     }
     setUserId(user.id);
-    const { data, error } = await supabase
-      .from("questions")
-      .select("id, title, content, response_text, created_at, assigned_proofreader_id")
-      .eq("stage", "in_proofreading_lobby")
-      .order("created_at", { ascending: true });
+    const [qaRes, qRes] = await Promise.all([
+      supabase
+        .from("question_answers")
+        .select("id, question_id, response_text, assigned_proofreader_id, deleted_at, questions(id, title, content, created_at)")
+        .eq("stage", "in_proofreading_lobby")
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("questions")
+        .select("id, title, content, response_text, created_at, assigned_proofreader_id")
+        .eq("stage", "in_proofreading_lobby")
+        .order("created_at", { ascending: true }),
+    ]);
 
-    if (error) {
-      setQuestions([]);
-    } else {
-      setQuestions((data ?? []) as LobbyQuestion[]);
-    }
+    const qaRows = (qaRes.data ?? []) as unknown as {
+      id: string;
+      question_id: string;
+      response_text: string | null;
+      assigned_proofreader_id: string | null;
+      deleted_at?: string | null;
+      questions: { id: string; title?: string | null; content: string; created_at: string } | { id: string; title?: string | null; content: string; created_at: string }[] | null;
+    }[];
+    const activeQa = qaRows.filter((r) => !r.deleted_at);
+    const legacyRows = (qRes.data ?? []) as LobbyQuestion[];
+    const fromQaIds = new Set(activeQa.map((r) => r.question_id));
+    const fromQa: LobbyQuestion[] = activeQa.map((r) => {
+      const q = Array.isArray(r.questions) ? r.questions[0] : r.questions;
+      return {
+        id: q?.id ?? r.question_id,
+        answer_id: r.id,
+        title: q?.title ?? null,
+        content: q?.content ?? "",
+        response_text: r.response_text,
+        created_at: q?.created_at ?? "",
+        assigned_proofreader_id: r.assigned_proofreader_id,
+      };
+    });
+    const legacy = legacyRows.filter((q) => !fromQaIds.has(q.id));
+    setQuestions([...fromQa, ...legacy]);
     setLoading(false);
   }, [router]);
 
@@ -127,7 +156,7 @@ export function ProofreaderDashboard() {
   // אחרי רענון: אם השאלה כבר לא בתור — לסגור מודאל; אם עדיין בתור — לעדכן את השאלה (למשל אחרי "תפוס משימה") כדי להציג עריכה
   useEffect(() => {
     if (!selected) return;
-    const updated = questions.find((q) => q.id === selected.id);
+    const updated = questions.find((q) => (q.answer_id ? q.answer_id === selected.answer_id : q.id === selected.id));
     if (!updated) {
       setModalOpen(false);
       setSelected(null);
@@ -157,7 +186,7 @@ export function ProofreaderDashboard() {
                 <h2 className="mb-3 text-start text-sm font-medium text-secondary">המשימות שלי ({mine.length})</h2>
                 <ul className="space-y-3">
                   {mine.map((q) => (
-                    <li key={q.id}>
+                    <li key={q.answer_id ?? q.id}>
                       <Card
                         className="cursor-pointer border-violet-200 bg-violet-50/50 transition-shadow hover:shadow-md"
                         onClick={() => openModal(q)}
@@ -191,7 +220,7 @@ export function ProofreaderDashboard() {
               ) : (
                 <ul className="space-y-3">
                   {available.map((q) => (
-                    <li key={q.id}>
+                    <li key={q.answer_id ?? q.id}>
                       <Card
                         className="cursor-pointer transition-shadow hover:shadow-md"
                         onClick={() => openModal(q)}

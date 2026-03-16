@@ -82,6 +82,10 @@ interface QuestionDetailsModalProps {
   onSendAndArchive?: (question: QuestionRow) => void;
   pdfPending?: boolean;
   sendPending?: boolean;
+  /** כשנכון — יש כמה תשובות לשאלה וטרם בוצע מיזוג; מציג כפתור מיזוג וחוסם יצירת PDF */
+  needsMerge?: boolean;
+  onMerge?: (questionId: string) => void;
+  mergePending?: boolean;
 }
 
 interface ResponseVersion {
@@ -100,6 +104,9 @@ export function QuestionDetailsModal({
   onSendAndArchive,
   pdfPending,
   sendPending,
+  needsMerge,
+  onMerge,
+  mergePending,
 }: QuestionDetailsModalProps) {
   const [versions, setVersions] = useState<ResponseVersion[]>([]);
   const [showVersions, setShowVersions] = useState(false);
@@ -148,10 +155,15 @@ export function QuestionDetailsModal({
 
     setSavePending(true);
     const supabase = getSupabaseBrowser();
-    const { error } = await supabase
-      .from("questions")
-      .update({ response_text: nextTrimmed || null, updated_at: new Date().toISOString() })
-      .eq("id", question.id);
+    const { error } = question.answer_id
+      ? await supabase
+          .from("question_answers")
+          .update({ response_text: nextTrimmed || null, updated_at: new Date().toISOString() })
+          .eq("id", question.answer_id)
+      : await supabase
+          .from("questions")
+          .update({ response_text: nextTrimmed || null, updated_at: new Date().toISOString() })
+          .eq("id", question.id);
     setSavePending(false);
     if (!error) {
       setInitialResponse(nextTrimmed);
@@ -307,6 +319,20 @@ export function QuestionDetailsModal({
             {showPdfActions && question && (
               <div className="rounded-xl border border-card-border bg-slate-50/60 p-3">
                 <p className="text-xs font-medium text-slate-600 mb-2">מסמך PDF</p>
+                {needsMerge && (
+                  <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-right">
+                    <p className="text-xs text-amber-800">יש יותר מתשובה אחת. יש לבצע מיזוג לפני יצירת PDF.</p>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="mt-2 bg-amber-600 text-white hover:bg-amber-700"
+                      onClick={() => onMerge?.(question.id)}
+                      disabled={mergePending}
+                    >
+                      {mergePending ? "ממזג…" : "מיזוג תשובות"}
+                    </Button>
+                  </div>
+                )}
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   {question.pdf_generated_at && (
                     <p className="text-xs text-red-600 font-medium">
@@ -336,7 +362,7 @@ export function QuestionDetailsModal({
                       size="sm"
                       className="gap-2 bg-red-600 text-white hover:bg-red-700"
                       onClick={() => onCreatePdf?.(question.id)}
-                      disabled={pdfPending}
+                      disabled={pdfPending || needsMerge}
                     >
                       <IconFilePlus className="h-4 w-4 shrink-0" />
                       {pdfPending ? "מייצר…" : "יצירת PDF מחדש"}
@@ -348,7 +374,7 @@ export function QuestionDetailsModal({
                     size="sm"
                     className="gap-2 bg-red-600 text-white hover:bg-red-700"
                     onClick={() => onCreatePdf?.(question.id)}
-                    disabled={pdfPending}
+                    disabled={pdfPending || needsMerge}
                   >
                     <IconFilePlus className="h-4 w-4 shrink-0" />
                     {pdfPending ? "מייצר…" : "יצירת PDF"}

@@ -5,18 +5,19 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const questionId = typeof body.questionId === "string" ? body.questionId : null;
+    const answerId = typeof body.answerId === "string" ? body.answerId : null;
     const target = body.target as "respondent" | "proofreader" | undefined;
 
     if (!questionId || (target !== "respondent" && target !== "proofreader")) {
       return NextResponse.json({ ok: false, error: "בקשה לא תקינה" }, { status: 400 });
     }
 
-    console.log("[api/admin/reminder] start", { questionId, target });
+    console.log("[api/admin/reminder] start", { questionId, answerId, target });
 
     const result =
       target === "respondent"
-        ? await sendReminderToRespondent(questionId)
-        : await sendReminderToProofreaders(questionId);
+        ? await sendReminderToRespondent(questionId, answerId)
+        : await sendReminderToProofreaders(questionId, answerId);
 
     if (!result.ok) {
       console.error("[api/admin/reminder] failed", { questionId, target, error: result.error });

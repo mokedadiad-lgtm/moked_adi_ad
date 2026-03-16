@@ -1,6 +1,6 @@
 "use client";
 
-import type { CategoryOption, ProofreaderTypeOption, TeamProfileRow } from "@/app/admin/actions";
+import type { CategoryOption, ProofreaderTypeOption, TeamProfileRow, TopicOption } from "@/app/admin/actions";
 import { deleteTeamMember, updateTeamMember } from "@/app/admin/actions";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -33,6 +33,7 @@ interface TeamMemberEditModalProps {
   profile: TeamProfileRow | null;
   categories: CategoryOption[];
   proofreaderTypes: ProofreaderTypeOption[];
+  topics: TopicOption[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
@@ -42,6 +43,7 @@ export function TeamMemberEditModal({
   profile,
   categories,
   proofreaderTypes,
+  topics,
   open,
   onOpenChange,
   onSuccess,
@@ -59,6 +61,7 @@ export function TeamMemberEditModal({
   const [cooldown_days, setCooldownDays] = useState(0);
   const [admin_note, setAdminNote] = useState("");
   const [category_ids, setCategoryIds] = useState<string[]>([]);
+  const [topic_ids, setTopicIds] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +82,7 @@ export function TeamMemberEditModal({
       setCooldownDays(profile.cooldown_days ?? 0);
       setAdminNote(profile.admin_note ?? "");
       setCategoryIds(profile.category_ids ?? []);
+      setTopicIds(profile.topic_ids ?? []);
       setError(null);
       setDeleteConfirm(false);
     }
@@ -107,6 +111,7 @@ export function TeamMemberEditModal({
       cooldown_days,
       admin_note: admin_note.trim() || null,
       category_ids,
+      topic_ids: is_respondent ? topic_ids : [],
     });
     setPending(false);
     if (result.ok) {
@@ -281,27 +286,31 @@ export function TeamMemberEditModal({
                 </>
               )}
 
-              <div className="space-y-2">
-                <Label className="text-right">קטגוריות שאלות (נושאי תשובה שהמשיב/ה יכול/ה לקבל)</Label>
-                <div className="flex flex-wrap gap-2 justify-start rounded-xl border border-card-border bg-slate-50 p-3">
-                  {categories.map((c) => (
-                    <label key={c.id} className="flex cursor-pointer items-center gap-2 justify-start">
-                      <Checkbox
-                        checked={category_ids.includes(c.id)}
-                        onCheckedChange={(v) =>
-                          setCategoryIds((prev) =>
-                            v ? [...prev, c.id] : prev.filter((id) => id !== c.id)
-                          )
-                        }
-                      />
-                      <span className="text-sm text-slate-600">{c.name_he}</span>
-                    </label>
-                  ))}
-                  {categories.length === 0 && (
-                    <span className="block text-right text-sm text-secondary">אין קטגוריות במערכת. הרץ מיגרציות Supabase (כולל seed קטגוריות){"\u200E"}.</span>
-                  )}
+              {is_respondent && (
+                <div className="space-y-2">
+                  <Label className="text-right">נושאים משויכים (שהמשיב/ה יכול/ה לקבל)</Label>
+                  <ul className="flex flex-col gap-1 rounded-xl border border-card-border bg-slate-50 p-3 list-none">
+                    {topics.map((t) => (
+                      <li key={t.id}>
+                        <label className="flex cursor-pointer items-center gap-2 justify-start">
+                          <Checkbox
+                            checked={topic_ids.includes(t.id)}
+                            onCheckedChange={(v) =>
+                              setTopicIds((prev) =>
+                                v ? [...prev, t.id] : prev.filter((id) => id !== t.id)
+                              )
+                            }
+                          />
+                          <span className="text-sm text-slate-600">{t.name_he}</span>
+                        </label>
+                      </li>
+                    ))}
+                    {topics.length === 0 && (
+                      <li className="text-sm text-secondary text-right">אין נושאים במערכת.</li>
+                    )}
+                  </ul>
                 </div>
-              </div>
+              )}
             </>
           )}
 

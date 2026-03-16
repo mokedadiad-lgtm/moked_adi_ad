@@ -1,6 +1,6 @@
 "use client";
 
-import type { CategoryOption, ProofreaderTypeOption, TeamProfileRow } from "@/app/admin/actions";
+import type { CategoryOption, ProofreaderTypeOption, TeamProfileRow, TopicOption } from "@/app/admin/actions";
 import { seedDefaultCategories } from "@/app/admin/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,9 +24,10 @@ interface TeamTableProps {
   profiles: TeamProfileRow[];
   categories: CategoryOption[];
   proofreaderTypes: ProofreaderTypeOption[];
+  topics: TopicOption[];
 }
 
-export function TeamTable({ profiles, categories, proofreaderTypes }: TeamTableProps) {
+export function TeamTable({ profiles, categories, proofreaderTypes, topics }: TeamTableProps) {
   const router = useRouter();
   const [editProfile, setEditProfile] = useState<TeamProfileRow | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -81,13 +82,14 @@ export function TeamTable({ profiles, categories, proofreaderTypes }: TeamTableP
                 <TableHead>אימייל</TableHead>
                 <TableHead>מגדר</TableHead>
                 <TableHead>תפקידים</TableHead>
+                <TableHead>נושאים משויכים</TableHead>
                 <TableHead className="w-[80px]">פעולות</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {profiles.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-secondary">
+                  <TableCell colSpan={6} className="py-8 text-center text-secondary">
                     אין אנשי צוות במערכת
                   </TableCell>
                 </TableRow>
@@ -134,6 +136,16 @@ export function TeamTable({ profiles, categories, proofreaderTypes }: TeamTableP
                         )}
                       </div>
                     </TableCell>
+                    <TableCell className="text-sm text-secondary">
+                      {p.is_respondent && (p.topic_ids?.length ?? 0) > 0
+                        ? (p.topic_ids ?? [])
+                            .map((tid) => topics.find((t) => t.id === tid)?.name_he)
+                            .filter(Boolean)
+                            .join(", ") || "—"
+                        : p.is_respondent
+                          ? "—"
+                          : "—"}
+                    </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
@@ -156,6 +168,7 @@ export function TeamTable({ profiles, categories, proofreaderTypes }: TeamTableP
         profile={editProfile}
         categories={categories}
         proofreaderTypes={proofreaderTypes}
+        topics={topics}
         open={modalOpen}
         onOpenChange={(open) => {
           setModalOpen(open);
@@ -169,6 +182,7 @@ export function TeamTable({ profiles, categories, proofreaderTypes }: TeamTableP
       <AddTeamMemberModal
         categories={categories}
         proofreaderTypes={proofreaderTypes}
+        topics={topics}
         open={addModalOpen}
         onOpenChange={setAddModalOpen}
         onSuccess={() => router.refresh()}

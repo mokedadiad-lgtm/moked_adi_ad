@@ -7,6 +7,9 @@ import {
   deleteProofreaderType,
   deleteSubTopic,
   deleteTopic,
+  getRespondents,
+  getTopicRespondentIds,
+  setTopicRespondents,
   updateProofreaderType,
   updateSubTopic,
   updateTopic,
@@ -31,7 +34,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { getSupabaseBrowser } from "@/lib/supabase/client";
 
 interface TopicsManagerProps {
   proofreaderTypes: ProofreaderTypeOption[];
@@ -56,7 +61,55 @@ export function TopicsManager({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // מודל שיוך משיבים (אחרי הוספת נושא או בלחיצה על נושא)
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignTopicId, setAssignTopicId] = useState<string | null>(null);
+  const [assignTopicName, setAssignTopicName] = useState("");
+  const [assignSubTopics, setAssignSubTopics] = useState<TopicOption["sub_topics"]>([]);
+  const [assignRespondentsList, setAssignRespondentsList] = useState<{ id: string; full_name_he: string | null }[]>([]);
+  const [assignRespondentIds, setAssignRespondentIds] = useState<string[]>([]);
+  const [assignLoading, setAssignLoading] = useState(false);
+  const [assignSaving, setAssignSaving] = useState(false);
+  const [userGender, setUserGender] = useState<"M" | "F" | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<"type" | "topic" | "subtopic" | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
   const refresh = () => router.refresh();
+
+  useEffect(() => {
+    let cancelled = false;
+    getSupabaseBrowser()
+      .auth.getUser()
+      .then(({ data: { user } }) => {
+        if (!user || cancelled) return null;
+        return getSupabaseBrowser().from("profiles").select("gender").eq("id", user.id).single();
+      })
+      .then((res) => {
+        const gender = (res as { data?: { gender?: string } } | null)?.data?.gender;
+        if (!cancelled && gender === "F") setUserGender("F");
+        else if (!cancelled && gender === "M") setUserGender("M");
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  // טעינת רשימת משיבים ומשויכים כשנפתח חלון השיוך
+  useEffect(() => {
+    if (!assignOpen || !assignTopicId) return;
+    let cancelled = false;
+    setAssignLoading(true);
+    Promise.all([getRespondents(), getTopicRespondentIds(assignTopicId)])
+      .then(([list, ids]) => {
+        if (!cancelled) {
+          setAssignRespondentsList(list);
+          setAssignRespondentIds(ids);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAssignLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [assignOpen, assignTopicId]);
 
   const handleCreateType = async () => {
     if (!newTypeName.trim()) return;
@@ -89,12 +142,14 @@ export function TopicsManager({
   };
 
   const handleDeleteType = async (id: string) => {
-    if (!confirm("למחוק את סוג ההגהה? נושאים המשויכים אליו יישארו ללא שיוך.")) return;
     setPending(true);
     const result = await deleteProofreaderType(id);
     setPending(false);
-    if (result.ok) refresh();
-    else setError(result.error);
+    if (result.ok) {
+      setDeleteConfirm(null);
+      setDeleteConfirmId(null);
+      refresh();
+    } else setError(result.error);
   };
 
   const handleCreateTopic = async () => {
@@ -107,9 +162,14 @@ export function TopicsManager({
     });
     setPending(false);
     if (result.ok) {
+      const id = (result as { ok: true; id: string }).id;
       setAddTopicOpen(false);
       setNewTopicName("");
       setNewTopicTypeId(proofreaderTypes[0]?.id ?? "");
+      setAssignTopicId(id);
+      setAssignTopicName(newTopicName.trim());
+      setAssignSubTopics([]);
+      setAssignOpen(true);
       refresh();
     } else setError(result.error);
   };
@@ -131,21 +191,60 @@ export function TopicsManager({
   };
 
   const handleDeleteTopic = async (id: string) => {
-    if (!confirm("למחוק את הנושא ואת כל תת-הנושאים?")) return;
     setPending(true);
     const result = await deleteTopic(id);
     setPending(false);
-    if (result.ok) refresh();
-    else setError(result.error);
+    if (result.ok) {
+      setDeleteConfirm(null);
+      setDeleteConfirmId(null);
+      refresh();
+    } else setError(result.error);
   };
 
   const handleDeleteSubTopic = async (id: string) => {
-    if (!confirm("למחוק את תת-הנושא?")) return;
     setPending(true);
     const result = await deleteSubTopic(id);
     setPending(false);
-    if (result.ok) refresh();
-    else setError(result.error);
+    if (result.ok) {
+      setDeleteConfirm(null);
+      setDeleteConfirmId(null);
+      refresh();
+    } else setError(result.error);
+  };
+
+  const runDeleteConfirm = () => {
+    if (!deleteConfirmId) return;
+    if (deleteConfirm === "type") handleDeleteType(deleteConfirmId);
+    else if (deleteConfirm === "topic") handleDeleteTopic(deleteConfirmId);
+    else if (deleteConfirm === "subtopic") handleDeleteSubTopic(deleteConfirmId);
+  };
+
+  const openAssignModal = (topic: TopicOption) => {
+    setAssignTopicId(topic.id);
+    setAssignTopicName(topic.name_he);
+    setAssignSubTopics(topic.sub_topics ?? []);
+    setAssignOpen(true);
+  };
+
+  const closeAssignModal = () => {
+    setAssignOpen(false);
+    setAssignTopicId(null);
+    setAssignTopicName("");
+    setAssignSubTopics([]);
+    setAssignRespondentIds([]);
+    setAssignRespondentsList([]);
+  };
+
+  const handleSaveAssignRespondents = async () => {
+    if (!assignTopicId) return;
+    setAssignSaving(true);
+    setError(null);
+    const result = await setTopicRespondents(assignTopicId, assignRespondentIds);
+    setAssignSaving(false);
+    if (result.ok) {
+      closeAssignModal();
+      refresh();
+    } else setError(result.error);
   };
 
   return (
@@ -184,7 +283,10 @@ export function TopicsManager({
                     variant="outline"
                     size="sm"
                     className="text-red-600"
-                    onClick={() => handleDeleteType(pt.id)}
+                    onClick={() => {
+                      setDeleteConfirm("type");
+                      setDeleteConfirmId(pt.id);
+                    }}
                     disabled={pending}
                   >
                     מחיקה
@@ -219,15 +321,22 @@ export function TopicsManager({
               className="rounded-xl border border-card-border bg-slate-50/50 p-4"
             >
               <div className="flex items-center justify-between">
-                <div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span className="font-medium text-primary">{topic.name_he}</span>
                   {topic.proofreader_type_name_he && (
-                    <span className="me-2 text-sm text-slate-500">
+                    <span className="text-sm text-slate-500">
                       ({topic.proofreader_type_name_he})
                     </span>
                   )}
                 </div>
                 <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openAssignModal(topic)}
+                  >
+                    שיוך משיבים
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -242,7 +351,10 @@ export function TopicsManager({
                     variant="outline"
                     size="sm"
                     className="text-red-600"
-                    onClick={() => handleDeleteTopic(topic.id)}
+                    onClick={() => {
+                      setDeleteConfirm("topic");
+                      setDeleteConfirmId(topic.id);
+                    }}
                     disabled={pending}
                   >
                     מחיקת נושא
@@ -260,7 +372,10 @@ export function TopicsManager({
                       variant="ghost"
                       size="sm"
                       className="h-7 text-red-600"
-                      onClick={() => handleDeleteSubTopic(s.id)}
+                      onClick={() => {
+                        setDeleteConfirm("subtopic");
+                        setDeleteConfirmId(s.id);
+                      }}
                       disabled={pending}
                     >
                       מחק
@@ -406,6 +521,95 @@ export function TopicsManager({
               disabled={pending || !newSubTopicName.trim()}
             >
               {pending ? "שומר…" : "שמור"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* חלון אישור מחיקה (סגנון מערכת, ממורכז) */}
+      <Dialog open={!!deleteConfirm} onOpenChange={(open) => !open && (setDeleteConfirm(null), setDeleteConfirmId(null))}>
+        <DialogContent className="max-w-sm rounded-2xl border border-card-border bg-card px-5 py-4 text-center shadow-soft" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-center">
+              {deleteConfirm === "type" && "מחיקת סוג הגהה"}
+              {deleteConfirm === "topic" && "מחיקת נושא"}
+              {deleteConfirm === "subtopic" && "מחיקת תת-נושא"}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600 text-center">
+            {deleteConfirm === "type" && "למחוק את סוג ההגהה? נושאים המשויכים אליו יישארו ללא שיוך."}
+            {deleteConfirm === "topic" && "למחוק את הנושא ואת כל תת-הנושאים?"}
+            {deleteConfirm === "subtopic" && "למחוק את תת-הנושא?"}
+          </p>
+          <DialogFooter className="mt-4 flex w-full justify-center gap-2 sm:!justify-center">
+            <Button variant="outline" onClick={() => { setDeleteConfirm(null); setDeleteConfirmId(null); }}>
+              ביטול
+            </Button>
+            <Button variant="default" className="bg-red-600 text-white hover:bg-red-700" onClick={runDeleteConfirm} disabled={pending}>
+              {pending ? "מוחק…" : "מחיקה"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* חלון שיוך משיבים לנושא (אחרי הוספת נושא או מכפתור "שיוך משיבים") */}
+      <Dialog open={assignOpen} onOpenChange={(open) => !open && closeAssignModal()}>
+        <DialogContent className="max-w-md max-h-[85vh] flex flex-col overflow-hidden" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>{assignTopicName || "שיוך משיבים"}</DialogTitle>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto space-y-4">
+            {assignSubTopics.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-right">תת-נושאים</Label>
+                <ul className="list-none rounded-xl border border-card-border bg-slate-50 p-3 space-y-1 text-sm text-slate-700">
+                  {assignSubTopics.map((s) => (
+                    <li key={s.id}>{s.name_he}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label className="text-right">
+                {userGender === "F" ? "בחרי אילו משיבים משויכים לנושא זה" : "בחר אילו משיבים משויכים לנושא זה"}
+              </Label>
+              {assignLoading ? (
+                <p className="text-sm text-slate-500 text-right">טוען...</p>
+              ) : (
+                <ul className="flex flex-col gap-1 rounded-xl border border-card-border bg-slate-50 p-3 list-none max-h-48 overflow-y-auto">
+                  {assignRespondentsList.map((r) => (
+                    <li key={r.id}>
+                      <label className="flex cursor-pointer items-center gap-2 justify-start">
+                        <Checkbox
+                          checked={assignRespondentIds.includes(r.id)}
+                          onCheckedChange={(v) =>
+                            setAssignRespondentIds((prev) =>
+                              v ? [...prev, r.id] : prev.filter((id) => id !== r.id)
+                            )
+                          }
+                        />
+                        <span className="text-sm text-slate-600">{r.full_name_he || "—"}</span>
+                      </label>
+                    </li>
+                  ))}
+                  {assignRespondentsList.length === 0 && !assignLoading && (
+                    <li className="text-sm text-secondary text-right">אין משיבים במערכת.</li>
+                  )}
+                </ul>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeAssignModal}>
+              ביטול
+            </Button>
+            <Button
+              variant="default"
+              className="bg-primary"
+              onClick={handleSaveAssignRespondents}
+              disabled={assignSaving}
+            >
+              {assignSaving ? "שומר…" : "שמור"}
             </Button>
           </DialogFooter>
         </DialogContent>

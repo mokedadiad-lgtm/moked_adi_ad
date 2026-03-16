@@ -422,7 +422,7 @@ export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpe
               ) : (
                 filtered.map((q) => (
                   <TableRow
-                    key={q.id}
+                    key={q.answer_id ?? q.id}
                     className={cn(
                       "cursor-pointer transition-colors hover:bg-primary/5",
                       q.stage === "pending_manager" && "border-2 border-red-400 bg-red-50/50"
@@ -430,7 +430,14 @@ export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpe
                     onClick={() => openStageModal(q)}
                   >
                     <TableCell className="font-mono text-[11px] text-secondary md:text-xs">
-                      {q.short_id ?? `${q.id.slice(0, 8)}…`}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span>{q.short_id ?? `${q.id.slice(0, 8)}…`}</span>
+                        {q.answers_count != null && q.answers_count >= 2 && (
+                          <Badge variant="secondary" className="text-[10px] font-normal bg-violet-100 text-violet-800 border-violet-200">
+                            {q.answers_count} תשובות
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="max-w-[280px] md:max-w-[320px]">
                       <div className="flex items-start gap-1.5">
@@ -488,7 +495,11 @@ export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpe
         open={stageModalOpen}
         onOpenChange={(open) => {
           setStageModalOpen(open);
-          if (!open) setStageModalQuestion(null);
+          if (!open) {
+            setStageModalQuestion(null);
+            // מנקה את ?open= מה-URL כדי שהרענון האוטומטי לא יפתח שוב את החלון
+            router.replace("/admin");
+          }
         }}
         onSuccess={() => router.refresh()}
       />

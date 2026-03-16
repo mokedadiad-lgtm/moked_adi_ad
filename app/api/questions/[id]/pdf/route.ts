@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { responseToStructured, responseToStructuredForPdf } from "@/lib/response-text";
+import { responseToPlainText } from "@/lib/response-text";
 import { renderPdfFromHtml } from "@/lib/pdf-from-html";
 import { NextResponse } from "next/server";
 import React from "react";
@@ -11,8 +12,51 @@ const BUCKET = "response-pdfs";
 
 export const maxDuration = 60;
 
+/** Build merged body HTML and footnotes from multiple answers (renumber footnote refs). */
+function mergeAnswersForPdf(
+  answers: { response_text: string | null; topic_name_he?: string | null; sub_topic_name_he?: string | null; respondent_name?: string | null }[]
+): { bodyHtmlForPdf: string; footnotes: string[]; mergedPlainText: string } {
+  const allFootnotes: string[] = [];
+  const bodyParts: string[] = [];
+  const plainParts: string[] = [];
+  let offset = 0;
+  for (const a of answers) {
+    const { bodyHtmlForPdf, footnotes } = responseToStructuredForPdf(a.response_text ?? null);
+    const titleParts = [a.topic_name_he, a.sub_topic_name_he].filter(Boolean);
+    const title = titleParts.length ? titleParts.join(" · ") : null;
+    const subTitle = a.respondent_name ? `משיב/ה: ${a.respondent_name}` : null;
+    const heading = [title, subTitle].filter(Boolean).join(" — ");
+    const renumberedBody = bodyHtmlForPdf.replace(
+      /<sup[^>]*class="fn-ref"[^>]*>(\d+)<\/sup>/gi,
+      (_, n) => `<sup class="fn-ref">${Number(n) + offset}</sup>`
+    );
+    for (let i = 0; i < footnotes.length; i++) {
+      allFootnotes.push(`${offset + i + 1}. ${footnotes[i]!.replace(/^\d+\.\s*/, "")}`);
+    }
+    offset += footnotes.length;
+    if (heading) bodyParts.push(`<h3 class="answer-heading">${escapeHtmlForPdf(heading)}</h3>`);
+    bodyParts.push(renumberedBody);
+    plainParts.push(responseToPlainText(a.response_text ?? null));
+  }
+  const mergedPlainText = plainParts.join("\n\n——\n\n");
+  return {
+    bodyHtmlForPdf: bodyParts.join("<div class=\"answer-sep\"></div>"),
+    footnotes: allFootnotes,
+    mergedPlainText,
+  };
+}
+
+function escapeHtmlForPdf(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 /**
  * ייצור PDF: מנסה קודם מ-HTML (Puppeteer, עברית תקינה). אם נכשל – fallback ל-react-pdf.
+ * כשקיימות תשובות ב-question_answers – מאחד את כולן ל-PDF אחד ומעדכן questions.response_text לארכיון.
  */
 export async function POST(
   _request: Request,
@@ -28,12 +72,13 @@ export async function POST(
     response_text: string | null;
     created_at: string | null;
     stage?: string;
+    answers_merged_at?: string | null;
   };
   try {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from("questions")
-      .select("content, response_text, created_at, stage")
+      .select("content, response_text, created_at, stage, answers_merged_at")
       .eq("id", id)
       .single();
     if (error || !data) {
@@ -45,7 +90,64 @@ export async function POST(
     return NextResponse.json({ error: "שגיאה בטעינת השאלה" }, { status: 500 });
   }
 
-  const { bodyHtmlForPdf, footnotes } = responseToStructuredForPdf(question.response_text ?? null);
+  const supabase = getSupabaseAdmin();
+  const { data: answersRows } = await supabase
+    .from("question_answers")
+    .select("response_text, assigned_respondent_id, topics(name_he), sub_topics(name_he), deleted_at")
+    .eq("question_id", id)
+    .in("stage", ["in_linguistic_review", "ready_for_sending", "sent_archived"])
+    .order("created_at", { ascending: true });
+
+  const answers = ((answersRows ?? []) as {
+    response_text: string | null;
+    assigned_respondent_id: string | null;
+    topics?: { name_he?: string } | null;
+    sub_topics?: { name_he?: string } | null;
+    deleted_at?: string | null;
+  }[]).filter((a) => !a.deleted_at);
+
+  let respondentNames: Record<string, string> = {};
+  if (answers.length > 0) {
+    const respondentIds = [...new Set(answers.map((a) => a.assigned_respondent_id).filter(Boolean))] as string[];
+    if (respondentIds.length > 0) {
+      const { data: profs } = await supabase.from("profiles").select("id, full_name_he").in("id", respondentIds);
+      if (profs) respondentNames = Object.fromEntries(profs.map((p) => [p.id, p.full_name_he ?? ""]));
+    }
+  }
+
+  let bodyHtmlForPdf: string;
+  let footnotes: string[];
+  let mergedPlainForArchive: string | null = null;
+
+  if (answers.length > 1) {
+    if (!question.answers_merged_at) {
+      return NextResponse.json(
+        { error: "נא לבצע מיזוג תשובות קודם (כפתור מיזוג תשובות בעמוד העריכה הלשונית)" },
+        { status: 400 }
+      );
+    }
+    const single = responseToStructuredForPdf(question.response_text ?? null);
+    bodyHtmlForPdf = single.bodyHtmlForPdf;
+    footnotes = single.footnotes;
+    mergedPlainForArchive = question.response_text;
+  } else if (answers.length === 1) {
+    const merged = mergeAnswersForPdf(
+      answers.map((a) => ({
+        response_text: a.response_text,
+        topic_name_he: a.topics?.name_he ?? null,
+        sub_topic_name_he: a.sub_topics?.name_he ?? null,
+        respondent_name: a.assigned_respondent_id ? (respondentNames[a.assigned_respondent_id]?.trim() || null) : null,
+      }))
+    );
+    bodyHtmlForPdf = merged.bodyHtmlForPdf;
+    footnotes = merged.footnotes;
+    mergedPlainForArchive = merged.mergedPlainText;
+  } else {
+    const single = responseToStructuredForPdf(question.response_text ?? null);
+    bodyHtmlForPdf = single.bodyHtmlForPdf;
+    footnotes = single.footnotes;
+  }
+
   const pdfGeneratedAt = new Date().toISOString();
   const pdfOptions = {
     questionContent: question.content,
@@ -59,8 +161,9 @@ export async function POST(
     buffer = await renderPdfFromHtml(pdfOptions);
   } catch (e) {
     console.warn("PDF from HTML failed, using react-pdf fallback:", e);
+    const responseTextForFallback = mergedPlainForArchive ?? question.response_text;
     try {
-      const { bodyPlain } = responseToStructured(question.response_text ?? null);
+      const { bodyPlain } = responseToStructured(responseTextForFallback ?? null);
       await ensureHeeboFontFiles();
       registerHeeboFont();
       const doc = React.createElement(ResponsePdfDocument, {
@@ -81,8 +184,6 @@ export async function POST(
   }
 
   const filename = `${id}.pdf`;
-  const supabase = getSupabaseAdmin();
-
   await supabase.storage.from(BUCKET).remove([filename]);
 
   const { error: uploadError } = await supabase.storage
@@ -101,11 +202,14 @@ export async function POST(
   const baseUrl = urlData.publicUrl;
   const pdfUrl = `${baseUrl}?v=${Date.now()}`;
 
-  const updatePayload: { pdf_url: string; updated_at: string; pdf_generated_at: string; stage?: string } = {
+  const updatePayload: { pdf_url: string; updated_at: string; pdf_generated_at: string; response_text?: string; stage?: string } = {
     pdf_url: pdfUrl,
     updated_at: pdfGeneratedAt,
     pdf_generated_at: pdfGeneratedAt,
   };
+  if (mergedPlainForArchive != null) {
+    updatePayload.response_text = mergedPlainForArchive;
+  }
   if (question.stage === "in_linguistic_review") {
     updatePayload.stage = "ready_for_sending";
   }

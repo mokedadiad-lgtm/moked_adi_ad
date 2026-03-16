@@ -36,6 +36,7 @@ export function AnswerModal({
   const [responseText, setResponseText] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+   const [draftSaved, setDraftSaved] = useState(false);
 
   useEffect(() => {
     if (open && question) setResponseText(question.response_text ?? "");
@@ -44,18 +45,24 @@ export function AnswerModal({
   const reset = () => {
     setResponseText("");
     setError(null);
+    setDraftSaved(false);
   };
 
   const saveDraft = async () => {
     if (!question || !responseText.trim()) return;
     const supabase = getSupabaseBrowser();
-    await supabase
-      .from("questions")
-      .update({
-        response_text: responseText.trim(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", question.id);
+    if (question.answer_id) {
+      await supabase
+        .from("question_answers")
+        .update({ response_text: responseText.trim(), updated_at: new Date().toISOString() })
+        .eq("id", question.answer_id);
+    } else {
+      await supabase
+        .from("questions")
+        .update({ response_text: responseText.trim(), updated_at: new Date().toISOString() })
+        .eq("id", question.id);
+    }
+    setDraftSaved(true);
   };
 
   const handleOpenChange = async (next: boolean) => {
@@ -75,13 +82,15 @@ export function AnswerModal({
     }
     setPending(true);
     setError(null);
-    const proofreaderTypeId = await getProofreaderTypeIdForQuestion(question.id);
+    const proofreaderTypeId = question.proofreader_type_id ?? (await getProofreaderTypeIdForQuestion(question.id));
     const supabase = getSupabaseBrowser();
-    const { data, error: rpcError } = await supabase.rpc("submit_respondent_response", {
+    const rpcParams: { p_question_id: string; p_response_text: string; p_proofreader_type_id: string | null; p_answer_id?: string } = {
       p_question_id: question.id,
       p_response_text: responseText.trim(),
       p_proofreader_type_id: proofreaderTypeId,
-    });
+    };
+    if (question.answer_id) rpcParams.p_answer_id = question.answer_id;
+    const { data, error: rpcError } = await supabase.rpc("submit_respondent_response", rpcParams);
 
     setPending(false);
     if (rpcError) {
@@ -93,6 +102,7 @@ export function AnswerModal({
       setError(result.error ?? "שגיאה בשליחה");
       return;
     }
+    setDraftSaved(false);
     onOpenChange(false);
     onSuccess();
     reset();
@@ -161,11 +171,19 @@ export function AnswerModal({
               {error}
             </p>
           )}
+          {draftSaved && !error && (
+            <p className="mt-2 text-sm text-emerald-700">
+              הטיוטה נשמרה.
+            </p>
+          )}
         </div>
 
         <DialogFooter className="shrink-0">
           <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
             ביטול
+          </Button>
+          <Button type="button" variant="outline" onClick={saveDraft} disabled={pending}>
+            {pending ? "שומר…" : "שמור טיוטה"}
           </Button>
           <Button type="button" onClick={handleSubmit} disabled={pending}>
             {pending ? "שולח…" : "סיים והעבר להגהה"}

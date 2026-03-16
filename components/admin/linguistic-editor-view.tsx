@@ -3,6 +3,13 @@
 import { QuestionDetailsModal } from "@/components/admin/question-details-modal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { QuestionRow } from "@/lib/types";
 import { STAGE_LABELS } from "@/lib/types";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -41,7 +48,9 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
   }, [questions, openQuestionId, router]);
 
   const [pdfPending, setPdfPending] = useState<string | null>(null);
+  const [mergePending, setMergePending] = useState<string | null>(null);
   const [sendPending, setSendPending] = useState<string | null>(null);
+  const [sendConfirmQuestion, setSendConfirmQuestion] = useState<QuestionRow | null>(null);
 
   const handleCreatePdf = async (questionId: string) => {
     setPdfPending(questionId);
@@ -78,13 +87,39 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
     }
   };
 
-  const handleSendAndArchive = async (q: QuestionRow) => {
+  const handleMerge = async (questionId: string) => {
+    setMergePending(questionId);
+    try {
+      const res = await fetch(`/api/questions/${questionId}/merge`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data?.error ?? "שגיאה במיזוג תשובות");
+        return;
+      }
+      router.refresh();
+      if (selected?.id === questionId) {
+        setSelected((prev) => prev ? { ...prev, answers_merged_at: new Date().toISOString(), answers_count: prev.answers_count ?? 0 } : null);
+      }
+    } catch {
+      alert("שגיאה בחיבור לשרת. נסה שוב.");
+    } finally {
+      setMergePending(null);
+    }
+  };
+
+  const handleSendAndArchive = (q: QuestionRow) => {
     if (!q.asker_email?.trim()) {
       alert("לא הוזן מייל לשואל. לא ניתן לשלוח.");
       return;
     }
-    if (!confirm(`לשלוח את התשובה למייל ${q.asker_email} ולעבור לארכיון?`)) return;
+    setSendConfirmQuestion(q);
+  };
+
+  const doSendAndArchive = async () => {
+    const q = sendConfirmQuestion;
+    if (!q) return;
     setSendPending(q.id);
+    setSendConfirmQuestion(null);
     try {
       const res = await fetch(`/api/questions/${q.id}/send`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
@@ -112,7 +147,7 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
     <>
       <ul className="space-y-4">
         {questions.map((q) => (
-          <li key={q.id}>
+          <li key={q.answer_id ?? q.id}>
             <Card
               className={cn(
                 "overflow-hidden transition-shadow hover:shadow-md",
@@ -161,6 +196,26 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
         ))}
       </ul>
 
+      {/* חלון אישור שליחה וארכוב (סגנון מערכת) */}
+      <Dialog open={!!sendConfirmQuestion} onOpenChange={(open) => !open && setSendConfirmQuestion(null)}>
+        <DialogContent className="max-w-sm rounded-2xl border border-card-border bg-card px-5 py-4 text-center shadow-soft" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-center">אישור שליחה וארכוב</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600 text-center">
+            {sendConfirmQuestion && (
+              <>לשלוח את התשובה למייל {sendConfirmQuestion.asker_email} ולעבור לארכיון?</>
+            )}
+          </p>
+          <DialogFooter className="flex justify-center gap-2 mt-4">
+            <Button variant="outline" onClick={() => setSendConfirmQuestion(null)}>ביטול</Button>
+            <Button variant="default" className="bg-green-600 text-white hover:bg-green-700" onClick={doSendAndArchive} disabled={!!sendPending}>
+              {sendPending ? "שולח…" : "אישור"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <QuestionDetailsModal
         question={selected}
         open={modalOpen}
@@ -174,6 +229,9 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
         onSendAndArchive={handleSendAndArchive}
         pdfPending={selected ? pdfPending === selected.id : false}
         sendPending={selected ? sendPending === selected.id : false}
+        needsMerge={selected ? (selected.answers_count ?? 0) >= 2 && !selected.answers_merged_at : false}
+        onMerge={handleMerge}
+        mergePending={selected ? mergePending === selected.id : false}
       />
     </>
   );

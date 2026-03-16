@@ -64,6 +64,11 @@ export async function POST(
     })
     .eq("id", id);
 
+  await supabase
+    .from("question_answers")
+    .update({ stage: "sent_archived", updated_at: new Date().toISOString() })
+    .eq("question_id", id);
+
   if (updateError) {
     console.error("Update question after send:", updateError);
     return NextResponse.json(

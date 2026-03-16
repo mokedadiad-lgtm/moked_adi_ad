@@ -122,6 +122,8 @@ export function buildPdfHtml(options: {
     .body p:last-child, .body div:last-child { margin-bottom: 0; }
     .body h2 { font-size: 16px; font-weight: 700; color: #374151; margin: 18px 0 8px; text-align: justify; }
     .body h3 { font-size: 15px; font-weight: 700; color: #4B5563; margin: 14px 0 6px; text-align: justify; }
+    .body .answer-heading { margin-top: 1.2em; color: #4338CA; }
+    .body .answer-sep { height: 0; border-bottom: 1px solid #E5E7EB; margin: 1em 0; }
     .body sup {
       font-size: 0.75em;
       vertical-align: super;

@@ -77,10 +77,10 @@ export function LobbyTaskModal({
     setPending(true);
     setError(null);
     const supabase = getSupabaseBrowser();
-    const { error: e } = await supabase
-      .from("questions")
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq("id", question.id);
+    const payload = { ...updates, updated_at: new Date().toISOString() };
+    const { error: e } = question.answer_id
+      ? await supabase.from("question_answers").update(payload).eq("id", question.answer_id)
+      : await supabase.from("questions").update(payload).eq("id", question.id);
     setPending(false);
     if (e) {
       setError(e.message);
@@ -176,7 +176,7 @@ export function LobbyTaskModal({
                   onClick={handleSaveResponse}
                   disabled={pending || !hasResponseChanges}
                 >
-                  {pending ? "שומר…" : "שמור שינויים"}
+                  {pending ? "שומר…" : "שמור טיוטה"}
                 </Button>
               </>
             ) : (
