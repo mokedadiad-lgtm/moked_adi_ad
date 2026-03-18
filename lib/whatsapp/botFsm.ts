@@ -87,6 +87,98 @@ function isNewProcessKeyword(text: string | undefined | null): boolean {
   );
 }
 
+// =========================
+// BOT TEXTS (synchronized with WHATSAPP_BOT_TEXTS.md)
+// =========================
+const START_TEXT =
+  "ברוכים הבאים לבוט של 'אסק מי פלוס' מבית עדי-עד!\n\nהמספר שממנו שלחת את ההודעה מזוהה לצורך שליחת המענה לפניתך.\nיש לבחור את האפשרות הנכונה עבורך כדי שנמשיך.\n";
+
+const GENDER_INVALID_FIRST_TEXT =
+  "לא זיהיתי בחירה תקינה.\nנא לבחור את האפשרות הרצויה באמצעות הכפתורים: `זכר` או `נקבה`.";
+
+const CHOOSE_MODE_TEXT = "תודה.\nאתה מעוניין בפניה ושאלה במוקד או להשאיר הודעה לנציג אנושי?\n";
+
+const HUMAN_HANDOFF_TEXT = "פנייתך הועברה למענה אנושי אנושי.\nניצור עמך קשר בהקדם האפשרי.\n";
+
+const AGE_TEXT = "נא להזין את הגיל שלך באמצעות מספר בלבד.";
+
+const AGE_INVALID_FIRST_TEXT =
+  "הגיל שהוזן אינו בטווח הנדרש או שאינו מספר.\nנא להזין את גילך.";
+
+const AGE_INVALID_SECOND_TEXT =
+  "השירות אינו מיועד לפונה בגילך.\nתודה על פנייתך. השיחה תיסגר כעת.\n";
+
+const BODY_COLLECT_TEXT =
+  "כעת נא לכתוב את השאלה שלך.\nניתן לשלוח את התוכן במספר הודעות.\nלאחר שתסיים/י, לחץ/י על האפשרות המתאימה.\n";
+
+const BODY_INVALID_OR_EMPTY_TEXT =
+  "לא נקלט תוכן שאלה תקין.\nנא לכתוב את השאלה באופן ברור.\n";
+
+const TITLE_COLLECT_TEXT = "נא להזין כותרת קצרה לשאלה.\n";
+
+const RESPONSE_TYPE_TEXT = "באיזו רמת פירוט תרצה/י לקבל מענה?\n";
+const RESPONSE_SHORT_BUTTON_TITLE = "תשובה קצרה, מתומצתת ומעשית";
+const RESPONSE_DETAILED_BUTTON_TITLE = "תשובה מקיפה, ארוכה ומורחבת";
+
+const PUBLICATION_CONSENT_TEXT =
+  "פעמים רבות השאלות שאנו נשאלים יכולות לסייע למתמודדים/ות נוספים/ות. את/ה חשוב/ה לנו ולעולם לא נפרסם את השאלה שלך אם לא תסכים/מי.\n\n" +
+  "את התשובות שאנו עונים יש לנו את הזכות לפרסם לתועלת נערים/ות נוספים/ות, בטשטוש פרטים מזהים.\n\n" +
+  "האם את/ה מאשר לנו לפרסם את שאלתך?\n";
+
+const PUBLICATION_PUBLISH_BUTTON_TITLE = "אפשר לפרסם";
+const PUBLICATION_BLUR_BUTTON_TITLE = "פרסום בטשטוש פרטים מזהים";
+const PUBLICATION_NONE_BUTTON_TITLE = "לא לפרסום";
+
+const DELIVERY_PREFERENCE_TEXT = "כיצד תרצה/י לקבל את התשובה?\n";
+const DELIVERY_WHATSAPP_BUTTON_TITLE = "וואטסאפ";
+const DELIVERY_EMAIL_BUTTON_TITLE = "אימייל";
+const DELIVERY_BOTH_BUTTON_TITLE = "גם וואטסאפ וגם אימייל";
+
+const COLLECT_EMAIL_TEXT = "נא להזין כתובת אימייל לקבלת התשובה.\n";
+const EMAIL_INVALID_TEXT =
+  "כתובת האימייל שהוזנה אינה תקינה.\nנא להזין כתובת אימייל תקינה.\n";
+
+const CONFIRM_EDIT_BUTTONS_BODY = "בחירה";
+const CONFIRM_DONE_BUTTON_ID = "CONFIRM_DONE";
+
+const WAITING_ADMIN_APPROVAL_TEXT =
+  "תודה.\nהפנייה שלך התקבלה והועברה למערכת המוקד.\nבעז\"ה נשלח לך תשובה בהמשך\n";
+
+const EXTRA_INBOX_MESSAGE_WHILE_WAITING_TEXT =
+  "קיבלנו הודעה נוספת מהשואל.\nהיא תועבר לעיון הנציג האנושי.\nלא נבצע עדכונים אוטומטיים עד לסיום הבדיקה והאישור.\n";
+
+const START_NEW_PROCESS_WHILE_WAITING_TEXT =
+  "פתחנו פנייה חדשה.\nהפנייה הקודמת עדיין נמצאת בבדיקה במערכת.\n";
+
+const MAX_EDITS_REACHED_TEXT =
+  "הגעת למספר השינויים המקסימלי האפשרי.\nבאפשרותך לאשר את הפנייה כפי שהיא כעת.\n";
+
+const EDIT_GENDER_TEXT =
+  "נא להזין מחדש את המגדר באמצעות הכפתורים: `זכר` או `נקבה`.\n";
+const EDIT_AGE_TEXT = "נא להזין גיל במספרים.\n";
+const EDIT_BODY_TEXT =
+  "נא לכתוב את תוכן השאלה החדש.\nניתן לשלוח במספר הודעות.\nלאחר שתסיים/י לחץ/י על האפשרות המתאימה.\n";
+const EDIT_TITLE_TEXT = "נא להזין כותרת חדשה לשאלה.\n";
+const EDIT_RESPONSE_TYPE_TEXT = "באיזו רמת פירוט תרצה/י לקבל מענה?\n";
+const EDIT_PUBLICATION_CONSENT_TEXT = "נא לבחור אפשרות לפרסום:\n";
+const EDIT_DELIVERY_PREFERENCE_TEXT = "כיצד תרצה/י לקבל את התשובה?\n";
+
+function responseTypeLabel(rt: ResponseType): string {
+  return rt === "short" ? RESPONSE_SHORT_BUTTON_TITLE : RESPONSE_DETAILED_BUTTON_TITLE;
+}
+
+function publicationConsentLabel(pc: PublicationConsent): string {
+  if (pc === "publish") return PUBLICATION_PUBLISH_BUTTON_TITLE;
+  if (pc === "blur") return PUBLICATION_BLUR_BUTTON_TITLE;
+  return PUBLICATION_NONE_BUTTON_TITLE;
+}
+
+function deliveryPreferenceLabel(dp: DeliveryPreference): string {
+  if (dp === "whatsapp") return DELIVERY_WHATSAPP_BUTTON_TITLE;
+  if (dp === "email") return DELIVERY_EMAIL_BUTTON_TITLE;
+  return DELIVERY_BOTH_BUTTON_TITLE;
+}
+
 export async function runBotFsm(params: {
   toPhoneRaw: string;
   currentState: BotConversationState;
@@ -126,17 +218,15 @@ export async function runBotFsm(params: {
   // Global escape to new process
   if (currentState === "waiting_admin_approval" && isNewProcessKeyword(text)) {
     // Start over as a new bot process, ignore current draft.
-    sendText("פתחנו פנייה חדשה.\nהפנייה הקודמת עדיין נמצאת בבדיקה אצל מנהל תפעולי.");
-    sendText("נא לבחור את המגדר באמצעות הכפתורים: זכר / נקבה");
+    sendText(START_NEW_PROCESS_WHILE_WAITING_TEXT.trimEnd());
+    sendText(START_TEXT.trimEnd());
     return { ok: true, nextState: "gender", nextContext: {}, outbound };
   }
 
   switch (currentState) {
     case "start": {
       // Bot entry: ask gender
-      sendText(
-        "שלום רב.\nשמי מערכת “שאל את המערכת”.\nהמספר שממנו נשלחת ההודעה מזוהה לצורך יצירת הקשר ומעקב אחר הבקשה.\nהשירות מיועד לציבור בגיל 18–99.\nנא לבחור את המגדר באמצעות הכפתורים."
-      );
+      sendText(START_TEXT.trimEnd());
       sendButtons("בחר/י מגדר:", [
         { id: "GENDER_M", title: "זכר" },
         { id: "GENDER_F", title: "נקבה" },
@@ -150,7 +240,7 @@ export async function runBotFsm(params: {
         buttonId === "GENDER_F" ? ("F" as const) :
         (text === "זכר" ? ("M" as const) : text === "נקבה" ? ("F" as const) : null);
       if (!g) {
-        sendText("לא זיהיתי בחירה תקינה.\nנא לבחור את המגדר באמצעות הכפתורים: `זכר` או `נקבה`.");
+        sendText(GENDER_INVALID_FIRST_TEXT);
         sendButtons("בחירה:", [
           { id: "GENDER_M", title: "זכר" },
           { id: "GENDER_F", title: "נקבה" },
@@ -158,22 +248,22 @@ export async function runBotFsm(params: {
         return { ok: true, nextState: "gender", nextContext: ctx, outbound };
       }
       ctx.asker_gender = g;
-      sendText("תודה.\nכיצד תרצה/י להתנהל מול המענה?");
+      sendText(CHOOSE_MODE_TEXT.trimEnd());
       sendButtons("", [
-        { id: "MODE_BOT", title: "מענה באמצעות הבוט" },
-        { id: "MODE_HUMAN", title: "נציג אנושי" },
+        { id: "MODE_BOT", title: "מעוניין בפניה ושאלה במוקד" },
+        { id: "MODE_HUMAN", title: "להשאיר הודעה לנציג אנושי" },
       ]);
       return { ok: true, nextState: "choose_mode", nextContext: ctx, outbound };
     }
 
     case "choose_mode": {
       if (buttonId === "MODE_HUMAN" || text === "נציג אנושי" || text === "נציג" || text === "אדם") {
-        sendText("פנייתך הועברה לטיפול נציג אנושי.\nניצור עמך קשר בהקדם האפשרי.");
+        sendText(HUMAN_HANDOFF_TEXT.trimEnd());
         return { ok: true, nextState: "done", nextContext: ctx, outbound };
       }
       // Default to bot flow
       ctx.delivery_preference = ctx.delivery_preference ?? "whatsapp";
-      sendText("נא להזין את הגיל שלך באמצעות מספר בלבד (טווח 18–99).");
+      sendText(AGE_TEXT);
       return { ok: true, nextState: "age", nextContext: ctx, outbound };
     }
 
@@ -185,15 +275,15 @@ export async function runBotFsm(params: {
         const badCount = prevBad + 1;
         (ctx as any).age_bad_count = badCount;
         if (badCount >= 2) {
-          sendText("השירות אינו מיועד למישהו בגילך.\nתודה על פנייתך. השיחה תיסגר כעת.");
+          sendText(AGE_INVALID_SECOND_TEXT.trimEnd());
           return { ok: true, nextState: "done", nextContext: ctx, outbound };
         }
-        sendText("הגיל שהוזן אינו בטווח הנדרש או שאינו מספר.\nנא להזין גיל מספרי בין 18 ל־99.");
+        sendText(AGE_INVALID_FIRST_TEXT);
         return { ok: true, nextState: "age", nextContext: ctx, outbound };
       }
       ctx.asker_age = n;
       ctx.bodyParts = [];
-      sendText("כעת נא לכתוב את השאלה שלך.\nניתן לשלוח את התוכן במספר הודעות.\nלאחר שתסיים/י, לחץ/י על `סיימתי`.");
+      sendText(BODY_COLLECT_TEXT.trimEnd());
       sendButtons("סיימת?", [
         { id: "BODY_ADD_MORE", title: "הוסף עוד" },
         { id: "BODY_DONE", title: "סיימתי" },
@@ -208,15 +298,15 @@ export async function runBotFsm(params: {
       if (buttonId === "BODY_DONE" || text === "סיימתי") {
         const content = (ctx.bodyParts ?? []).join("\n").trim();
         if (!content) {
-          sendText("לא נקלט תוכן שאלה תקין.\nנא לכתוב את השאלה באופן ברור.");
-          sendButtons("המשך", [
+          sendText(BODY_INVALID_OR_EMPTY_TEXT.trimEnd());
+          sendButtons("סיימת?", [
             { id: "BODY_ADD_MORE", title: "הוסף עוד" },
             { id: "BODY_DONE", title: "סיימתי" },
           ]);
           return { ok: true, nextState: "body_collect", nextContext: ctx, outbound };
         }
         ctx.bodyParts = [];
-        sendText("נא להזין כותרת קצרה לשאלה.");
+        sendText(TITLE_COLLECT_TEXT.trimEnd());
         sendButtons("כותרת", [
           { id: "TITLE_DONE", title: "סיימתי" },
           { id: "TITLE_ADD_MORE", title: "הוסף עוד" },
@@ -228,8 +318,8 @@ export async function runBotFsm(params: {
 
       // Add more: just keep state
       if (buttonId === "BODY_ADD_MORE" || text === "הוסף עוד") {
-        sendText("מצוין. המשך/י לכתוב את השאלה (אפשר במספר הודעות).");
-        sendButtons("המשך?", [
+        sendText(BODY_COLLECT_TEXT.trimEnd());
+        sendButtons("סיימת?", [
           { id: "BODY_ADD_MORE", title: "הוסף עוד" },
           { id: "BODY_DONE", title: "סיימתי" },
         ]);
@@ -237,7 +327,7 @@ export async function runBotFsm(params: {
       }
 
       // If no buttons, allow typing; stay in same state.
-      sendText("המשך/י לכתוב את תוכן השאלה. בסיום לחץ/י `סיימתי`.");
+      sendText(BODY_COLLECT_TEXT.trimEnd());
       return { ok: true, nextState: "body_collect", nextContext: ctx, outbound };
     }
 
@@ -258,19 +348,19 @@ export async function runBotFsm(params: {
           return { ok: false, error: "missing_content" };
         }
         if (!title) {
-          sendText("נא להזין כותרת לשאלה.");
+          sendText(TITLE_COLLECT_TEXT.trimEnd());
           return { ok: true, nextState: "title_collect", nextContext: ctx, outbound };
         }
-        sendText("באיזו רמת פירוט תרצה/י לקבל מענה?");
+        sendText(RESPONSE_TYPE_TEXT.trimEnd());
         sendButtons("בחירה", [
-          { id: "RESP_SHORT", title: "קצר ולעניין" },
-          { id: "RESP_DETAILED", title: "מורחב" },
+          { id: "RESP_SHORT", title: RESPONSE_SHORT_BUTTON_TITLE },
+          { id: "RESP_DETAILED", title: RESPONSE_DETAILED_BUTTON_TITLE },
         ]);
         return { ok: true, nextState: "response_type", nextContext: ctx, outbound };
       }
 
       // stay
-      sendText("אפשר לשלוח את הכותרת. בסיום לחץ/י `סיימתי`.");
+      sendText(TITLE_COLLECT_TEXT.trimEnd());
       return { ok: true, nextState: "title_collect", nextContext: ctx, outbound };
     }
 
@@ -282,17 +372,17 @@ export async function runBotFsm(params: {
       if (!rt) {
         sendText("לא זיהיתי בחירה.\nנא לבחור: קצר ולעניין / מורחב.");
         sendButtons("בחירה", [
-          { id: "RESP_SHORT", title: "קצר ולעניין" },
-          { id: "RESP_DETAILED", title: "מורחב" },
+          { id: "RESP_SHORT", title: RESPONSE_SHORT_BUTTON_TITLE },
+          { id: "RESP_DETAILED", title: RESPONSE_DETAILED_BUTTON_TITLE },
         ]);
         return { ok: true, nextState: "response_type", nextContext: ctx, outbound };
       }
       ctx.response_type = rt;
-      sendText("נא לבחור אפשרות לפרסום התשובה:\nאפשר לפרסם / פרסום בטשטוש / ללא פרסום");
+      sendText(PUBLICATION_CONSENT_TEXT.trimEnd());
       sendButtons("פרסום", [
-        { id: "PUB_PUBLISH", title: "אפשר לפרסם" },
-        { id: "PUB_BLUR", title: "פרסום בטשטוש" },
-        { id: "PUB_NONE", title: "ללא פרסום" },
+        { id: "PUB_PUBLISH", title: PUBLICATION_PUBLISH_BUTTON_TITLE },
+        { id: "PUB_BLUR", title: PUBLICATION_BLUR_BUTTON_TITLE },
+        { id: "PUB_NONE", title: PUBLICATION_NONE_BUTTON_TITLE },
       ]);
       return { ok: true, nextState: "publication_consent", nextContext: ctx, outbound };
     }
@@ -308,18 +398,18 @@ export async function runBotFsm(params: {
       if (!pc) {
         sendText("לא זיהיתי בחירה תקינה בפרסום.\nנא לבחור שוב.");
         sendButtons("פרסום", [
-          { id: "PUB_PUBLISH", title: "אפשר לפרסם" },
-          { id: "PUB_BLUR", title: "פרסום בטשטוש" },
-          { id: "PUB_NONE", title: "ללא פרסום" },
+          { id: "PUB_PUBLISH", title: PUBLICATION_PUBLISH_BUTTON_TITLE },
+          { id: "PUB_BLUR", title: PUBLICATION_BLUR_BUTTON_TITLE },
+          { id: "PUB_NONE", title: PUBLICATION_NONE_BUTTON_TITLE },
         ]);
         return { ok: true, nextState: "publication_consent", nextContext: ctx, outbound };
       }
       ctx.publication_consent = pc;
-      sendText("כיצד תרצה/י לקבל את התשובה?");
+      sendText(DELIVERY_PREFERENCE_TEXT.trimEnd());
       sendButtons("ערוץ", [
-        { id: "DELIV_WHATSAPP", title: "וואטסאפ" },
-        { id: "DELIV_EMAIL", title: "אימייל" },
-        { id: "DELIV_BOTH", title: "גם וואטסאפ וגם אימייל" },
+        { id: "DELIV_WHATSAPP", title: DELIVERY_WHATSAPP_BUTTON_TITLE },
+        { id: "DELIV_EMAIL", title: DELIVERY_EMAIL_BUTTON_TITLE },
+        { id: "DELIV_BOTH", title: DELIVERY_BOTH_BUTTON_TITLE },
       ]);
       return { ok: true, nextState: "delivery_preference", nextContext: ctx, outbound };
     }
@@ -343,11 +433,11 @@ export async function runBotFsm(params: {
       }
       ctx.delivery_preference = dp;
       if (dp === "email") {
-        sendText("נא להזין כתובת אימייל לקבלת התשובה.");
+        sendText(COLLECT_EMAIL_TEXT.trimEnd());
         return { ok: true, nextState: "collect_email", nextContext: ctx, outbound };
       }
       if (dp === "both") {
-        sendText("נא להזין כתובת אימייל לקבלת התשובה.");
+        sendText(COLLECT_EMAIL_TEXT.trimEnd());
         return { ok: true, nextState: "collect_email", nextContext: ctx, outbound };
       }
       // whatsapp only
@@ -358,7 +448,7 @@ export async function runBotFsm(params: {
       const em = safeTrim(text);
       // Basic email validation
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
-        sendText("כתובת האימייל שהוזנה אינה תקינה.\nנא להזין כתובת אימייל תקינה.");
+        sendText(EMAIL_INVALID_TEXT.trimEnd());
         return { ok: true, nextState: "collect_email", nextContext: ctx, outbound };
       }
       ctx.asker_email = em;
@@ -366,25 +456,7 @@ export async function runBotFsm(params: {
     }
 
     case "confirm": {
-      const wantsEdit =
-        buttonId === "CONFIRM_EDIT" ||
-        text === "שנה משהו" ||
-        text === "שינויים" ||
-        text === "עריכה";
-      const wantsDone =
-        buttonId === "CONFIRM_DONE" ||
-        text === "סיום ואישור פנייה" ||
-        text === "זהו" ||
-        text === "מאשר" ||
-        text === "אישור";
-
-      if (wantsEdit) {
-        // Can't show 8 options as quick buttons (limit 3) => text list
-        sendText("איזה שדה תרצה/י לשנות? נא השב/י באחד מהבאים:");
-        sendText("מגדר / גיל / שאלה / כותרת / מסלול מענה / פרסום / ערוץ קבלת תשובה");
-        return { ok: true, nextState: "edit_field_choice", nextContext: ctx, outbound };
-      }
-      if (wantsDone) {
+      if (buttonId === CONFIRM_DONE_BUTTON_ID || text === "סיום ואישור פנייה") {
         // Create draft
         const asker_gender = ctx.asker_gender as Gender | undefined;
         const asker_age = ctx.asker_age as number | undefined;
@@ -410,8 +482,57 @@ export async function runBotFsm(params: {
         });
         if (!createRes.ok) return { ok: false, error: createRes.error };
 
-        sendText("תודה.\nהפנייה שלך התקבלה והועברה לאישור מנהל תפעולי.\nנעדכן אותך לאחר האישור.");
+        sendText(WAITING_ADMIN_APPROVAL_TEXT.trimEnd());
         return { ok: true, nextState: "waiting_admin_approval", nextContext: ctx, outbound, createdDraft: true };
+      }
+
+      // Edit selection buttons (from showConfirm)
+      switch (buttonId) {
+        case "EDIT_GENDER":
+          sendText(EDIT_GENDER_TEXT.trimEnd());
+          sendButtons("מגדר", [
+            { id: "GENDER_M", title: "זכר" },
+            { id: "GENDER_F", title: "נקבה" },
+          ]);
+          return { ok: true, nextState: "edit_gender", nextContext: ctx, outbound };
+        case "EDIT_AGE":
+          sendText(EDIT_AGE_TEXT.trimEnd());
+          return { ok: true, nextState: "edit_age", nextContext: ctx, outbound };
+        case "EDIT_BODY":
+          ctx.bodyParts = [];
+          sendText(EDIT_BODY_TEXT.trimEnd());
+          sendButtons("סיימת?", [
+            { id: "BODY_ADD_MORE", title: "הוסף עוד" },
+            { id: "BODY_DONE", title: "סיימתי" },
+          ]);
+          return { ok: true, nextState: "edit_body", nextContext: ctx, outbound };
+        case "EDIT_TITLE":
+          sendText(EDIT_TITLE_TEXT.trimEnd());
+          sendButtons("כותרת", [{ id: "EDIT_TITLE_DONE", title: "סיימתי" }]);
+          return { ok: true, nextState: "edit_title", nextContext: ctx, outbound };
+        case "EDIT_RESPONSE_TYPE":
+          sendText(EDIT_RESPONSE_TYPE_TEXT.trimEnd());
+          sendButtons("מסלול", [
+            { id: "RESP_SHORT", title: RESPONSE_SHORT_BUTTON_TITLE },
+            { id: "RESP_DETAILED", title: RESPONSE_DETAILED_BUTTON_TITLE },
+          ]);
+          return { ok: true, nextState: "edit_response_type", nextContext: ctx, outbound };
+        case "EDIT_PUBLICATION_CONSENT":
+          sendText(EDIT_PUBLICATION_CONSENT_TEXT.trimEnd());
+          sendButtons("פרסום", [
+            { id: "PUB_PUBLISH", title: "ניתן לפרסם" },
+            { id: "PUB_BLUR", title: "פרסום בטשטוש" },
+            { id: "PUB_NONE", title: "ללא פרסום" },
+          ]);
+          return { ok: true, nextState: "edit_publication_consent", nextContext: ctx, outbound };
+        case "EDIT_DELIVERY_PREFERENCE":
+          sendText(EDIT_DELIVERY_PREFERENCE_TEXT.trimEnd());
+          sendButtons("ערוץ", [
+            { id: "DELIV_WHATSAPP", title: DELIVERY_WHATSAPP_BUTTON_TITLE },
+            { id: "DELIV_EMAIL", title: DELIVERY_EMAIL_BUTTON_TITLE },
+            { id: "DELIV_BOTH", title: DELIVERY_BOTH_BUTTON_TITLE },
+          ]);
+          return { ok: true, nextState: "edit_delivery_preference", nextContext: ctx, outbound };
       }
 
       // Default: re-show confirm
@@ -501,7 +622,7 @@ export async function runBotFsm(params: {
     case "edit_age": {
       const n = parseAge(text);
       if (n == null || n < 18 || n > 99) {
-        sendText("נא להזין גיל מספרי בין 18 ל־99.");
+        sendText(EDIT_AGE_TEXT.trimEnd());
         return { ok: true, nextState: "edit_age", nextContext: ctx, outbound };
       }
       ctx.asker_age = n;
@@ -515,7 +636,7 @@ export async function runBotFsm(params: {
       if (buttonId === "BODY_DONE" || text === "סיימתי") {
         const content = (ctx.bodyParts ?? []).join("\n").trim();
         if (!content) {
-          sendText("לא נקלט תוכן שאלה תקין.\nנא לכתוב את השאלה באופן ברור.");
+          sendText(BODY_INVALID_OR_EMPTY_TEXT.trimEnd());
           return { ok: true, nextState: "edit_body", nextContext: ctx, outbound };
         }
         (ctx as any).content = content;
@@ -523,18 +644,27 @@ export async function runBotFsm(params: {
         ctx.edit_count = (ctx.edit_count ?? 0) + 1;
         return showConfirm(outbound, ctx);
       }
-      sendText("המשך/י לכתוב את תוכן השאלה החדש. בסיום לחץ/י `סיימתי`.");
+      sendText(EDIT_BODY_TEXT.trimEnd());
       return { ok: true, nextState: "edit_body", nextContext: ctx, outbound };
     }
 
     case "edit_title": {
-      if (!text) {
-        sendText("נא להזין כותרת חדשה.");
+      if (text) {
+        ctx.title = text.trim();
         return { ok: true, nextState: "edit_title", nextContext: ctx, outbound };
       }
-      ctx.title = text;
-      ctx.edit_count = (ctx.edit_count ?? 0) + 1;
-      return showConfirm(outbound, ctx);
+      if (buttonId === "EDIT_TITLE_DONE" || text === "סיימתי") {
+        if (!ctx.title || !ctx.title.trim()) {
+          sendText(EDIT_TITLE_TEXT.trimEnd());
+          sendButtons("כותרת", [{ id: "EDIT_TITLE_DONE", title: "סיימתי" }]);
+          return { ok: true, nextState: "edit_title", nextContext: ctx, outbound };
+        }
+        ctx.edit_count = (ctx.edit_count ?? 0) + 1;
+        return showConfirm(outbound, ctx);
+      }
+      sendText(EDIT_TITLE_TEXT.trimEnd());
+      sendButtons("כותרת", [{ id: "EDIT_TITLE_DONE", title: "סיימתי" }]);
+      return { ok: true, nextState: "edit_title", nextContext: ctx, outbound };
     }
 
     case "edit_response_type": {
@@ -545,8 +675,8 @@ export async function runBotFsm(params: {
       if (!rt) {
         sendText("לא זיהיתי בחירה. נא לבחור שוב.");
         sendButtons("מסלול", [
-          { id: "RESP_SHORT", title: "קצר ולעניין" },
-          { id: "RESP_DETAILED", title: "מורחב" },
+          { id: "RESP_SHORT", title: RESPONSE_SHORT_BUTTON_TITLE },
+          { id: "RESP_DETAILED", title: RESPONSE_DETAILED_BUTTON_TITLE },
         ]);
         return { ok: true, nextState: "edit_response_type", nextContext: ctx, outbound };
       }
@@ -566,7 +696,7 @@ export async function runBotFsm(params: {
       if (!pc) {
         sendText("לא זיהיתי בחירה. נא לבחור שוב.");
         sendButtons("פרסום", [
-          { id: "PUB_PUBLISH", title: "אפשר לפרסם" },
+          { id: "PUB_PUBLISH", title: "ניתן לפרסם" },
           { id: "PUB_BLUR", title: "פרסום בטשטוש" },
           { id: "PUB_NONE", title: "ללא פרסום" },
         ]);
@@ -597,7 +727,7 @@ export async function runBotFsm(params: {
       ctx.delivery_preference = dp;
       ctx.asker_email = undefined;
       if (dp === "email" || dp === "both") {
-        sendText("נא להזין כתובת אימייל לקבלת התשובה.");
+        sendText(COLLECT_EMAIL_TEXT.trimEnd());
         return { ok: true, nextState: "collect_email", nextContext: ctx, outbound };
       }
       ctx.edit_count = (ctx.edit_count ?? 0) + 1;
@@ -606,13 +736,13 @@ export async function runBotFsm(params: {
 
     case "waiting_admin_approval": {
       // In this phase, do not auto-update draft. Provide a short message unless user starts a new process.
-      sendText("קיבלנו הודעה נוספת.\nהיא תועבר לעיון מנהל תפעולי.\nלא נבצע עדכונים אוטומטיים עד לסיום הבדיקה והאישור.");
+      sendText(EXTRA_INBOX_MESSAGE_WHILE_WAITING_TEXT.trimEnd());
       return { ok: true, nextState: "waiting_admin_approval", nextContext: ctx, outbound };
     }
 
     case "done": {
       // No further action.
-      sendText("תודה. אם יש צורך, פנה/י שוב.");
+      // Conversation closed; ignore further inbound messages.
       return { ok: true, nextState: "done", nextContext: ctx, outbound };
     }
   }
@@ -632,45 +762,67 @@ function showConfirm(outbound: OutboundAction[], ctx: BotContext): BotFsmResult 
   const age = ctx.asker_age != null ? String(ctx.asker_age) : "—";
 
   const genderLabel = gender === "M" ? "זכר" : gender === "F" ? "נקבה" : gender;
-  const rtLabel = rt === "short" ? "קצר ולעניין" : "מורחב";
-  const pubLabel = pub === "publish" ? "אפשר לפרסם" : pub === "blur" ? "פרסום בטשטוש" : "ללא פרסום";
-  const delLabel = delivery_preference === "whatsapp" ? "וואטסאפ" : delivery_preference === "email" ? "אימייל" : "גם וואטסאפ וגם אימייל";
+  const rtLabel = responseTypeLabel(rt);
+  const pubLabel = publicationConsentLabel(pub);
+  const delLabel = deliveryPreferenceLabel(delivery_preference);
 
-  const show: string[] = [];
-  show.push("תודה.");
-  show.push("להלן סיכום פרטי הפנייה:");
-  show.push(`מגדר: ${genderLabel}`);
-  show.push(`גיל: ${age}`);
-  show.push(`כותרת: ${title}`);
-  show.push("תוכן השאלה:");
-  show.push(content);
-  show.push(`מסלול מענה: ${rtLabel}`);
-  show.push(`אפשרות פרסום: ${pubLabel}`);
-  show.push(`ערוץ קבלת תשובה: ${delLabel}`);
-  if (asker_email) show.push(`אימייל: ${asker_email}`);
-  show.push("");
-  show.push("האם ברצונך לשנות או להוסיף משהו?");
-  show.push("אם אין צורך בשינויים — נא לאשר את הפנייה.");
+  const lines: string[] = [];
+  lines.push("תודה.");
+  lines.push("להלן סיכום פרטי הפנייה:");
+  lines.push("");
+  lines.push(`מגדר: ${genderLabel}`);
+  lines.push(`גיל: ${age}`);
+  lines.push(`כותרת: ${title}`);
+  lines.push("תוכן השאלה:");
+  lines.push(content);
+  lines.push("");
+  lines.push(`מסלול מענה: ${rtLabel}`);
+  lines.push(`אפשרות פרסום: ${pubLabel}`);
+  lines.push(`ערוץ קבלת תשובה: ${delLabel}`);
+  if (asker_email) lines.push(`אימייל: ${asker_email}`);
+  lines.push("");
+  lines.push("האם ברצונך לשנות או להוסיף משהו?");
+  lines.push("אם אין צורך בשינויים — נא לאשר את הפנייה.");
 
-  outbound.push({ kind: "text", text: show.join("\n") });
-  // Quick buttons limit => just two buttons for confirm
+  outbound.push({ kind: "text", text: lines.join("\n") });
+
+  const maxed = (ctx.edit_count ?? 0) >= 4;
+  if (maxed) {
+    outbound.push({ kind: "text", text: MAX_EDITS_REACHED_TEXT.trimEnd() });
+    outbound.push({
+      kind: "buttons",
+      bodyText: CONFIRM_EDIT_BUTTONS_BODY,
+      buttons: [{ id: CONFIRM_DONE_BUTTON_ID, title: "סיום ואישור פנייה" }],
+    });
+    return { ok: true, nextState: "confirm", nextContext: ctx, outbound };
+  }
+
   outbound.push({
     kind: "buttons",
-    bodyText: "בחירה",
+    bodyText: CONFIRM_EDIT_BUTTONS_BODY,
     buttons: [
-      { id: "CONFIRM_EDIT", title: "שינוי משהו" },
-      { id: "CONFIRM_DONE", title: "זהו (אישור)" },
+      { id: "EDIT_GENDER", title: "שינוי מגדר" },
+      { id: "EDIT_AGE", title: "שינוי גיל" },
+      { id: "EDIT_BODY", title: "שינוי שאלה" },
     ],
   });
-
-  // Respect max edits
-  if ((ctx.edit_count ?? 0) >= 4) {
-    outbound.push({
-      kind: "text",
-      text: "הגעת למספר השינויים המקסימלי האפשרי. באפשרותך לאשר את הפנייה כפי שהיא כעת.",
-    });
-    // Still let CONFIRM_DONE through; CONFIRM_EDIT is allowed but ignored.
-  }
+  outbound.push({
+    kind: "buttons",
+    bodyText: CONFIRM_EDIT_BUTTONS_BODY,
+    buttons: [
+      { id: "EDIT_TITLE", title: "שינוי כותרת" },
+      { id: "EDIT_RESPONSE_TYPE", title: "שינוי מסלול מענה" },
+      { id: "EDIT_PUBLICATION_CONSENT", title: "שינוי אפשרות פרסום" },
+    ],
+  });
+  outbound.push({
+    kind: "buttons",
+    bodyText: CONFIRM_EDIT_BUTTONS_BODY,
+    buttons: [
+      { id: "EDIT_DELIVERY_PREFERENCE", title: "שינוי ערוץ קבלת תשובה" },
+      { id: CONFIRM_DONE_BUTTON_ID, title: "סיום ואישור פנייה" },
+    ],
+  });
 
   return { ok: true, nextState: "confirm", nextContext: ctx, outbound };
 }
