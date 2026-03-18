@@ -1711,3 +1711,263 @@ export async function saveLinguisticResponse(
   }
   return { ok: true };
 }
+
+// =========================
+// WhatsApp intake drafts (admin approval)
+// =========================
+
+export type DraftStatus = "in_progress" | "waiting_admin_approval" | "approved" | "cancelled";
+
+export interface QuestionIntakeDraftItem {
+  id: string;
+  phone: string;
+  status: DraftStatus;
+  created_at: string;
+  asker_gender: "M" | "F" | null;
+  asker_age: number | null;
+  title: string | null;
+  content_preview: string;
+  response_type: "short" | "detailed" | null;
+  publication_consent: "publish" | "blur" | "none" | null;
+  delivery_preference: "whatsapp" | "email" | "both" | null;
+  asker_email: string | null;
+  edit_count: number;
+}
+
+export interface DraftInboxMessageItem {
+  id: string;
+  received_at: string;
+  message_type: string | null;
+  text_body: string | null;
+  provider_message_id: string;
+}
+
+export interface QuestionIntakeDraftDetails extends QuestionIntakeDraftItem {
+  content: string;
+  inbound_messages: DraftInboxMessageItem[];
+}
+
+export async function getWaitingQuestionIntakeDrafts(): Promise<QuestionIntakeDraftItem[]> {
+  const supabase = getSupabaseAdmin();
+  try {
+    const { data, error } = await supabase
+      .from("question_intake_drafts")
+      .select("id, phone, status, created_at, asker_gender, asker_age, title, content, response_type, publication_consent, delivery_preference, asker_email, edit_count")
+      .eq("status", "waiting_admin_approval")
+      .order("created_at", { ascending: false });
+    if (error) return [];
+    return (data ?? []).map((d) => ({
+      id: d.id,
+      phone: d.phone,
+      status: d.status as DraftStatus,
+      created_at: d.created_at,
+      asker_gender: (d.asker_gender as "M" | "F" | null) ?? null,
+      asker_age: d.asker_age ?? null,
+      title: d.title ?? null,
+      content_preview: (d.content ?? "").slice(0, 120),
+      response_type: (d.response_type as any) ?? null,
+      publication_consent: (d.publication_consent as any) ?? null,
+      delivery_preference: (d.delivery_preference as any) ?? null,
+      asker_email: d.asker_email ?? null,
+      edit_count: d.edit_count ?? 0,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function getQuestionIntakeDraftDetails(draftId: string): Promise<QuestionIntakeDraftDetails | null> {
+  const supabase = getSupabaseAdmin();
+  try {
+    const { data: draft, error: dErr } = await supabase
+      .from("question_intake_drafts")
+      .select("id, phone, status, created_at, asker_gender, asker_age, title, content, response_type, publication_consent, delivery_preference, asker_email, edit_count")
+      .eq("id", draftId)
+      .maybeSingle();
+    if (dErr || !draft) return null;
+
+    const phone = draft.phone as string;
+    const createdAt = draft.created_at as string;
+    const { data: inbound, error: iErr } = await supabase
+      .from("whatsapp_inbound_messages")
+      .select("id, received_at, message_type, text_body, provider_message_id")
+      .eq("from_phone", phone)
+      .gte("received_at", createdAt)
+      .order("received_at", { ascending: false })
+      .limit(25);
+
+    if (iErr) {
+      return {
+        id: draft.id,
+        phone,
+        status: draft.status as DraftStatus,
+        created_at: draft.created_at,
+        asker_gender: (draft.asker_gender as "M" | "F" | null) ?? null,
+        asker_age: draft.asker_age ?? null,
+        title: draft.title ?? null,
+        content_preview: (draft.content ?? "").slice(0, 120),
+        content: draft.content ?? "",
+        response_type: (draft.response_type as any) ?? null,
+        publication_consent: (draft.publication_consent as any) ?? null,
+        delivery_preference: (draft.delivery_preference as any) ?? null,
+        asker_email: draft.asker_email ?? null,
+        edit_count: draft.edit_count ?? 0,
+        inbound_messages: [],
+      };
+    }
+
+    return {
+      id: draft.id,
+      phone,
+      status: draft.status as DraftStatus,
+      created_at: draft.created_at,
+      asker_gender: (draft.asker_gender as "M" | "F" | null) ?? null,
+      asker_age: draft.asker_age ?? null,
+      title: draft.title ?? null,
+      content_preview: (draft.content ?? "").slice(0, 120),
+      content: draft.content ?? "",
+      response_type: (draft.response_type as any) ?? null,
+      publication_consent: (draft.publication_consent as any) ?? null,
+      delivery_preference: (draft.delivery_preference as any) ?? null,
+      asker_email: draft.asker_email ?? null,
+      edit_count: draft.edit_count ?? 0,
+      inbound_messages: (inbound ?? []) as DraftInboxMessageItem[],
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function updateQuestionIntakeDraft(
+  draftId: string,
+  patch: Partial<{
+    asker_gender: "M" | "F" | null;
+    asker_age: number | null;
+    title: string | null;
+    content: string | null;
+    response_type: "short" | "detailed" | null;
+    publication_consent: "publish" | "blur" | "none" | null;
+    delivery_preference: "whatsapp" | "email" | "both" | null;
+    asker_email: string | null;
+  }>
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = getSupabaseAdmin();
+  try {
+    const update: Record<string, unknown> = {};
+    if (patch.asker_gender !== undefined) update.asker_gender = patch.asker_gender;
+    if (patch.asker_age !== undefined) update.asker_age = patch.asker_age;
+    if (patch.title !== undefined) update.title = patch.title;
+    if (patch.content !== undefined) update.content = patch.content;
+    if (patch.response_type !== undefined) update.response_type = patch.response_type;
+    if (patch.publication_consent !== undefined) update.publication_consent = patch.publication_consent;
+    if (patch.delivery_preference !== undefined) update.delivery_preference = patch.delivery_preference;
+    if (patch.asker_email !== undefined) update.asker_email = patch.asker_email;
+
+    update.updated_at = new Date().toISOString();
+
+    const { error } = await supabase.from("question_intake_drafts").update(update).eq("id", draftId);
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: safeError((e as Error)?.message) };
+  }
+}
+
+export async function approveQuestionIntakeDraft(
+  draftId: string
+): Promise<{ ok: true; short_id?: string } | { ok: false; error: string }> {
+  const supabase = getSupabaseAdmin();
+  try {
+    const { data: draft, error: dErr } = await supabase
+      .from("question_intake_drafts")
+      .select("id, phone, asker_gender, asker_age, title, content, response_type, publication_consent, delivery_preference, asker_email")
+      .eq("id", draftId)
+      .maybeSingle();
+    if (dErr || !draft) return { ok: false, error: "טיוטה לא נמצאה" };
+    if (!draft.title || !draft.content) return { ok: false, error: "חסרים פרטים בטיוטה" };
+
+    const { data: q, error: qErr } = await supabase
+      .from("questions")
+      .insert({
+        stage: "waiting_assignment",
+        title: draft.title,
+        content: draft.content,
+        asker_email: draft.asker_email ?? null,
+        asker_phone: draft.phone,
+        asker_gender: draft.asker_gender ?? null,
+        asker_age: draft.asker_age != null ? String(draft.asker_age) : null,
+        response_type: draft.response_type ?? "short",
+        publication_consent: draft.publication_consent ?? "none",
+        terms_accepted: true,
+        updated_at: new Date().toISOString(),
+      })
+      .select("id, short_id")
+      .single();
+
+    if (qErr || !q) return { ok: false, error: qErr?.message ?? "Insert failed" };
+
+    const shortId = (q.short_id ?? null) as string | null;
+
+    const genderLabel = draft.asker_gender === "M" ? "זכר" : draft.asker_gender === "F" ? "נקבה" : "—";
+    const responseLabel = draft.response_type === "short" ? "קצר ולעניין" : "מורחב";
+    const pubLabel =
+      draft.publication_consent === "publish" ? "אפשר לפרסם" : draft.publication_consent === "blur" ? "פרסום בטשטוש" : "ללא פרסום";
+    const deliveryLabel =
+      draft.delivery_preference === "whatsapp"
+        ? "וואטסאפ"
+        : draft.delivery_preference === "email"
+          ? "אימייל"
+          : draft.delivery_preference === "both"
+            ? "גם וואטסאפ וגם אימייל"
+            : "—";
+
+    const { error: upErr } = await supabase
+      .from("question_intake_drafts")
+      .update({
+        status: "approved",
+        approved_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", draftId);
+    if (upErr) {
+      // Still return success for insert; but log.
+      console.error("approveQuestionIntakeDraft: update draft failed", upErr);
+    }
+
+    // Optional: update conversation state to done
+    await supabase
+      .from("whatsapp_conversations")
+      .update({ state: "done", updated_at: new Date().toISOString() })
+      .eq("phone", draft.phone);
+
+    // Notify asker (if they requested WhatsApp)
+    try {
+      if (draft.delivery_preference === "whatsapp" || draft.delivery_preference === "both") {
+        const { sendMetaWhatsAppText } = await import("@/lib/whatsapp/meta");
+        const msg = [
+          "הפנייה שלך אושרה.",
+          shortId ? `מספר פנייה: ${shortId}` : "",
+          `מגדר: ${genderLabel}`,
+          `גיל: ${draft.asker_age ?? "—"}`,
+          `כותרת: ${draft.title}`,
+          "תוכן השאלה:",
+          draft.content,
+          `מסלול מענה: ${responseLabel}`,
+          `אפשרות פרסום: ${pubLabel}`,
+          `ערוץ קבלת תשובה: ${deliveryLabel}`,
+          "",
+          "אם ברצונך לשנות משהו — אנא פנה/י לנציג אנושי בהודעה זו.",
+        ]
+          .filter(Boolean)
+          .join("\n");
+        await sendMetaWhatsAppText(draft.phone, msg);
+      }
+    } catch (e) {
+      console.error("approveQuestionIntakeDraft: failed sending ack", e);
+    }
+
+    return { ok: true, short_id: shortId ?? undefined };
+  } catch (e) {
+    return { ok: false, error: safeError((e as Error)?.message) };
+  }
+}

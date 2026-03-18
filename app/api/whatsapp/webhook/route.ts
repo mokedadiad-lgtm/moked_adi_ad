@@ -1,0 +1,272 @@
+import crypto from "crypto";
+import { NextRequest, NextResponse } from "next/server";
+import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { runBotFsm, type BotConversationState, type BotContext } from "@/lib/whatsapp/botFsm";
+import { sendMetaWhatsAppButtons, sendMetaWhatsAppText } from "@/lib/whatsapp/meta";
+
+function timingSafeEqual(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return crypto.timingSafeEqual(aBuf, bBuf);
+}
+
+function verifyMetaSignature(rawBody: string, signatureHeader: string | null): boolean {
+  const appSecret = process.env.META_APP_SECRET;
+  if (!appSecret) return false;
+  if (!signatureHeader) return false;
+  if (!signatureHeader.startsWith("sha256=")) return false;
+  const expected = "sha256=" + crypto.createHmac("sha256", appSecret).update(rawBody, "utf8").digest("hex");
+  return timingSafeEqual(expected, signatureHeader);
+}
+
+/**
+ * Meta WhatsApp Cloud API webhook verification (GET)
+ * Meta sends: hub.mode, hub.verify_token, hub.challenge
+ */
+export async function GET(request: Request) {
+  const req = request as NextRequest;
+  const mode = req.nextUrl.searchParams.get("hub.mode");
+  const token = req.nextUrl.searchParams.get("hub.verify_token");
+  const challenge = req.nextUrl.searchParams.get("hub.challenge");
+
+  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+  if (!verifyToken) {
+    return NextResponse.json({ error: "Missing WHATSAPP_VERIFY_TOKEN" }, { status: 500 });
+  }
+
+  if (mode === "subscribe" && token === verifyToken && challenge !== null) {
+    return new NextResponse(challenge, {
+      status: 200,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
+  return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+}
+
+type MetaWebhookPayload = {
+  object?: string;
+  entry?: Array<{
+    id?: string;
+    changes?: Array<{
+      field?: string;
+      value?: {
+        messages?: Array<{
+          from?: string;
+          id?: string;
+          timestamp?: string;
+          type?: string;
+          text?: { body?: string };
+          [k: string]: unknown;
+        }>;
+        statuses?: unknown[];
+        contacts?: unknown[];
+        [k: string]: unknown;
+      };
+    }>;
+  }>;
+};
+
+export async function POST(request: Request) {
+  const rawBody = await request.text();
+  const sig = request.headers.get("x-hub-signature-256");
+  if (!verifyMetaSignature(rawBody, sig)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let payload: MetaWebhookPayload | null = null;
+  try {
+    payload = JSON.parse(rawBody) as MetaWebhookPayload;
+  } catch {
+    return NextResponse.json({ error: "Bad JSON" }, { status: 400 });
+  }
+
+  const supabase = getSupabaseAdmin();
+  const nowIso = new Date().toISOString();
+
+  const messages: Array<{
+    provider_message_id: string;
+    from_phone: string;
+    message_type: string | null;
+    text_body: string | null;
+    buttonId: string | null;
+    payload: unknown;
+  }> = [];
+
+  for (const entry of payload?.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      const value = change.value;
+      for (const m of value?.messages ?? []) {
+        const id = typeof m.id === "string" ? m.id : null;
+        const from = typeof m.from === "string" ? m.from : null;
+        if (!id || !from) continue;
+        const type = typeof m.type === "string" ? m.type : null;
+        const text = typeof m.text?.body === "string" ? m.text.body : null;
+        const buttonId =
+          typeof (m as any)?.interactive?.button_reply?.id === "string"
+            ? (m as any).interactive.button_reply.id
+            : null;
+        messages.push({
+          provider_message_id: id,
+          from_phone: from,
+          message_type: type,
+          text_body: text,
+          buttonId,
+          payload: m,
+        });
+      }
+    }
+  }
+
+  async function sendOutbound(toPhoneRaw: string, outbound: Array<{ kind: string; [k: string]: unknown }>) {
+    for (const o of outbound) {
+      if (o.kind === "text") {
+        const text = typeof o.text === "string" ? o.text : "";
+        if (!text) continue;
+        try {
+          await sendMetaWhatsAppText(toPhoneRaw, text);
+        } catch (e) {
+          console.error("whatsapp webhook: send text failed", e);
+        }
+      } else if (o.kind === "buttons") {
+        const bodyText = typeof o.bodyText === "string" ? o.bodyText : "";
+        const buttons = Array.isArray(o.buttons)
+          ? o.buttons.filter((b) => b && typeof (b as any).id === "string" && typeof (b as any).title === "string")
+          : [];
+        if (buttons.length === 0) continue;
+        try {
+          await sendMetaWhatsAppButtons(toPhoneRaw, bodyText || "בחירה", buttons.map((b) => ({ id: (b as any).id, title: (b as any).title })));
+        } catch (e) {
+          console.error("whatsapp webhook: send buttons failed", e);
+        }
+      }
+    }
+  }
+
+  // Always 200 quickly (Meta expects fast ack). We still persist logs synchronously here (small volume).
+  for (const msg of messages) {
+    // Find or create conversation by phone
+    const { data: conv, error: convErr } = await supabase
+      .from("whatsapp_conversations")
+      .select("id, unread_count, mode, state, context")
+      .eq("phone", msg.from_phone)
+      .maybeSingle();
+    if (convErr) {
+      console.error("whatsapp webhook: conversation fetch error", convErr);
+      continue;
+    }
+
+    let conversationId = conv?.id as string | undefined;
+    if (!conversationId) {
+      const { data: created, error: createErr } = await supabase
+        .from("whatsapp_conversations")
+        .insert({
+          phone: msg.from_phone,
+          mode: "bot",
+          state: "start",
+          context: {},
+          last_inbound_at: nowIso,
+          unread_count: 1,
+        })
+        .select("id")
+        .single();
+      if (createErr) {
+        console.error("whatsapp webhook: conversation create error", createErr);
+        continue;
+      }
+      conversationId = created.id as string;
+    } else {
+      await supabase
+        .from("whatsapp_conversations")
+        .update({
+          last_inbound_at: nowIso,
+          unread_count: ((conv?.unread_count as number | null) ?? 0) + 1,
+          updated_at: nowIso,
+        })
+        .eq("id", conversationId);
+    }
+
+    // Insert inbound message (idempotent via unique index)
+    const { error: inboundErr } = await supabase.from("whatsapp_inbound_messages").insert({
+      provider: "meta",
+      provider_message_id: msg.provider_message_id,
+      conversation_id: conversationId,
+      from_phone: msg.from_phone,
+      message_type: msg.message_type,
+      text_body: msg.text_body,
+      // payload includes all interactive details; used later for bot FSM / admin UI
+      payload: msg.payload ?? {},
+      status: "received",
+      received_at: nowIso,
+    });
+    if (inboundErr) {
+      // Duplicate (already processed) is expected sometimes; keep quiet unless it's not unique violation.
+      const message = inboundErr.message ?? "";
+      if (!message.toLowerCase().includes("duplicate")) {
+        console.error("whatsapp webhook: inbound insert error", inboundErr);
+      }
+      continue;
+    }
+
+    // Bot handling: only for conversation.mode=bot
+    // (We use conv from earlier select; if conversation was just created, conv.mode/state may be undefined.)
+    const conversationMode = (conv as any)?.mode ?? "bot";
+    if (conversationMode !== "bot") continue;
+
+    const currentState = ((conv as any)?.state ?? "start") as BotConversationState;
+    const currentContext = ((conv as any)?.context ?? {}) as BotContext;
+
+    const fsmResult = await runBotFsm({
+      toPhoneRaw: msg.from_phone,
+      currentState,
+      currentContext,
+      inbound: {
+        text: msg.text_body,
+        buttonId: msg.buttonId,
+      },
+      createDraftFn: async (draft) => {
+        try {
+          const { data, error } = await supabase.from("question_intake_drafts").insert({
+            phone: draft.phone,
+            status: "waiting_admin_approval",
+            asker_gender: draft.asker_gender,
+            asker_age: draft.asker_age,
+            title: draft.title,
+            content: draft.content,
+            response_type: draft.response_type,
+            publication_consent: draft.publication_consent,
+            delivery_preference: draft.delivery_preference,
+            asker_email: draft.asker_email ?? null,
+            terms_accepted: draft.terms_accepted,
+          }).select("id").single();
+          if (error || !data?.id) return { ok: false as const, error: error?.message ?? "insert_failed" };
+          return { ok: true as const, draftId: data.id };
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : "insert_failed";
+          return { ok: false as const, error: errMsg };
+        }
+      },
+    });
+
+    if (!fsmResult.ok) {
+      console.error("WhatsApp bot FSM error:", fsmResult.error);
+      continue;
+    }
+
+    // Update conversation state/context
+    await supabase
+      .from("whatsapp_conversations")
+      .update({
+        state: fsmResult.nextState,
+        context: fsmResult.nextContext ?? {},
+        updated_at: nowIso,
+      })
+      .eq("id", conversationId);
+
+    // Send outbound responses via Meta
+    await sendOutbound(msg.from_phone, fsmResult.outbound as any);
+  }
+
+  return NextResponse.json({ ok: true });
+}
+

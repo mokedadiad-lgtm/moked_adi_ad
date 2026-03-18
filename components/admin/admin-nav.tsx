@@ -21,6 +21,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { href: "/admin", label: "לוח בקרה", icon: HomeIcon, adminOnly: true },
   { href: "/admin/linguistic", label: "עריכה לשונית", icon: EditIcon, needLinguistic: true },
+  { href: "/admin/whatsapp-inbox", label: "דואר נכנס וואטסאפ", icon: ChatIcon, adminOnly: true },
   { href: "/respondent", label: "אזור משיב", icon: RespondentIcon, needRespondent: true },
   { href: "/proofreader", label: "לובי הגהה", icon: LobbyIcon, needProofreader: true },
   { href: "/admin/team", label: "ניהול צוות", icon: UsersIcon, adminOnly: true },
@@ -118,6 +119,27 @@ function LobbyIcon({ className }: { className?: string }) {
       <path d="M16 13H8" />
       <path d="M16 17H8" />
       <path d="M10 9H8" />
+    </svg>
+  );
+}
+
+function ChatIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h14a4 4 0 0 1 4 4z" />
+      <path d="M8 9h8" />
+      <path d="M8 13h6" />
     </svg>
   );
 }
