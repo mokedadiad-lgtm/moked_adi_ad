@@ -154,10 +154,11 @@ const WA_REPLY_PUB_PUBLISH = "אפשר לפרסם";
 const WA_REPLY_PUB_BLUR = "בטשטוש";
 const WA_REPLY_PUB_NONE = "ללא פרסום";
 const WA_REPLY_DELIV_BOTH = "שניהם";
-const WA_REPLY_CONFIRM_DONE = "סיום ואישור";
+const WA_REPLY_CONFIRM_DONE = "אישור";
+const WA_REPLY_CONFIRM_CHANGE = "שינוי";
 const WA_REPLY_EDIT_DELIVERY = "שינוי ערוץ";
 const CANCEL_REFERRAL_BUTTON_ID = "CANCEL_REFERRAL";
-const WA_REPLY_CANCEL_REFERRAL = "ביטול פנייה";
+const WA_REPLY_CANCEL_REFERRAL = "ביטול";
 
 // Category menu displayed on the `confirm` screen (instead of 3 separate button messages).
 // Each WhatsApp quick-reply message is limited to ~3 buttons, so we show 3 categories first.
@@ -180,6 +181,7 @@ const EMAIL_INVALID_TEXT =
 
 const CONFIRM_EDIT_BUTTONS_BODY = "בחירה";
 const CONFIRM_DONE_BUTTON_ID = "CONFIRM_DONE";
+const CONFIRM_CHANGE_BUTTON_ID = "CONFIRM_CHANGE";
 
 const WAITING_ADMIN_APPROVAL_TEXT =
   "תודה.\nהפנייה שלך התקבלה והועברה למערכת המוקד.\nבעז\"ה נשלח לך תשובה בהמשך\n";
@@ -589,7 +591,9 @@ export async function runBotFsm(params: {
 
       if (
         buttonId === CONFIRM_DONE_BUTTON_ID ||
+        text === "אישור" ||
         text === "סיום ואישור פנייה" ||
+        text === "סיום ואישור" ||
         text === WA_REPLY_CONFIRM_DONE
       ) {
         // Create draft
@@ -628,6 +632,22 @@ export async function runBotFsm(params: {
 
       // Edit selection buttons (from showConfirm)
       switch (buttonId) {
+        case CONFIRM_CHANGE_BUTTON_ID:
+          if ((ctx.edit_count ?? 0) >= 4) {
+            sendText(renderText("max_edits_reached", ctx).trimEnd());
+            sendButtons(CONFIRM_EDIT_BUTTONS_BODY, [
+              { id: CANCEL_REFERRAL_BUTTON_ID, title: WA_REPLY_CANCEL_REFERRAL },
+              { id: CONFIRM_DONE_BUTTON_ID, title: WA_REPLY_CONFIRM_DONE },
+            ]);
+            return { ok: true, nextState: "confirm", nextContext: ctx, outbound };
+          }
+          sendButtons("בחר תחום לשינוי", [
+            { id: EDIT_CAT_PERSONAL_BUTTON_ID, title: WA_REPLY_EDIT_CAT_PERSONAL },
+            { id: EDIT_CAT_CONTENT_BUTTON_ID, title: WA_REPLY_EDIT_CAT_CONTENT },
+            { id: EDIT_CAT_ANSWER_BUTTON_ID, title: WA_REPLY_EDIT_CAT_ANSWER },
+          ]);
+          return { ok: true, nextState: "confirm", nextContext: ctx, outbound };
+
         case EDIT_CAT_PERSONAL_BUTTON_ID:
           // Up to 3 buttons per WhatsApp quick-reply message.
           sendButtons("בחירה", [
@@ -951,16 +971,7 @@ function showConfirm(outbound: OutboundAction[], ctx: BotContext): BotFsmResult 
     kind: "buttons",
     bodyText: CONFIRM_EDIT_BUTTONS_BODY,
     buttons: [
-      { id: EDIT_CAT_PERSONAL_BUTTON_ID, title: WA_REPLY_EDIT_CAT_PERSONAL },
-      { id: EDIT_CAT_CONTENT_BUTTON_ID, title: WA_REPLY_EDIT_CAT_CONTENT },
-      { id: EDIT_CAT_ANSWER_BUTTON_ID, title: WA_REPLY_EDIT_CAT_ANSWER },
-    ],
-  });
-
-  outbound.push({
-    kind: "buttons",
-    bodyText: CONFIRM_EDIT_BUTTONS_BODY,
-    buttons: [
+      { id: CONFIRM_CHANGE_BUTTON_ID, title: WA_REPLY_CONFIRM_CHANGE },
       { id: CANCEL_REFERRAL_BUTTON_ID, title: WA_REPLY_CANCEL_REFERRAL },
       { id: CONFIRM_DONE_BUTTON_ID, title: WA_REPLY_CONFIRM_DONE },
     ],
