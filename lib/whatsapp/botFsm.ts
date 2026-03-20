@@ -136,6 +136,21 @@ const DELIVERY_WHATSAPP_BUTTON_TITLE = "וואטסאפ";
 const DELIVERY_EMAIL_BUTTON_TITLE = "אימייל";
 const DELIVERY_BOTH_BUTTON_TITLE = "גם וואטסאפ וגם אימייל";
 
+/**
+ * WhatsApp Cloud API (Graph): quick-reply button `title` max 20 characters.
+ * Wording in the message body / סיכום אישור נשאר ב-*_BUTTON_TITLE הארוכים למעלה.
+ */
+const WA_REPLY_MODE_BOT = "שאלה במוקד";
+const WA_REPLY_MODE_HUMAN = "נציג אנושי";
+const WA_REPLY_RESP_SHORT = "קצר ומעשי";
+const WA_REPLY_RESP_DETAILED = "מורחב";
+const WA_REPLY_PUB_PUBLISH = "אפשר לפרסם";
+const WA_REPLY_PUB_BLUR = "בטשטוש";
+const WA_REPLY_PUB_NONE = "ללא פרסום";
+const WA_REPLY_DELIV_BOTH = "שניהם";
+const WA_REPLY_CONFIRM_DONE = "סיום ואישור";
+const WA_REPLY_EDIT_DELIVERY = "שינוי ערוץ";
+
 const COLLECT_EMAIL_TEXT = "נא להזין כתובת אימייל לקבלת התשובה.\n";
 const EMAIL_INVALID_TEXT =
   "כתובת האימייל שהוזנה אינה תקינה.\nנא להזין כתובת אימייל תקינה.\n";
@@ -278,14 +293,21 @@ export async function runBotFsm(params: {
       ctx.asker_gender = g;
       sendText(renderText("choose_mode", ctx).trimEnd());
       sendButtons("", [
-        { id: "MODE_BOT", title: "מעוניין בפניה ושאלה במוקד" },
-        { id: "MODE_HUMAN", title: "להשאיר הודעה לנציג אנושי" },
+        { id: "MODE_BOT", title: WA_REPLY_MODE_BOT },
+        { id: "MODE_HUMAN", title: WA_REPLY_MODE_HUMAN },
       ]);
       return { ok: true, nextState: "choose_mode", nextContext: ctx, outbound };
     }
 
     case "choose_mode": {
-      if (buttonId === "MODE_HUMAN" || text === "נציג אנושי" || text === "נציג" || text === "אדם") {
+      if (
+        buttonId === "MODE_HUMAN" ||
+        text === "נציג אנושי" ||
+        text === "נציג" ||
+        text === "אדם" ||
+        text === "להשאיר הודעה לנציג אנושי" ||
+        text === WA_REPLY_MODE_HUMAN
+      ) {
         sendText(renderText("human_handoff", ctx).trimEnd());
         return { ok: true, nextState: "done", nextContext: ctx, outbound };
       }
@@ -354,8 +376,12 @@ export async function runBotFsm(params: {
         return { ok: true, nextState: "body_collect", nextContext: ctx, outbound };
       }
 
-      // If no buttons, allow typing; stay in same state.
+      // User typed free text: keep collecting; re-show prompt with buttons (WhatsApp does not persist prior buttons).
       sendText(renderText("body_collect", ctx).trimEnd());
+      sendButtons("סיימת?", [
+        { id: "BODY_ADD_MORE", title: "הוסף עוד" },
+        { id: "BODY_DONE", title: "סיימתי" },
+      ]);
       return { ok: true, nextState: "body_collect", nextContext: ctx, outbound };
     }
 
@@ -377,18 +403,26 @@ export async function runBotFsm(params: {
         }
         if (!title) {
           sendText(renderText("title_collect", ctx).trimEnd());
+          sendButtons("כותרת", [
+            { id: "TITLE_DONE", title: "סיימתי" },
+            { id: "TITLE_ADD_MORE", title: "הוסף עוד" },
+          ]);
           return { ok: true, nextState: "title_collect", nextContext: ctx, outbound };
         }
         sendText(renderText("response_type", ctx).trimEnd());
         sendButtons("בחירה", [
-          { id: "RESP_SHORT", title: RESPONSE_SHORT_BUTTON_TITLE },
-          { id: "RESP_DETAILED", title: RESPONSE_DETAILED_BUTTON_TITLE },
+          { id: "RESP_SHORT", title: WA_REPLY_RESP_SHORT },
+          { id: "RESP_DETAILED", title: WA_REPLY_RESP_DETAILED },
         ]);
         return { ok: true, nextState: "response_type", nextContext: ctx, outbound };
       }
 
-      // stay
+      // User typed title text; re-show prompt with buttons.
       sendText(renderText("title_collect", ctx).trimEnd());
+      sendButtons("כותרת", [
+        { id: "TITLE_DONE", title: "סיימתי" },
+        { id: "TITLE_ADD_MORE", title: "הוסף עוד" },
+      ]);
       return { ok: true, nextState: "title_collect", nextContext: ctx, outbound };
     }
 
@@ -396,21 +430,23 @@ export async function runBotFsm(params: {
       const rt =
         buttonId === "RESP_SHORT" ? ("short" as const) :
         buttonId === "RESP_DETAILED" ? ("detailed" as const) :
-        (text === "קצר" || text === "קצר ולעניין" ? ("short" as const) : text === "מורחב" ? ("detailed" as const) : null);
+        (text === "קצר" || text === "קצר ולעניין" || text === "קצר ומעשי" || text === RESPONSE_SHORT_BUTTON_TITLE
+          ? ("short" as const)
+          : text === "מורחב" || text === RESPONSE_DETAILED_BUTTON_TITLE ? ("detailed" as const) : null);
       if (!rt) {
         sendText("לא זיהיתי בחירה.\nנא לבחור: קצר ולעניין / מורחב.");
         sendButtons("בחירה", [
-          { id: "RESP_SHORT", title: RESPONSE_SHORT_BUTTON_TITLE },
-          { id: "RESP_DETAILED", title: RESPONSE_DETAILED_BUTTON_TITLE },
+          { id: "RESP_SHORT", title: WA_REPLY_RESP_SHORT },
+          { id: "RESP_DETAILED", title: WA_REPLY_RESP_DETAILED },
         ]);
         return { ok: true, nextState: "response_type", nextContext: ctx, outbound };
       }
       ctx.response_type = rt;
       sendText(renderText("publication_consent", ctx).trimEnd());
       sendButtons("פרסום", [
-        { id: "PUB_PUBLISH", title: PUBLICATION_PUBLISH_BUTTON_TITLE },
-        { id: "PUB_BLUR", title: PUBLICATION_BLUR_BUTTON_TITLE },
-        { id: "PUB_NONE", title: PUBLICATION_NONE_BUTTON_TITLE },
+        { id: "PUB_PUBLISH", title: WA_REPLY_PUB_PUBLISH },
+        { id: "PUB_BLUR", title: WA_REPLY_PUB_BLUR },
+        { id: "PUB_NONE", title: WA_REPLY_PUB_NONE },
       ]);
       return { ok: true, nextState: "publication_consent", nextContext: ctx, outbound };
     }
@@ -420,15 +456,15 @@ export async function runBotFsm(params: {
         buttonId === "PUB_PUBLISH" ? ("publish" as const) :
         buttonId === "PUB_BLUR" ? ("blur" as const) :
         buttonId === "PUB_NONE" ? ("none" as const) :
-        (text === "אפשר לפרסם" || text === "פרסום" ? ("publish" as const) :
-          text === "פרסום בטשטוש" ? ("blur" as const) :
+        (text === "אפשר לפרסם" || text === "פרסום" || text === "ניתן לפרסם" ? ("publish" as const) :
+          text === "פרסום בטשטוש" || text === "בטשטוש" ? ("blur" as const) :
           text === "ללא פרסום" ? ("none" as const) : null);
       if (!pc) {
         sendText("לא זיהיתי בחירה תקינה בפרסום.\nנא לבחור שוב.");
         sendButtons("פרסום", [
-          { id: "PUB_PUBLISH", title: PUBLICATION_PUBLISH_BUTTON_TITLE },
-          { id: "PUB_BLUR", title: PUBLICATION_BLUR_BUTTON_TITLE },
-          { id: "PUB_NONE", title: PUBLICATION_NONE_BUTTON_TITLE },
+          { id: "PUB_PUBLISH", title: WA_REPLY_PUB_PUBLISH },
+          { id: "PUB_BLUR", title: WA_REPLY_PUB_BLUR },
+          { id: "PUB_NONE", title: WA_REPLY_PUB_NONE },
         ]);
         return { ok: true, nextState: "publication_consent", nextContext: ctx, outbound };
       }
@@ -437,7 +473,7 @@ export async function runBotFsm(params: {
       sendButtons("ערוץ", [
         { id: "DELIV_WHATSAPP", title: DELIVERY_WHATSAPP_BUTTON_TITLE },
         { id: "DELIV_EMAIL", title: DELIVERY_EMAIL_BUTTON_TITLE },
-        { id: "DELIV_BOTH", title: DELIVERY_BOTH_BUTTON_TITLE },
+        { id: "DELIV_BOTH", title: WA_REPLY_DELIV_BOTH },
       ]);
       return { ok: true, nextState: "delivery_preference", nextContext: ctx, outbound };
     }
@@ -449,13 +485,15 @@ export async function runBotFsm(params: {
         buttonId === "DELIV_BOTH" ? ("both" as const) :
         (text === "וואטסאפ" ? ("whatsapp" as const) :
           text === "אימייל" ? ("email" as const) :
-          text === "גם וואטסאפ וגם אימייל" ? ("both" as const) : null);
+          (text === "גם וואטסאפ וגם אימייל" || text === "שניהם" || text === WA_REPLY_DELIV_BOTH)
+            ? ("both" as const)
+            : null);
       if (!dp) {
         sendText("לא זיהיתי בחירה בערוץ.\nנא לבחור: וואטסאפ / אימייל / גם וגם.");
         sendButtons("ערוץ", [
           { id: "DELIV_WHATSAPP", title: "וואטסאפ" },
           { id: "DELIV_EMAIL", title: "אימייל" },
-          { id: "DELIV_BOTH", title: "גם וואטסאפ וגם אימייל" },
+          { id: "DELIV_BOTH", title: WA_REPLY_DELIV_BOTH },
         ]);
         return { ok: true, nextState: "delivery_preference", nextContext: ctx, outbound };
       }
@@ -484,7 +522,11 @@ export async function runBotFsm(params: {
     }
 
     case "confirm": {
-      if (buttonId === CONFIRM_DONE_BUTTON_ID || text === "סיום ואישור פנייה") {
+      if (
+        buttonId === CONFIRM_DONE_BUTTON_ID ||
+        text === "סיום ואישור פנייה" ||
+        text === WA_REPLY_CONFIRM_DONE
+      ) {
         // Create draft
         const asker_gender = ctx.asker_gender as Gender | undefined;
         const asker_age = ctx.asker_age as number | undefined;
@@ -541,16 +583,16 @@ export async function runBotFsm(params: {
         case "EDIT_RESPONSE_TYPE":
           sendText(renderText("edit_response_type", ctx).trimEnd());
           sendButtons("מסלול", [
-            { id: "RESP_SHORT", title: "קצר ולעניין" },
-            { id: "RESP_DETAILED", title: "מורחב" },
+            { id: "RESP_SHORT", title: WA_REPLY_RESP_SHORT },
+            { id: "RESP_DETAILED", title: WA_REPLY_RESP_DETAILED },
           ]);
           return { ok: true, nextState: "edit_response_type", nextContext: ctx, outbound };
         case "EDIT_PUBLICATION_CONSENT":
           sendText(renderText("edit_publication_consent", ctx).trimEnd());
           sendButtons("פרסום", [
-            { id: "PUB_PUBLISH", title: "ניתן לפרסם" },
-            { id: "PUB_BLUR", title: "פרסום בטשטוש" },
-            { id: "PUB_NONE", title: "ללא פרסום" },
+            { id: "PUB_PUBLISH", title: WA_REPLY_PUB_PUBLISH },
+            { id: "PUB_BLUR", title: WA_REPLY_PUB_BLUR },
+            { id: "PUB_NONE", title: WA_REPLY_PUB_NONE },
           ]);
           return { ok: true, nextState: "edit_publication_consent", nextContext: ctx, outbound };
         case "EDIT_DELIVERY_PREFERENCE":
@@ -558,7 +600,7 @@ export async function runBotFsm(params: {
           sendButtons("ערוץ", [
             { id: "DELIV_WHATSAPP", title: DELIVERY_WHATSAPP_BUTTON_TITLE },
             { id: "DELIV_EMAIL", title: DELIVERY_EMAIL_BUTTON_TITLE },
-            { id: "DELIV_BOTH", title: DELIVERY_BOTH_BUTTON_TITLE },
+            { id: "DELIV_BOTH", title: WA_REPLY_DELIV_BOTH },
           ]);
           return { ok: true, nextState: "edit_delivery_preference", nextContext: ctx, outbound };
       }
@@ -605,17 +647,17 @@ export async function runBotFsm(params: {
       if (field === "מסלול מענה") {
         sendText(renderText("edit_response_type", ctx).trimEnd());
         sendButtons("מסלול", [
-          { id: "RESP_SHORT", title: "קצר ולעניין" },
-          { id: "RESP_DETAILED", title: "מורחב" },
+          { id: "RESP_SHORT", title: WA_REPLY_RESP_SHORT },
+          { id: "RESP_DETAILED", title: WA_REPLY_RESP_DETAILED },
         ]);
         return { ok: true, nextState: "edit_response_type", nextContext: ctx, outbound };
       }
       if (field === "פרסום") {
         sendText(renderText("edit_publication_consent", ctx).trimEnd());
         sendButtons("פרסום", [
-          { id: "PUB_PUBLISH", title: "אפשר לפרסם" },
-          { id: "PUB_BLUR", title: "פרסום בטשטוש" },
-          { id: "PUB_NONE", title: "ללא פרסום" },
+          { id: "PUB_PUBLISH", title: WA_REPLY_PUB_PUBLISH },
+          { id: "PUB_BLUR", title: WA_REPLY_PUB_BLUR },
+          { id: "PUB_NONE", title: WA_REPLY_PUB_NONE },
         ]);
         return { ok: true, nextState: "edit_publication_consent", nextContext: ctx, outbound };
       }
@@ -624,7 +666,7 @@ export async function runBotFsm(params: {
       sendButtons("ערוץ", [
         { id: "DELIV_WHATSAPP", title: "וואטסאפ" },
         { id: "DELIV_EMAIL", title: "אימייל" },
-        { id: "DELIV_BOTH", title: "גם וואטסאפ וגם אימייל" },
+        { id: "DELIV_BOTH", title: WA_REPLY_DELIV_BOTH },
       ]);
       return { ok: true, nextState: "edit_delivery_preference", nextContext: ctx, outbound };
     }
@@ -665,6 +707,10 @@ export async function runBotFsm(params: {
         const content = (ctx.bodyParts ?? []).join("\n").trim();
         if (!content) {
           sendText(renderText("body_invalid_or_empty", ctx).trimEnd());
+          sendButtons("סיימת?", [
+            { id: "BODY_ADD_MORE", title: "הוסף עוד" },
+            { id: "BODY_DONE", title: "סיימתי" },
+          ]);
           return { ok: true, nextState: "edit_body", nextContext: ctx, outbound };
         }
         (ctx as any).content = content;
@@ -673,12 +719,18 @@ export async function runBotFsm(params: {
         return showConfirm(outbound, ctx);
       }
       sendText(renderText("edit_body", ctx).trimEnd());
+      sendButtons("סיימת?", [
+        { id: "BODY_ADD_MORE", title: "הוסף עוד" },
+        { id: "BODY_DONE", title: "סיימתי" },
+      ]);
       return { ok: true, nextState: "edit_body", nextContext: ctx, outbound };
     }
 
     case "edit_title": {
       if (text) {
         ctx.title = text.trim();
+        sendText(renderText("edit_title", ctx).trimEnd());
+        sendButtons("כותרת", [{ id: "EDIT_TITLE_DONE", title: "סיימתי" }]);
         return { ok: true, nextState: "edit_title", nextContext: ctx, outbound };
       }
       if (buttonId === "EDIT_TITLE_DONE" || text === "סיימתי") {
@@ -699,12 +751,14 @@ export async function runBotFsm(params: {
       const rt =
         buttonId === "RESP_SHORT" ? ("short" as const) :
         buttonId === "RESP_DETAILED" ? ("detailed" as const) :
-        (text === "קצר ולעניין" || text === "קצר" ? ("short" as const) : text === "מורחב" ? ("detailed" as const) : null);
+        (text === "קצר ולעניין" || text === "קצר" || text === "קצר ומעשי" || text === RESPONSE_SHORT_BUTTON_TITLE
+          ? ("short" as const)
+          : text === "מורחב" || text === RESPONSE_DETAILED_BUTTON_TITLE ? ("detailed" as const) : null);
       if (!rt) {
         sendText("לא זיהיתי בחירה. נא לבחור שוב.");
         sendButtons("מסלול", [
-          { id: "RESP_SHORT", title: "קצר ולעניין" },
-          { id: "RESP_DETAILED", title: "מורחב" },
+          { id: "RESP_SHORT", title: WA_REPLY_RESP_SHORT },
+          { id: "RESP_DETAILED", title: WA_REPLY_RESP_DETAILED },
         ]);
         return { ok: true, nextState: "edit_response_type", nextContext: ctx, outbound };
       }
@@ -718,15 +772,15 @@ export async function runBotFsm(params: {
         buttonId === "PUB_PUBLISH" ? ("publish" as const) :
         buttonId === "PUB_BLUR" ? ("blur" as const) :
         buttonId === "PUB_NONE" ? ("none" as const) :
-        (text === "אפשר לפרסם" ? ("publish" as const) :
-          text === "פרסום בטשטוש" ? ("blur" as const) :
+        (text === "אפשר לפרסם" || text === "ניתן לפרסם" ? ("publish" as const) :
+          text === "פרסום בטשטוש" || text === "בטשטוש" ? ("blur" as const) :
           text === "ללא פרסום" ? ("none" as const) : null);
       if (!pc) {
         sendText("לא זיהיתי בחירה. נא לבחור שוב.");
         sendButtons("פרסום", [
-          { id: "PUB_PUBLISH", title: "ניתן לפרסם" },
-          { id: "PUB_BLUR", title: "פרסום בטשטוש" },
-          { id: "PUB_NONE", title: "ללא פרסום" },
+          { id: "PUB_PUBLISH", title: WA_REPLY_PUB_PUBLISH },
+          { id: "PUB_BLUR", title: WA_REPLY_PUB_BLUR },
+          { id: "PUB_NONE", title: WA_REPLY_PUB_NONE },
         ]);
         return { ok: true, nextState: "edit_publication_consent", nextContext: ctx, outbound };
       }
@@ -742,13 +796,15 @@ export async function runBotFsm(params: {
         buttonId === "DELIV_BOTH" ? ("both" as const) :
         (text === "וואטסאפ" ? ("whatsapp" as const) :
           text === "אימייל" ? ("email" as const) :
-          text === "גם וואטסאפ וגם אימייל" ? ("both" as const) : null);
+          (text === "גם וואטסאפ וגם אימייל" || text === "שניהם" || text === WA_REPLY_DELIV_BOTH)
+            ? ("both" as const)
+            : null);
       if (!dp) {
         sendText("לא זיהיתי בחירה. נא לבחור שוב.");
         sendButtons("ערוץ", [
           { id: "DELIV_WHATSAPP", title: "וואטסאפ" },
           { id: "DELIV_EMAIL", title: "אימייל" },
-          { id: "DELIV_BOTH", title: "גם וואטסאפ וגם אימייל" },
+          { id: "DELIV_BOTH", title: WA_REPLY_DELIV_BOTH },
         ]);
         return { ok: true, nextState: "edit_delivery_preference", nextContext: ctx, outbound };
       }
@@ -794,7 +850,7 @@ function showConfirm(outbound: OutboundAction[], ctx: BotContext): BotFsmResult 
     outbound.push({
       kind: "buttons",
       bodyText: CONFIRM_EDIT_BUTTONS_BODY,
-      buttons: [{ id: CONFIRM_DONE_BUTTON_ID, title: "סיום ואישור פנייה" }],
+      buttons: [{ id: CONFIRM_DONE_BUTTON_ID, title: WA_REPLY_CONFIRM_DONE }],
     });
     return { ok: true, nextState: "confirm", nextContext: ctx, outbound };
   }
@@ -821,8 +877,8 @@ function showConfirm(outbound: OutboundAction[], ctx: BotContext): BotFsmResult 
     kind: "buttons",
     bodyText: CONFIRM_EDIT_BUTTONS_BODY,
     buttons: [
-      { id: "EDIT_DELIVERY_PREFERENCE", title: "שינוי ערוץ קבלת תשובה" },
-      { id: CONFIRM_DONE_BUTTON_ID, title: "סיום ואישור פנייה" },
+      { id: "EDIT_DELIVERY_PREFERENCE", title: WA_REPLY_EDIT_DELIVERY },
+      { id: CONFIRM_DONE_BUTTON_ID, title: WA_REPLY_CONFIRM_DONE },
     ],
   });
 

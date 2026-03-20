@@ -47,6 +47,22 @@ async function postJson(path: string, body: unknown): Promise<MetaSendResult> {
 
 export type MetaButton = { id: string; title: string };
 
+/** Meta Graph API: reply button `title` must be at most 20 characters. */
+const MAX_REPLY_BUTTON_TITLE_LENGTH = 20;
+
+function clipReplyButtonTitle(title: string): string {
+  const chars = [...title];
+  if (chars.length <= MAX_REPLY_BUTTON_TITLE_LENGTH) return title;
+  const clipped = chars.slice(0, MAX_REPLY_BUTTON_TITLE_LENGTH).join("");
+  console.warn(
+    `[WhatsApp] Button title too long (${chars.length} > ${MAX_REPLY_BUTTON_TITLE_LENGTH}), clipped:`,
+    title,
+    "→",
+    clipped
+  );
+  return clipped;
+}
+
 /**
  * Send a text message (free-form, within 24h session window).
  */
@@ -89,7 +105,7 @@ export async function sendMetaWhatsAppButtons(
       action: {
         buttons: safeButtons.map((b) => ({
           type: "reply",
-          reply: { id: b.id, title: b.title },
+          reply: { id: b.id, title: clipReplyButtonTitle(b.title) },
         })),
       },
     },
