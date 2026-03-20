@@ -6,6 +6,7 @@ export type BotTextStateKey =
   | "start"
   | "gender_invalid_first"
   | "choose_mode"
+  | "human_message_collect"
   | "human_handoff"
   | "age"
   | "age_invalid_first"

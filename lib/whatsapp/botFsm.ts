@@ -9,6 +9,7 @@ export type BotConversationState =
   | "start"
   | "gender"
   | "choose_mode"
+  | "human_message_collect"
   | "age"
   | "body_collect"
   | "title_collect"
@@ -32,6 +33,7 @@ export type BotContext = {
   asker_gender?: Gender;
   asker_age?: number;
   bodyParts?: string[];
+  humanParts?: string[];
   title?: string;
   response_type?: ResponseType;
   publication_consent?: PublicationConsent;
@@ -164,6 +166,12 @@ const EDIT_CAT_ANSWER_BUTTON_ID = "EDIT_CAT_ANSWER";
 const WA_REPLY_EDIT_CAT_PERSONAL = "פרטים אישיים";
 const WA_REPLY_EDIT_CAT_CONTENT = "תוכן השאלה";
 const WA_REPLY_EDIT_CAT_ANSWER = "הגדרות תשובה";
+
+// Human handoff (collecting a free-form message from the user).
+const HUMAN_ADD_MORE_BUTTON_ID = "HUMAN_ADD_MORE";
+const WA_REPLY_HUMAN_ADD_MORE = "המשך עוד";
+const HUMAN_DONE_BUTTON_ID = "HUMAN_DONE";
+const WA_REPLY_HUMAN_DONE = "סיימתי";
 
 const COLLECT_EMAIL_TEXT = "נא להזין כתובת אימייל לקבלת התשובה.\n";
 const EMAIL_INVALID_TEXT =
@@ -314,13 +322,56 @@ export async function runBotFsm(params: {
         text === "להשאיר הודעה לנציג אנושי" ||
         text === WA_REPLY_MODE_HUMAN
       ) {
-        sendText(renderText("human_handoff", ctx).trimEnd());
-        return { ok: true, nextState: "done", nextContext: ctx, outbound };
+        // Collect the user's message for the human agent.
+        ctx.humanParts = [];
+        sendText(renderText("human_message_collect", ctx).trimEnd());
+        return { ok: true, nextState: "human_message_collect", nextContext: ctx, outbound };
       }
       // Default to bot flow
       ctx.delivery_preference = ctx.delivery_preference ?? "whatsapp";
       sendText(renderText("age", ctx).trimEnd());
       return { ok: true, nextState: "age", nextContext: ctx, outbound };
+    }
+
+    case "human_message_collect": {
+      const normalizedText = text ?? "";
+
+      // Finish button (also allow typing "סיימתי" as text).
+      if (
+        buttonId === HUMAN_DONE_BUTTON_ID ||
+        normalizedText === WA_REPLY_HUMAN_DONE ||
+        normalizedText === "סיימתי"
+      ) {
+        ctx.humanParts = [];
+        sendText(renderText("human_handoff", ctx).trimEnd());
+        return { ok: true, nextState: "done", nextContext: ctx, outbound };
+      }
+
+      // Continue button (also allow typing "המשך עוד" as text).
+      if (
+        buttonId === HUMAN_ADD_MORE_BUTTON_ID ||
+        normalizedText === WA_REPLY_HUMAN_ADD_MORE ||
+        normalizedText === "המשך עוד"
+      ) {
+        sendText(renderText("human_message_collect", ctx).trimEnd());
+        return { ok: true, nextState: "human_message_collect", nextContext: ctx, outbound };
+      }
+
+      // User typed free-form message.
+      if (text) {
+        ctx.humanParts = [...(ctx.humanParts ?? []), text];
+
+        // Buttons should only appear after the user sent at least one message.
+        sendButtons("מה הלאה?", [
+          { id: HUMAN_ADD_MORE_BUTTON_ID, title: WA_REPLY_HUMAN_ADD_MORE },
+          { id: HUMAN_DONE_BUTTON_ID, title: WA_REPLY_HUMAN_DONE },
+        ]);
+        return { ok: true, nextState: "human_message_collect", nextContext: ctx, outbound };
+      }
+
+      // Fallback: re-show prompt.
+      sendText(renderText("human_message_collect", ctx).trimEnd());
+      return { ok: true, nextState: "human_message_collect", nextContext: ctx, outbound };
     }
 
     case "age": {
