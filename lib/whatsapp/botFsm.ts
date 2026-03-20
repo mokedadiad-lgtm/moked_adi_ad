@@ -769,9 +769,14 @@ export async function runBotFsm(params: {
     }
 
     case "done": {
-      // No further action.
-      // Conversation closed; ignore further inbound messages.
-      return { ok: true, nextState: "done", nextContext: ctx, outbound };
+      // Conversation was closed (e.g. human handoff); any new message restarts the bot flow.
+      const newCtx: BotContext = {};
+      sendText(renderText("start", newCtx).trimEnd());
+      sendButtons("בחר/י מגדר:", [
+        { id: "GENDER_M", title: "זכר" },
+        { id: "GENDER_F", title: "נקבה" },
+      ]);
+      return { ok: true, nextState: "gender", nextContext: newCtx, outbound };
     }
   }
 
