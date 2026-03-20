@@ -39,6 +39,9 @@ export type BotContext = {
   asker_email?: string;
   edit_count?: number;
   chosen_edit_field?: string;
+  // When a draft is created, we keep its id here so admin approval won't close
+  // a conversation that the user has already restarted.
+  activeDraftId?: string;
 };
 
 export type InboundBotEvent = {
@@ -142,7 +145,7 @@ const DELIVERY_BOTH_BUTTON_TITLE = "גם וואטסאפ וגם אימייל";
  */
 const WA_REPLY_MODE_BOT = "שאלה במוקד";
 const WA_REPLY_MODE_HUMAN = "נציג אנושי";
-const WA_REPLY_RESP_SHORT = "קצר ומעשי";
+const WA_REPLY_RESP_SHORT = "קצר ולעניין";
 const WA_REPLY_RESP_DETAILED = "מורחב";
 const WA_REPLY_PUB_PUBLISH = "אפשר לפרסם";
 const WA_REPLY_PUB_BLUR = "בטשטוש";
@@ -150,6 +153,17 @@ const WA_REPLY_PUB_NONE = "ללא פרסום";
 const WA_REPLY_DELIV_BOTH = "שניהם";
 const WA_REPLY_CONFIRM_DONE = "סיום ואישור";
 const WA_REPLY_EDIT_DELIVERY = "שינוי ערוץ";
+const CANCEL_REFERRAL_BUTTON_ID = "CANCEL_REFERRAL";
+const WA_REPLY_CANCEL_REFERRAL = "ביטול פנייה";
+
+// Category menu displayed on the `confirm` screen (instead of 3 separate button messages).
+// Each WhatsApp quick-reply message is limited to ~3 buttons, so we show 3 categories first.
+const EDIT_CAT_PERSONAL_BUTTON_ID = "EDIT_CAT_PERSONAL";
+const EDIT_CAT_CONTENT_BUTTON_ID = "EDIT_CAT_CONTENT";
+const EDIT_CAT_ANSWER_BUTTON_ID = "EDIT_CAT_ANSWER";
+const WA_REPLY_EDIT_CAT_PERSONAL = "פרטים אישיים";
+const WA_REPLY_EDIT_CAT_CONTENT = "תוכן השאלה";
+const WA_REPLY_EDIT_CAT_ANSWER = "הגדרות תשובה";
 
 const COLLECT_EMAIL_TEXT = "נא להזין כתובת אימייל לקבלת התשובה.\n";
 const EMAIL_INVALID_TEXT =
@@ -258,14 +272,6 @@ export async function runBotFsm(params: {
   };
   const sendText = (t: string) => outbound.push({ kind: "text", text: t });
 
-  // Global escape to new process
-  if (currentState === "waiting_admin_approval" && isNewProcessKeyword(text)) {
-    // Start over as a new bot process, ignore current draft.
-    sendText(renderText("start_new_process_while_waiting", ctx).trimEnd());
-    sendText(renderText("start", ctx).trimEnd());
-    return { ok: true, nextState: "gender", nextContext: {}, outbound };
-  }
-
   switch (currentState) {
     case "start": {
       // Bot entry: ask gender
@@ -334,10 +340,6 @@ export async function runBotFsm(params: {
       ctx.asker_age = n;
       ctx.bodyParts = [];
       sendText(renderText("body_collect", ctx).trimEnd());
-      sendButtons("סיימת?", [
-        { id: "BODY_ADD_MORE", title: "הוסף עוד" },
-        { id: "BODY_DONE", title: "סיימתי" },
-      ]);
       return { ok: true, nextState: "body_collect", nextContext: ctx, outbound };
     }
 
@@ -357,10 +359,6 @@ export async function runBotFsm(params: {
         }
         ctx.bodyParts = [];
         sendText(renderText("title_collect", ctx).trimEnd());
-        sendButtons("כותרת", [
-          { id: "TITLE_DONE", title: "סיימתי" },
-          { id: "TITLE_ADD_MORE", title: "הוסף עוד" },
-        ]);
         // Store content temporarily in ctx.title? we'll keep in ctx as `content` later through next step
         (ctx as any).content = content;
         return { ok: true, nextState: "title_collect", nextContext: ctx, outbound };
@@ -430,7 +428,7 @@ export async function runBotFsm(params: {
       const rt =
         buttonId === "RESP_SHORT" ? ("short" as const) :
         buttonId === "RESP_DETAILED" ? ("detailed" as const) :
-        (text === "קצר" || text === "קצר ולעניין" || text === "קצר ומעשי" || text === RESPONSE_SHORT_BUTTON_TITLE
+        (text === "קצר" || text === "קצר ולעניין" || text === "קצר ומעשי" || text === WA_REPLY_RESP_SHORT || text === RESPONSE_SHORT_BUTTON_TITLE
           ? ("short" as const)
           : text === "מורחב" || text === RESPONSE_DETAILED_BUTTON_TITLE ? ("detailed" as const) : null);
       if (!rt) {
@@ -457,7 +455,7 @@ export async function runBotFsm(params: {
         buttonId === "PUB_BLUR" ? ("blur" as const) :
         buttonId === "PUB_NONE" ? ("none" as const) :
         (text === "אפשר לפרסם" || text === "פרסום" || text === "ניתן לפרסם" ? ("publish" as const) :
-          text === "פרסום בטשטוש" || text === "בטשטוש" ? ("blur" as const) :
+          text === "פרסום בטשטוש" || text === "פרסום בטשטוש פרטים מזהים" || text === "בטשטוש" ? ("blur" as const) :
           text === "ללא פרסום" ? ("none" as const) : null);
       if (!pc) {
         sendText("לא זיהיתי בחירה תקינה בפרסום.\nנא לבחור שוב.");
@@ -523,6 +521,16 @@ export async function runBotFsm(params: {
 
     case "confirm": {
       if (
+        buttonId === CANCEL_REFERRAL_BUTTON_ID ||
+        text === WA_REPLY_CANCEL_REFERRAL ||
+        text === "ביטול" ||
+        text === "ביטול פנייה"
+      ) {
+        sendText(renderText("cancel_referral", ctx).trimEnd());
+        return { ok: true, nextState: "done", nextContext: ctx, outbound };
+      }
+
+      if (
         buttonId === CONFIRM_DONE_BUTTON_ID ||
         text === "סיום ואישור פנייה" ||
         text === WA_REPLY_CONFIRM_DONE
@@ -552,12 +560,40 @@ export async function runBotFsm(params: {
         });
         if (!createRes.ok) return { ok: false, error: createRes.error };
 
+        // Keep the draft id so admin approval won't close a conversation that already restarted.
+        ctx.activeDraftId = createRes.draftId;
+
         sendText(renderText("waiting_admin_approval", ctx).trimEnd());
-        return { ok: true, nextState: "waiting_admin_approval", nextContext: ctx, outbound, createdDraft: true };
+        // Treat waiting_admin_approval as "informational only": after sending it, the FSM ends.
+        // Any subsequent inbound message will restart the flow from scratch (via `done`).
+        return { ok: true, nextState: "done", nextContext: ctx, outbound, createdDraft: true };
       }
 
       // Edit selection buttons (from showConfirm)
       switch (buttonId) {
+        case EDIT_CAT_PERSONAL_BUTTON_ID:
+          // Up to 3 buttons per WhatsApp quick-reply message.
+          sendButtons("בחירה", [
+            { id: "EDIT_GENDER", title: "שינוי מגדר" },
+            { id: "EDIT_AGE", title: "שינוי גיל" },
+          ]);
+          return { ok: true, nextState: "confirm", nextContext: ctx, outbound };
+
+        case EDIT_CAT_CONTENT_BUTTON_ID:
+          sendButtons("בחירה", [
+            { id: "EDIT_BODY", title: "שינוי שאלה" },
+            { id: "EDIT_TITLE", title: "שינוי כותרת" },
+          ]);
+          return { ok: true, nextState: "confirm", nextContext: ctx, outbound };
+
+        case EDIT_CAT_ANSWER_BUTTON_ID:
+          sendButtons("בחירה", [
+            { id: "EDIT_RESPONSE_TYPE", title: "שינוי מסלול מענה" },
+            { id: "EDIT_PUBLICATION_CONSENT", title: "שינוי אפשרות פרסום" },
+            { id: "EDIT_DELIVERY_PREFERENCE", title: WA_REPLY_EDIT_DELIVERY },
+          ]);
+          return { ok: true, nextState: "confirm", nextContext: ctx, outbound };
+
         case "EDIT_GENDER":
           sendText(renderText("edit_gender", ctx).trimEnd());
           sendButtons("מגדר", [
@@ -571,14 +607,9 @@ export async function runBotFsm(params: {
         case "EDIT_BODY":
           ctx.bodyParts = [];
           sendText(renderText("edit_body", ctx).trimEnd());
-          sendButtons("סיימת?", [
-            { id: "BODY_ADD_MORE", title: "הוסף עוד" },
-            { id: "BODY_DONE", title: "סיימתי" },
-          ]);
           return { ok: true, nextState: "edit_body", nextContext: ctx, outbound };
         case "EDIT_TITLE":
           sendText(renderText("edit_title", ctx).trimEnd());
-          sendButtons("כותרת", [{ id: "EDIT_TITLE_DONE", title: "סיימתי" }]);
           return { ok: true, nextState: "edit_title", nextContext: ctx, outbound };
         case "EDIT_RESPONSE_TYPE":
           sendText(renderText("edit_response_type", ctx).trimEnd());
@@ -634,10 +665,6 @@ export async function runBotFsm(params: {
       if (field === "שאלה") {
         ctx.bodyParts = [];
         sendText(renderText("edit_body", ctx).trimEnd());
-        sendButtons("סיימת?", [
-          { id: "BODY_ADD_MORE", title: "הוסף עוד" },
-          { id: "BODY_DONE", title: "סיימתי" },
-        ]);
         return { ok: true, nextState: "edit_body", nextContext: ctx, outbound };
       }
       if (field === "כותרת") {
@@ -751,7 +778,7 @@ export async function runBotFsm(params: {
       const rt =
         buttonId === "RESP_SHORT" ? ("short" as const) :
         buttonId === "RESP_DETAILED" ? ("detailed" as const) :
-        (text === "קצר ולעניין" || text === "קצר" || text === "קצר ומעשי" || text === RESPONSE_SHORT_BUTTON_TITLE
+        (text === "קצר ולעניין" || text === "קצר" || text === "קצר ומעשי" || text === WA_REPLY_RESP_SHORT || text === RESPONSE_SHORT_BUTTON_TITLE
           ? ("short" as const)
           : text === "מורחב" || text === RESPONSE_DETAILED_BUTTON_TITLE ? ("detailed" as const) : null);
       if (!rt) {
@@ -773,7 +800,7 @@ export async function runBotFsm(params: {
         buttonId === "PUB_BLUR" ? ("blur" as const) :
         buttonId === "PUB_NONE" ? ("none" as const) :
         (text === "אפשר לפרסם" || text === "ניתן לפרסם" ? ("publish" as const) :
-          text === "פרסום בטשטוש" || text === "בטשטוש" ? ("blur" as const) :
+          text === "פרסום בטשטוש" || text === "פרסום בטשטוש פרטים מזהים" || text === "בטשטוש" ? ("blur" as const) :
           text === "ללא פרסום" ? ("none" as const) : null);
       if (!pc) {
         sendText("לא זיהיתי בחירה. נא לבחור שוב.");
@@ -819,9 +846,14 @@ export async function runBotFsm(params: {
     }
 
     case "waiting_admin_approval": {
-      // In this phase, do not auto-update draft. Provide a short message unless user starts a new process.
-      sendText(renderText("extra_inbox_message_while_waiting", ctx).trimEnd());
-      return { ok: true, nextState: "waiting_admin_approval", nextContext: ctx, outbound };
+      // Backward-compat: if an old conversation was left in this state, restart the process fully.
+      const newCtx: BotContext = {};
+      sendText(renderText("start", newCtx).trimEnd());
+      sendButtons("בחר/י מגדר:", [
+        { id: "GENDER_M", title: "זכר" },
+        { id: "GENDER_F", title: "נקבה" },
+      ]);
+      return { ok: true, nextState: "gender", nextContext: newCtx, outbound };
     }
 
     case "done": {
@@ -850,7 +882,10 @@ function showConfirm(outbound: OutboundAction[], ctx: BotContext): BotFsmResult 
     outbound.push({
       kind: "buttons",
       bodyText: CONFIRM_EDIT_BUTTONS_BODY,
-      buttons: [{ id: CONFIRM_DONE_BUTTON_ID, title: WA_REPLY_CONFIRM_DONE }],
+      buttons: [
+        { id: CANCEL_REFERRAL_BUTTON_ID, title: WA_REPLY_CANCEL_REFERRAL },
+        { id: CONFIRM_DONE_BUTTON_ID, title: WA_REPLY_CONFIRM_DONE },
+      ],
     });
     return { ok: true, nextState: "confirm", nextContext: ctx, outbound };
   }
@@ -859,25 +894,17 @@ function showConfirm(outbound: OutboundAction[], ctx: BotContext): BotFsmResult 
     kind: "buttons",
     bodyText: CONFIRM_EDIT_BUTTONS_BODY,
     buttons: [
-      { id: "EDIT_GENDER", title: "שינוי מגדר" },
-      { id: "EDIT_AGE", title: "שינוי גיל" },
-      { id: "EDIT_BODY", title: "שינוי שאלה" },
+      { id: EDIT_CAT_PERSONAL_BUTTON_ID, title: WA_REPLY_EDIT_CAT_PERSONAL },
+      { id: EDIT_CAT_CONTENT_BUTTON_ID, title: WA_REPLY_EDIT_CAT_CONTENT },
+      { id: EDIT_CAT_ANSWER_BUTTON_ID, title: WA_REPLY_EDIT_CAT_ANSWER },
     ],
   });
+
   outbound.push({
     kind: "buttons",
     bodyText: CONFIRM_EDIT_BUTTONS_BODY,
     buttons: [
-      { id: "EDIT_TITLE", title: "שינוי כותרת" },
-      { id: "EDIT_RESPONSE_TYPE", title: "שינוי מסלול מענה" },
-      { id: "EDIT_PUBLICATION_CONSENT", title: "שינוי אפשרות פרסום" },
-    ],
-  });
-  outbound.push({
-    kind: "buttons",
-    bodyText: CONFIRM_EDIT_BUTTONS_BODY,
-    buttons: [
-      { id: "EDIT_DELIVERY_PREFERENCE", title: WA_REPLY_EDIT_DELIVERY },
+      { id: CANCEL_REFERRAL_BUTTON_ID, title: WA_REPLY_CANCEL_REFERRAL },
       { id: CONFIRM_DONE_BUTTON_ID, title: WA_REPLY_CONFIRM_DONE },
     ],
   });

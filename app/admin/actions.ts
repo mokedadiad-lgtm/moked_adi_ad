@@ -1934,11 +1934,31 @@ export async function approveQuestionIntakeDraft(
       console.error("approveQuestionIntakeDraft: update draft failed", upErr);
     }
 
-    // Optional: update conversation state to done
-    await supabase
+    // Update conversation state to done only if this draft is still the active one.
+    // This prevents a late approval of an old draft from closing a conversation
+    // that the user has already restarted.
+    const { data: conv, error: convErr } = await supabase
       .from("whatsapp_conversations")
-      .update({ state: "done", updated_at: new Date().toISOString() })
-      .eq("phone", draft.phone);
+      .select("context")
+      .eq("phone", draft.phone)
+      .maybeSingle();
+
+    const activeDraftId = (conv?.context as any)?.activeDraftId as string | undefined;
+    if (convErr) {
+      console.error("approveQuestionIntakeDraft: fetch conversation context failed", convErr);
+    }
+
+    if (activeDraftId === draftId) {
+      await supabase
+        .from("whatsapp_conversations")
+        .update({
+          state: "done",
+          // Clear context to avoid keeping a stale activeDraftId forever.
+          context: {} as any,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("phone", draft.phone);
+    }
 
     // Notify asker (if they requested WhatsApp)
     try {
