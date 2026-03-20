@@ -34,6 +34,7 @@ export type BotContext = {
   asker_age?: number;
   bodyParts?: string[];
   humanParts?: string[];
+  humanPromptShown?: boolean;
   title?: string;
   response_type?: ResponseType;
   publication_consent?: PublicationConsent;
@@ -324,6 +325,7 @@ export async function runBotFsm(params: {
       ) {
         // Collect the user's message for the human agent.
         ctx.humanParts = [];
+      ctx.humanPromptShown = true;
         sendText(renderText("human_message_collect", ctx).trimEnd());
         return { ok: true, nextState: "human_message_collect", nextContext: ctx, outbound };
       }
@@ -370,7 +372,11 @@ export async function runBotFsm(params: {
       }
 
       // Fallback: re-show prompt.
-      sendText(renderText("human_message_collect", ctx).trimEnd());
+      // Prevent duplicate prompt spam when the user already received the instruction once.
+      if (!ctx.humanPromptShown) {
+        ctx.humanPromptShown = true;
+        sendText(renderText("human_message_collect", ctx).trimEnd());
+      }
       return { ok: true, nextState: "human_message_collect", nextContext: ctx, outbound };
     }
 
