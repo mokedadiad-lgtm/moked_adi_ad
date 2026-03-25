@@ -8,7 +8,7 @@ import { RoleSwitcher, useHasSidebar } from "@/components/role-switcher";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { cn } from "@/lib/utils";
+import { afterModalClose, cn } from "@/lib/utils";
 import { AnswerModal } from "./answer-modal";
 
 export interface RespondentQuestion {
@@ -252,7 +252,7 @@ export function RespondentDashboard() {
 
   const closeModal = () => {
     setModalOpen(false);
-    setSelected(null);
+    afterModalClose(() => setSelected(null));
   };
 
   const handleAnswerSubmitted = () => {

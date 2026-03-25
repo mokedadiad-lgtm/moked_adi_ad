@@ -35,6 +35,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { afterModalClose } from "@/lib/utils";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 
@@ -61,7 +62,7 @@ const BAR_GAP = 6;
 const MAX_BAR_LABELS = 8;
 
 const PIE_COLORS = [
-  "#4f46e5", "#059669", "#dc2626", "#d97706", "#7c3aed",
+  "#d81b60", "#059669", "#dc2626", "#d97706", "#7c3aed",
   "#0d9488", "#ea580c", "#2563eb", "#ca8a04", "#9333ea",
 ];
 
@@ -347,6 +348,7 @@ export function AnalyticsView({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [detailQuestion, setDetailQuestion] = useState<AnalyticsQuestionRow | null>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
 
   const applyFilters = useCallback(
     (updates: Record<string, string | number | undefined | null>) => {
@@ -539,7 +541,10 @@ export function AnalyticsView({
                   <TableRow
                     key={q.id}
                     className="cursor-pointer text-xs transition-colors hover:bg-slate-50"
-                    onClick={() => setDetailQuestion(q)}
+                    onClick={() => {
+                      setDetailQuestion(q);
+                      setDetailModalOpen(true);
+                    }}
                   >
                     <TableCell className="font-mono text-slate-600">{q.short_id ?? q.id.slice(0, 8)}</TableCell>
                     <TableCell className="max-w-[200px] truncate" title={q.title ?? undefined}>{q.title || "—"}</TableCell>
@@ -561,15 +566,22 @@ export function AnalyticsView({
         </CardContent>
       </Card>
 
-      <Dialog open={!!detailQuestion} onOpenChange={(open) => !open && setDetailQuestion(null)}>
-        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto" dir="rtl">
-          <DialogHeader>
+      <Dialog
+        open={detailModalOpen}
+        onOpenChange={(open) => {
+          setDetailModalOpen(open);
+          if (!open) afterModalClose(() => setDetailQuestion(null));
+        }}
+      >
+        <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col gap-0 overflow-hidden p-0 px-0 pt-10 pb-0" dir="rtl">
+          <DialogHeader className="shrink-0 px-4 sm:px-6">
             <DialogTitle>
               פרטי שאלה {detailQuestion?.short_id ?? detailQuestion?.id?.slice(0, 8)}
             </DialogTitle>
           </DialogHeader>
           {detailQuestion && (
-            <div className="space-y-4 text-sm">
+            <div className="min-h-0 w-full flex-1 overflow-y-auto">
+            <div className="space-y-4 px-4 pb-1 text-sm sm:px-6">
               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                 <p className="text-slate-500">כותרת</p>
                 <p className="font-medium text-slate-800">{detailQuestion.title || "—"}</p>
@@ -600,6 +612,7 @@ export function AnalyticsView({
                   {detailQuestion.content || "—"}
                 </div>
               </div>
+            </div>
             </div>
           )}
         </DialogContent>

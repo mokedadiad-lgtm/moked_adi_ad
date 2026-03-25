@@ -29,7 +29,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
-  themeColor: "#4f46e5",
+  themeColor: "#d81b60",
 };
 
 export default function RootLayout({
@@ -39,7 +39,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="he" dir="rtl" className={heebo.variable}>
-      <body className={`${heebo.className} min-h-screen bg-background text-slate-700 antialiased`}>
+      <body className={`${heebo.className} min-h-screen bg-background text-foreground antialiased`}>
         {children}
       </body>
     </html>

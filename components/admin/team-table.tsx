@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { afterModalClose } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AddTeamMemberModal } from "./add-team-member-modal";
@@ -41,7 +42,7 @@ export function TeamTable({ profiles, categories, proofreaderTypes, topics }: Te
 
   const closeModal = () => {
     setModalOpen(false);
-    setEditProfile(null);
+    setTimeout(() => setEditProfile(null), 0);
   };
 
   const handleSeedCategories = async () => {
@@ -172,7 +173,7 @@ export function TeamTable({ profiles, categories, proofreaderTypes, topics }: Te
         open={modalOpen}
         onOpenChange={(open) => {
           setModalOpen(open);
-          if (!open) setEditProfile(null);
+          if (!open) afterModalClose(() => setEditProfile(null));
         }}
         onSuccess={() => {
           closeModal();

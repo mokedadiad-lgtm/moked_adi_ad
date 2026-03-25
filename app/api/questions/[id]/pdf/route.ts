@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import React from "react";
 import * as ReactPDF from "@react-pdf/renderer";
 import { ResponsePdfDocument, type ResponsePdfProps } from "@/lib/pdf-response-document";
+import { getPdfLogoDataUri } from "@/lib/pdf-brand-assets";
 import { ensureHeeboFontFiles, registerHeeboFont } from "@/lib/pdf-register-font";
 
 const BUCKET = "response-pdfs";
@@ -71,14 +72,32 @@ export async function POST(
     created_at: string | null;
     stage?: string;
     answers_merged_at?: string | null;
+    linguistic_signature?: string | null;
   };
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    let data: (typeof question) | null = null;
+    let error: { message?: string } | null = null;
+    const withSig = await supabase
       .from("questions")
-      .select("content, response_text, created_at, stage, answers_merged_at")
+      .select("content, response_text, created_at, stage, answers_merged_at, linguistic_signature")
       .eq("id", id)
       .single();
+    if (
+      withSig.error &&
+      (withSig.error.message ?? "").toLowerCase().includes("linguistic_signature")
+    ) {
+      const noSig = await supabase
+        .from("questions")
+        .select("content, response_text, created_at, stage, answers_merged_at")
+        .eq("id", id)
+        .single();
+      data = noSig.data ? { ...noSig.data, linguistic_signature: null as string | null } : null;
+      error = noSig.error;
+    } else {
+      data = withSig.data;
+      error = withSig.error;
+    }
     if (error || !data) {
       return NextResponse.json({ error: "שאלה לא נמצאה" }, { status: 404 });
     }
@@ -140,7 +159,8 @@ export async function POST(
     );
     bodyHtmlForPdf = merged.bodyHtmlForPdf;
     footnotes = merged.footnotes;
-    mergedPlainForArchive = merged.mergedPlainText;
+    /** לא לשמור mergedPlainText ב־questions.response_text — זה דורס HTML עשיר (בולד/כותרות/הערות) אחרי יצירת PDF */
+    mergedPlainForArchive = null;
   } else {
     const single = responseToStructuredForPdf(question.response_text ?? null);
     bodyHtmlForPdf = single.bodyHtmlForPdf;
@@ -153,6 +173,7 @@ export async function POST(
     bodyHtmlForPdf,
     footnotes,
     createdAt: pdfGeneratedAt,
+    linguisticSignature: question.linguistic_signature ?? null,
   };
 
   let buffer: Buffer;
@@ -168,6 +189,7 @@ export async function POST(
       const doc = React.createElement(ResponsePdfDocument, {
         ...pdfOptions,
         bodyPlain,
+        logoDataUri: getPdfLogoDataUri(),
       } as ResponsePdfProps);
       buffer = await ReactPDF.renderToBuffer(doc as React.ReactElement<ReactPDF.DocumentProps>);
     } catch (fallbackErr) {
@@ -208,6 +230,12 @@ export async function POST(
   };
   if (mergedPlainForArchive != null) {
     updatePayload.response_text = mergedPlainForArchive;
+  } else if (answers.length === 1) {
+    /** מסנכרן את questions.response_text עם ה-HTML העשיר מ־question_answers — אחרת רענון UI נופל לטקסט שטוח ישן ב־questions */
+    const rt = answers[0]?.response_text;
+    if (rt != null && String(rt).trim() !== "") {
+      updatePayload.response_text = rt;
+    }
   }
   if (question.stage === "in_linguistic_review") {
     updatePayload.stage = "ready_for_sending";

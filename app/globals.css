@@ -3,19 +3,19 @@
 @tailwind utilities;
 
 :root {
-  --background: #f8fafc;
-  --foreground: #1e293b;
-  --primary: #4f46e5;
-  --primary-hover: #4338ca;
+  --background: #faf7f9;
+  --foreground: #2c2c54;
+  --primary: #d81b60;
+  --primary-hover: #ad1457;
   --primary-foreground: #ffffff;
-  --secondary: #64748b;
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
-  --accent: #eef2ff;
+  --secondary: #5c5c78;
+  --muted: #f5f0f3;
+  --muted-foreground: #75759e;
+  --accent: #fce4ec;
   --card: #ffffff;
-  --card-border: #e2e8f0;
-  --border: #e2e8f0;
-  --ring: #4f46e5;
+  --card-border: #e8e0e5;
+  --border: #e5dde2;
+  --ring: #d81b60;
   --radius: 0.75rem;
 }
 
@@ -34,4 +34,24 @@ body {
 *:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
+}
+
+/* גלגלת בסרגל כהה: מסלול אפור, ידית בהירה (היפוך מברירת המחדל הלבנה) */
+.scrollbar-sidebar-muted {
+  scrollbar-width: thin;
+  scrollbar-color: #e2e8f0 #52525b;
+}
+.scrollbar-sidebar-muted::-webkit-scrollbar {
+  width: 8px;
+}
+.scrollbar-sidebar-muted::-webkit-scrollbar-track {
+  background: #52525b;
+  border-radius: 4px;
+}
+.scrollbar-sidebar-muted::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 4px;
+}
+.scrollbar-sidebar-muted::-webkit-scrollbar-thumb:hover {
+  background: #f8fafc;
 }

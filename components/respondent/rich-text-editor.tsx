@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 const FOOTNOTES_MARKER = "data-footnotes-json";
 
@@ -35,6 +35,46 @@ function serialize(bodyHtml: string, orderedIds: string[], footnoteTexts: Record
   return wrap.innerHTML;
 }
 
+function newFootnoteId(index: number): string {
+  const rnd =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Math.random().toString(36).slice(2, 12)}`;
+  return `fn-${Date.now()}-${index}-${rnd}`;
+}
+
+/**
+ * כשמועתקים/מודבקים sup עם אותו data-fn-id — יש כפילויות ב-DOM.
+ * מתקן מזהים כפולים (הופעה שנייה ואילך מקבלת מזהה חדש + העתקת טקסט הערה).
+ */
+function dedupeFootnoteMarkers(
+  container: HTMLElement,
+  footnoteTexts: Record<string, string>
+): { ids: string[]; footnoteTexts: Record<string, string>; hadDuplicateIds: boolean } {
+  const markers = [...container.querySelectorAll("[data-fn-id]")] as HTMLElement[];
+  const seenIds = new Set<string>();
+  const ids: string[] = [];
+  const nextTexts = { ...footnoteTexts };
+  let hadDuplicateIds = false;
+
+  markers.forEach((el, index) => {
+    let id = el.getAttribute("data-fn-id");
+    if (!id) return;
+    if (seenIds.has(id)) {
+      hadDuplicateIds = true;
+      const newId = newFootnoteId(index);
+      el.setAttribute("data-fn-id", newId);
+      nextTexts[newId] = nextTexts[id] ?? "";
+      id = newId;
+    }
+    seenIds.add(id);
+    ids.push(id);
+    el.textContent = `[${ids.length}]`;
+  });
+
+  return { ids, footnoteTexts: nextTexts, hadDuplicateIds };
+}
+
 export interface RichTextEditorProps {
   value: string;
   onChange: (html: string) => void;
@@ -55,50 +95,43 @@ export function RichTextEditor({
   const [orderedFnIds, setOrderedFnIds] = useState<string[]>([]);
   const [focusFootnoteId, setFocusFootnoteId] = useState<string | null>(null);
   const footnoteInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  /** אחרי onChange מקומי — לא להידרר מחדש מה-prop value (מונע דריסת הקלדה) */
+  const skipNextValueHydrationRef = useRef(false);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   const renumberAndCapture = useCallback(() => {
     if (!ref.current) return;
-    const markers = [...ref.current.querySelectorAll("[data-fn-id]")] as HTMLElement[];
-    const ids: string[] = [];
-    markers.forEach((el, i) => {
-      const id = el.getAttribute("data-fn-id");
-      if (id) {
-        ids.push(id);
-        el.textContent = `[${i + 1}]`;
-      }
-    });
+    const { ids, footnoteTexts: nextTexts } = dedupeFootnoteMarkers(ref.current, footnoteTexts);
     setOrderedFnIds(ids);
+    setFootnoteTexts(nextTexts);
     const bodyHtml = ref.current.innerHTML;
-    onChange(serialize(bodyHtml, ids, footnoteTexts));
+    skipNextValueHydrationRef.current = true;
+    onChange(serialize(bodyHtml, ids, nextTexts));
   }, [onChange, footnoteTexts]);
 
   const capture = useCallback(() => {
     renumberAndCapture();
   }, [renumberAndCapture]);
 
-  useEffect(() => {
-    const { body, footnoteTexts: initial } = parseValue(value);
-    if (ref.current) ref.current.innerHTML = body || "";
-    if (ref.current) {
-      const markers = [...ref.current.querySelectorAll("[data-fn-id]")] as HTMLElement[];
-      const ids = markers.map((el) => el.getAttribute("data-fn-id")).filter(Boolean) as string[];
-      setOrderedFnIds(ids);
+  /** הידרציה מ־value (טעינה ראשונית, רענון מהשרת, מעבר שאלה דרך key) — לא אחרי הקלדה שלנו */
+  useLayoutEffect(() => {
+    if (!ref.current) return;
+    if (skipNextValueHydrationRef.current) {
+      skipNextValueHydrationRef.current = false;
+      return;
     }
-    setFootnoteTexts(initial);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (!ref.current || !value) return;
-    const cur = ref.current.innerHTML.trim();
-    const isEmpty = !cur || cur === "<br>" || cur === "<br/>";
-    if (!isEmpty) return;
     const { body, footnoteTexts: initial } = parseValue(value);
-    ref.current.innerHTML = body;
-    const markers = [...ref.current.querySelectorAll("[data-fn-id]")] as HTMLElement[];
-    const ids = markers.map((el) => el.getAttribute("data-fn-id")).filter(Boolean) as string[];
+    ref.current.innerHTML = body || "";
+    const { ids, footnoteTexts: next, hadDuplicateIds } = dedupeFootnoteMarkers(ref.current, initial);
     setOrderedFnIds(ids);
-    setFootnoteTexts(initial);
+    setFootnoteTexts(next);
+    if (hadDuplicateIds) {
+      skipNextValueHydrationRef.current = true;
+      onChangeRef.current(serialize(ref.current.innerHTML, ids, next));
+    }
+    // רק value — לא onChange (ההורה מעבירה פונקציה חדשה בכל רינדור)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   // מעבר אוטומטי לשדה ההערה אחרי הוספת הערת שוליים
@@ -123,31 +156,147 @@ export function RichTextEditor({
     [capture]
   );
 
-  /** כותרת: אם הסמן בתוך כותרת (h2/h3) – מבטל; אחרת הופך את הבלוק לכותרת */
   const toggleHeading = useCallback(() => {
+    const root = ref.current;
+    if (!root) return;
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0) return;
-    let node: Node | null = sel.anchorNode;
-    let isInsideHeading = false;
-    while (node && ref.current) {
-      if (node === ref.current) break;
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        const tag = (node as Element).tagName;
-        if (tag === "H2" || tag === "H3" || tag === "H1") {
-          isInsideHeading = true;
-          break;
+
+    const findBlock = (node: Node | null): HTMLElement | null => {
+      let n: Node | null = node;
+      while (n && n !== root) {
+        if (n.nodeType === Node.ELEMENT_NODE) {
+          const el = n as HTMLElement;
+          const t = el.tagName;
+          if (t === "P" || t === "DIV" || t === "H1" || t === "H2" || t === "H3" || t === "BLOCKQUOTE" || t === "LI") {
+            return el;
+          }
         }
+        n = n.parentNode;
       }
-      node = node.parentNode;
+      return null;
+    };
+
+    const isHeadingTag = (el: HTMLElement) => /^H[1-6]$/.test(el.tagName);
+
+    /** תו משמעותי ראשון בבלוק — כדי לא לכלול בלוק הבא כשהסימון מסתיים ברווח לפני התוכן שלו */
+    const firstMeaningfulPointInBlock = (block: HTMLElement): { node: Text; offset: number } | null => {
+      const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, null);
+      let n: Node | null;
+      while ((n = walker.nextNode())) {
+        const t = n as Text;
+        const s = t.textContent ?? "";
+        const i = s.search(/\S/);
+        if (i !== -1) return { node: t, offset: i };
+      }
+      return null;
+    };
+
+    /** בלוק שבו הסימון מסתיים לפני התוכן המשמעותי — לא להפוך לכותרת (רווח בסוף סימון ש"נוגע" בבלוק הבא) */
+    const blockIsSubstantiallySelected = (range: Range, block: HTMLElement): boolean => {
+      if (!range.intersectsNode(block)) return false;
+      const first = firstMeaningfulPointInBlock(block);
+      if (!first) return true;
+      try {
+        if (range.comparePoint(first.node, first.offset) > 0) return false;
+      } catch {
+        return true;
+      }
+      return true;
+    };
+
+    /** כל בלוקי התוכן שחותכים את הבחירה — העמוקים ביותר (בלי אב שגם מועמד), בסדר מסמך */
+    const collectBlocksInRange = (range: Range): HTMLElement[] => {
+      const selector = "p, h1, h2, h3, h4, h5, h6, blockquote, li, div";
+      const candidates: HTMLElement[] = [];
+      root.querySelectorAll(selector).forEach((el) => {
+        const h = el as HTMLElement;
+        if (!range.intersectsNode(h)) return;
+        candidates.push(h);
+      });
+
+      const innermost = candidates.filter((el) => {
+        return !candidates.some((other) => other !== el && other.contains(el));
+      });
+
+      innermost.sort((a, b) => {
+        const pos = a.compareDocumentPosition(b);
+        if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+        if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+        return 0;
+      });
+
+      return innermost;
+    };
+
+    const range = sel.getRangeAt(0).cloneRange();
+
+    let blocks = collectBlocksInRange(range).filter((b) => blockIsSubstantiallySelected(range, b));
+
+    if (blocks.length === 0) {
+      const startBlock = findBlock(range.startContainer);
+      const endBlock = findBlock(range.endContainer);
+      if (startBlock && endBlock && startBlock === endBlock) {
+        if (blockIsSubstantiallySelected(range, startBlock)) blocks = [startBlock];
+      } else if (startBlock && !endBlock) {
+        blocks = [startBlock];
+      }
     }
-    exec("formatBlock", isInsideHeading ? "p" : "h2");
-  }, [exec]);
+
+    if (blocks.length === 0) {
+      const hasBlockEl = root.querySelector("p, div, h1, h2, h3, h4, h5, h6, blockquote, li");
+      if (!hasBlockEl && (root.textContent?.trim() || root.innerHTML.trim())) {
+        const h = document.createElement("h2");
+        while (root.firstChild) h.appendChild(root.firstChild);
+        root.appendChild(h);
+        blocks = [h];
+      }
+    }
+
+    if (blocks.length === 0) {
+      exec("formatBlock", "h2");
+      return;
+    }
+
+    const allHeadings = blocks.every(isHeadingTag);
+    const targetTag = allHeadings ? "p" : "h2";
+
+    const newBlocks: HTMLElement[] = [];
+    for (const block of blocks) {
+      if (block.tagName.toLowerCase() === targetTag) {
+        newBlocks.push(block);
+        continue;
+      }
+      const next = document.createElement(targetTag);
+      while (block.firstChild) {
+        next.appendChild(block.firstChild);
+      }
+      block.parentNode?.replaceChild(next, block);
+      newBlocks.push(next);
+    }
+
+    try {
+      const r = document.createRange();
+      const first = newBlocks[0]!;
+      const last = newBlocks[newBlocks.length - 1]!;
+      r.setStartBefore(first);
+      r.setEndAfter(last);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    } catch {
+      /* ignore */
+    }
+
+    root.focus();
+    skipNextValueHydrationRef.current = true;
+    capture();
+  }, [capture, exec]);
 
   const insertFootnote = useCallback(() => {
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0) return;
     const range = sel.getRangeAt(0);
-    const id = `fn-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const id = newFootnoteId(0);
     const sup = document.createElement("sup");
     sup.className = "fn-ref text-primary font-medium";
     sup.setAttribute("data-fn-id", id);
@@ -166,6 +315,7 @@ export function RichTextEditor({
       const next = { ...footnoteTexts, [id]: text };
       setFootnoteTexts(next);
       if (ref.current) {
+        skipNextValueHydrationRef.current = true;
         onChange(serialize(ref.current.innerHTML, orderedFnIds, next));
       }
     },
@@ -177,6 +327,7 @@ export function RichTextEditor({
       <div className="flex flex-wrap items-center gap-2 rounded-t-xl border border-b-0 border-card-border bg-slate-100 p-2">
         <button
           type="button"
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => exec("bold")}
           disabled={disabled}
           className="rounded px-2 py-1 text-sm font-bold hover:bg-slate-200 disabled:opacity-50"
@@ -186,6 +337,7 @@ export function RichTextEditor({
         </button>
         <button
           type="button"
+          onMouseDown={(e) => e.preventDefault()}
           onClick={toggleHeading}
           disabled={disabled}
           className="rounded px-2 py-1 text-sm hover:bg-slate-200 disabled:opacity-50"
@@ -195,6 +347,7 @@ export function RichTextEditor({
         </button>
         <button
           type="button"
+          onMouseDown={(e) => e.preventDefault()}
           onClick={insertFootnote}
           disabled={disabled}
           className="rounded px-2 py-1 text-sm hover:bg-slate-200 disabled:opacity-50"
@@ -207,7 +360,7 @@ export function RichTextEditor({
         ref={ref}
         contentEditable={!disabled}
         dir="rtl"
-        className="min-h-[3rem] max-h-[400px] overflow-y-auto w-full rounded-b-xl border border-card-border bg-white p-4 text-start focus:outline-none focus:ring-2 focus:ring-primary/20 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:text-base [&_h3]:font-semibold"
+        className="min-h-[3rem] max-h-[400px] overflow-y-auto w-full rounded-b-xl border border-card-border bg-white p-4 text-start text-base focus:outline-none focus:ring-2 focus:ring-primary/20 [&_h2]:!text-xl [&_h2]:!font-bold [&_h2_strong]:!text-xl [&_h3]:!text-lg [&_h3]:font-semibold [&_h3_strong]:!text-lg"
         onInput={capture}
         onBlur={capture}
         data-placeholder={placeholder}
@@ -218,7 +371,7 @@ export function RichTextEditor({
           <p className="mb-3 text-sm font-semibold text-primary">הערות שוליים</p>
           <div className="flex flex-col gap-2">
             {orderedFnIds.map((id, i) => (
-              <div key={id} className="flex items-start gap-2 text-start">
+              <div key={`${id}-${i}`} className="flex items-start gap-2 text-start">
                 <span className="mt-2 shrink-0 text-sm font-medium text-primary">[{i + 1}]</span>
                 <input
                   ref={(el) => {

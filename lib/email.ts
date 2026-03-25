@@ -16,13 +16,13 @@ function goLink(pathWithQuery: string): string {
 }
 
 const BRAND = {
-  primary: "#4F46E5",
-  primaryHover: "#4338ca",
+  primary: "#D81B60",
+  primaryHover: "#AD1457",
   success: "#059669",
   successHover: "#047857",
-  text: "#1e293b",
-  textMuted: "#64748b",
-  bg: "#f8fafc",
+  text: "#2c2c54",
+  textMuted: "#75759e",
+  bg: "#faf7f9",
   white: "#ffffff",
 };
 

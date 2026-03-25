@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import type { ProofreaderTypeOption, TopicOption } from "@/app/admin/actions";
 import type { QuestionRow, QuestionStage } from "@/lib/types";
+import { afterModalClose } from "@/lib/utils";
 import { ACTIVE_STAGES, STAGE_LABELS } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -341,7 +342,7 @@ export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpe
                   {isLobby && byProofreaderType.length > 0 && (
                     <div className="flex w-full shrink-0 flex-wrap justify-end gap-x-1 gap-y-0 text-[9px] leading-tight text-violet-800/90 md:gap-x-1.5 md:text-[10px]">
                       {byProofreaderType.map(({ id, name_he, count }, i) => (
-                        <span key={id} className="whitespace-nowrap">
+                        <span key={`${id}-${i}`} className="whitespace-nowrap">
                           {i > 0 && <span className="text-violet-500/70"> · </span>}
                           <span className="font-medium tabular-nums text-violet-900/90">{count}</span>
                           <span className="text-violet-700/80"> {name_he}</span>
@@ -496,7 +497,7 @@ export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpe
         onOpenChange={(open) => {
           setStageModalOpen(open);
           if (!open) {
-            setStageModalQuestion(null);
+            afterModalClose(() => setStageModalQuestion(null));
             // מנקה את ?open= מה-URL כדי שהרענון האוטומטי לא יפתח שוב את החלון
             router.replace("/admin");
           }
@@ -505,18 +506,18 @@ export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpe
       />
 
       <Dialog open={emailModalOpen} onOpenChange={setEmailModalOpen}>
-        <DialogContent className="max-h-[80vh] overflow-hidden flex flex-col" dir="rtl">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[80vh] flex-col gap-0 overflow-hidden p-0 px-0 pt-10 pb-0" dir="rtl">
+          <DialogHeader className="px-4 sm:px-6">
             <DialogTitle>שאלות לפי אימייל</DialogTitle>
           </DialogHeader>
           {emailModalEmail && (
-            <p className="text-sm text-slate-600">{emailModalEmail}</p>
+            <p className="px-4 text-sm text-slate-600 sm:px-6">{emailModalEmail}</p>
           )}
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="min-h-0 w-full flex-1 overflow-y-auto">
             {emailModalLoading ? (
-              <p className="py-4 text-center text-sm text-slate-500">טוען...</p>
+              <p className="px-4 py-4 text-center text-sm text-slate-500 sm:px-6">טוען...</p>
             ) : (
-              <ul className="space-y-2 py-2">
+              <ul className="space-y-2 px-4 py-2 sm:px-6">
                 {emailModalList.map((item) => (
                   <li key={item.id}>
                     <a
@@ -532,7 +533,7 @@ export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpe
               </ul>
             )}
           </div>
-          <p className="text-xs text-slate-500">
+          <p className="px-4 pb-4 pt-1 text-xs text-slate-500 sm:px-6">
             לחיצה על שאלה תפתח אותה בלוח הבקרה.{" "}
             {emailModalEmail && (
               <a

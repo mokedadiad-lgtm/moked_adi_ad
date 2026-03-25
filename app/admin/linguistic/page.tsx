@@ -5,11 +5,24 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { QuestionRow } from "@/lib/types";
 import { Suspense } from "react";
 
-const SELECT =
+const SELECT_WITH_SIGNATURE =
+  "id, short_id, stage, title, content, created_at, asker_email, asker_age, asker_gender, response_type, publication_consent, assigned_respondent_id, response_text, proofreader_note, pdf_url, pdf_generated_at, linguistic_signature, topic_id, sub_topic_id, topics(name_he), sub_topics(name_he)";
+
+const SELECT_NO_SIGNATURE =
   "id, short_id, stage, title, content, created_at, asker_email, asker_age, asker_gender, response_type, publication_consent, assigned_respondent_id, response_text, proofreader_note, pdf_url, pdf_generated_at, topic_id, sub_topic_id, topics(name_he), sub_topics(name_he)";
 
 const QA_SELECT =
   "id, question_id, topic_id, sub_topic_id, assigned_respondent_id, stage, response_text, proofreader_note, pdf_url, pdf_generated_at, deleted_at";
+
+const QA_QUESTIONS_INNER_WITH_SIG =
+  "questions!inner(id, short_id, title, content, created_at, asker_email, asker_age, asker_gender, response_type, publication_consent, deleted_at, answers_merged_at, response_text, pdf_url, pdf_generated_at, linguistic_signature)";
+
+const QA_QUESTIONS_INNER_NO_SIG =
+  "questions!inner(id, short_id, title, content, created_at, asker_email, asker_age, asker_gender, response_type, publication_consent, deleted_at, answers_merged_at, response_text, pdf_url, pdf_generated_at)";
+
+function isMissingLinguisticSignatureError(err: { message?: string } | null | undefined): boolean {
+  return (err?.message ?? "").toLowerCase().includes("linguistic_signature");
+}
 
 type TopicRef = { name_he: string } | { name_he: string }[] | null | undefined;
 type Row = QuestionRow & {
@@ -24,6 +37,7 @@ type Row = QuestionRow & {
   proofreader_note?: string | null;
   pdf_url?: string | null;
   pdf_generated_at?: string | null;
+  linguistic_signature?: string | null;
 };
 
 function nameFromRelation(v: TopicRef): string | null {
@@ -31,9 +45,10 @@ function nameFromRelation(v: TopicRef): string | null {
   return Array.isArray(v) ? v[0]?.name_he ?? null : v.name_he ?? null;
 }
 
-async function getLinguisticQuestions(): Promise<QuestionRow[]> {
+async function fetchLinguisticQuestionRows(includeSignature: boolean): Promise<QuestionRow[] | "missing-signature-column"> {
   const supabase = getSupabaseAdmin();
   const stages = ["in_linguistic_review", "ready_for_sending"] as const;
+  const qaInner = includeSignature ? QA_QUESTIONS_INNER_WITH_SIG : QA_QUESTIONS_INNER_NO_SIG;
 
   let qaRows: {
     id: string;
@@ -54,20 +69,37 @@ async function getLinguisticQuestions(): Promise<QuestionRow[]> {
   try {
     const qaRes = await supabase
       .from("question_answers")
-      .select(`${QA_SELECT}, questions!inner(id, short_id, title, content, created_at, asker_email, asker_age, asker_gender, response_type, publication_consent, deleted_at, answers_merged_at, response_text, pdf_url, pdf_generated_at), topics(name_he), sub_topics(name_he)`)
+      .select(`${QA_SELECT}, ${qaInner}, topics(name_he), sub_topics(name_he)`)
       .in("stage", stages)
       .order("created_at", { ascending: false });
-    qaRows = ((qaRes.data ?? []) as unknown as typeof qaRows).filter((r) => !r.deleted_at);
+    if (qaRes.error) {
+      if (includeSignature && isMissingLinguisticSignatureError(qaRes.error)) return "missing-signature-column";
+    } else {
+      qaRows = ((qaRes.data ?? []) as unknown as typeof qaRows).filter((r) => !r.deleted_at);
+    }
   } catch {
     // question_answers may not exist
   }
 
-  const { data: legacyData, error } = await supabase
-    .from("questions")
-    .select(SELECT)
-    .in("stage", stages)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+  const legacyRes = includeSignature
+    ? await supabase
+        .from("questions")
+        .select(SELECT_WITH_SIGNATURE)
+        .in("stage", stages)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+    : await supabase
+        .from("questions")
+        .select(SELECT_NO_SIGNATURE)
+        .in("stage", stages)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+  const legacyData = legacyRes.data;
+  const error = legacyRes.error;
+
+  if (error) {
+    if (includeSignature && isMissingLinguisticSignatureError(error)) return "missing-signature-column";
+  }
 
   const legacyRows = (error ? [] : (legacyData ?? [])) as Row[];
   const questionIdsFromQa = new Set(qaRows.map((r) => r.question_id));
@@ -104,7 +136,13 @@ async function getLinguisticQuestions(): Promise<QuestionRow[]> {
     if (rows.length === 0) continue;
     const first = rows[0]!;
     const q = Array.isArray(first.questions) ? first.questions[0] : first.questions;
-    const qData = q as { answers_merged_at?: string | null; response_text?: string | null; pdf_url?: string | null; pdf_generated_at?: string | null } | undefined;
+    const qData = q as {
+      answers_merged_at?: string | null;
+      response_text?: string | null;
+      pdf_url?: string | null;
+      pdf_generated_at?: string | null;
+      linguistic_signature?: string | null;
+    } | undefined;
     const respondentName =
       first.assigned_respondent_id && names[first.assigned_respondent_id]
         ? names[first.assigned_respondent_id]!
@@ -128,12 +166,18 @@ async function getLinguisticQuestions(): Promise<QuestionRow[]> {
       sub_topic_id: first.sub_topic_id ?? null,
       topic_name_he: nameFromRelation(first.topics),
       sub_topic_name_he: nameFromRelation(first.sub_topics),
-      response_text: qData?.answers_merged_at ? (qData?.response_text ?? null) : (first.response_text ?? qData?.response_text ?? null),
+      response_text: qData?.answers_merged_at
+        ? (qData?.response_text ?? null)
+        : (() => {
+            const fromAnswer = first.response_text?.trim() ?? "";
+            return fromAnswer ? first.response_text : (qData?.response_text ?? first.response_text ?? null);
+          })(),
       proofreader_note: first.proofreader_note ?? null,
       pdf_url: qData?.pdf_url ?? null,
       pdf_generated_at: qData?.pdf_generated_at ?? null,
       answers_merged_at: qData?.answers_merged_at ?? null,
       answers_count: answersCountByQuestion[questionId] ?? 1,
+      linguistic_signature: includeSignature ? (qData?.linguistic_signature ?? null) : null,
     });
   }
 
@@ -158,9 +202,17 @@ async function getLinguisticQuestions(): Promise<QuestionRow[]> {
     proofreader_note: r.proofreader_note ?? null,
     pdf_url: r.pdf_url ?? null,
     pdf_generated_at: r.pdf_generated_at ?? null,
+    linguistic_signature: includeSignature ? (r.linguistic_signature ?? null) : null,
   }));
 
   return [...fromQa, ...fromLegacy];
+}
+
+async function getLinguisticQuestions(): Promise<QuestionRow[]> {
+  const withCol = await fetchLinguisticQuestionRows(true);
+  if (withCol !== "missing-signature-column") return withCol;
+  const without = await fetchLinguisticQuestionRows(false);
+  return without === "missing-signature-column" ? [] : without;
 }
 
 export default async function LinguisticEditorPage() {

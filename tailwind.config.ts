@@ -14,19 +14,21 @@ const config: Config = {
       },
       colors: {
         primary: {
-          DEFAULT: "#4f46e5",
+          DEFAULT: "#d81b60",
           foreground: "#ffffff",
-          hover: "#4338ca",
-          muted: "#eef2ff",
+          hover: "#ad1457",
+          muted: "#fce4ec",
         },
         secondary: {
-          DEFAULT: "#64748b",
-          foreground: "#f8fafc",
+          DEFAULT: "#5c5c78",
+          foreground: "#faf7f9",
         },
-        background: "#f8fafc",
+        background: "#faf7f9",
+        foreground: "#2c2c54",
+        "muted-foreground": "#75759e",
         card: {
           DEFAULT: "#ffffff",
-          border: "#e2e8f0",
+          border: "#e8e0e5",
         },
       },
       borderRadius: {

@@ -137,13 +137,13 @@ export function TeamMemberEditModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[90vh] w-[95vw] max-w-2xl flex-col gap-4 overflow-hidden" dir="rtl">
-        <DialogHeader className="shrink-0">
+      <DialogContent className="flex max-h-[90vh] w-[95vw] max-w-2xl flex-col gap-0 overflow-hidden p-0 px-0 pt-10 pb-0" dir="rtl">
+        <DialogHeader className="shrink-0 px-4 sm:px-6">
           <DialogTitle>עריכת איש צוות</DialogTitle>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="grid gap-4 text-right" dir="rtl">
+        <div className="min-h-0 w-full flex-1 overflow-y-auto">
+        <div className="grid gap-4 px-4 pb-1 text-right sm:px-6" dir="rtl">
           <div className="space-y-2">
             <Label htmlFor="team-full_name_he">שם מלא</Label>
             <Input
@@ -306,7 +306,7 @@ export function TeamMemberEditModal({
         </div>
         </div>
 
-        <DialogFooter className="shrink-0 flex flex-col gap-2 sm:flex-row sm:justify-between">
+        <DialogFooter className="shrink-0 flex flex-col gap-2 px-4 pb-4 pt-2 sm:flex-row sm:justify-between sm:px-6">
           <div className="flex flex-col gap-2">
             <label className="flex cursor-pointer items-center gap-2 justify-start text-sm text-slate-600">
               <Checkbox checked={deleteConfirm} onCheckedChange={(v) => setDeleteConfirm(!!v)} />

@@ -4,6 +4,8 @@ import { AdminNav } from "@/components/admin/admin-nav";
 import { InactivityLogout } from "@/components/inactivity-logout";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -81,7 +83,28 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    getDelayedQuestions().then(setDelayedQuestions);
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const items = await getDelayedQuestions();
+        if (!cancelled) setDelayedQuestions(items);
+      } catch {
+        // We keep previous value on error to avoid flicker.
+      }
+    };
+
+    load();
+
+    // The admin dashboard refreshes its table via `router.refresh()` (and HMR),
+    // but `delayedQuestions` lives in this component and was loaded only once.
+    // Polling keeps the sidebar status in sync with the table.
+    const intervalId = window.setInterval(load, 5000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
   }, []);
 
   useEffect(() => {
@@ -97,15 +120,31 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const hasSidebar = showSidebar !== false;
 
   return (
-    <div className="flex min-h-screen bg-background" dir="rtl">
+    <div className="flex min-h-screen flex-col bg-background" dir="rtl">
       <InactivityLogout />
+      <div className="fixed right-0 top-4 z-[35] flex w-64 justify-center">
+        <Link
+          href="/"
+          className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-border bg-card shadow-md ring-1 ring-border/50 md:h-[4.75rem] md:w-[4.75rem]"
+          aria-label="אסק מי פלוס"
+        >
+          <Image
+            src="/brand/logo-full.png"
+            alt=""
+            width={80}
+            height={80}
+            className="h-full w-full object-contain p-1.5"
+            priority
+          />
+        </Link>
+      </div>
       {hasSidebar && (
         <>
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
             className={cn(
-              "fixed start-4 top-4 z-30 flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 shadow-sm transition-opacity hover:bg-slate-50 md:hidden",
+              "fixed end-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-card text-foreground shadow-sm transition-opacity hover:bg-muted md:hidden",
               sidebarOpen && "pointer-events-none opacity-0"
             )}
             aria-label="פתח תפריט"
@@ -124,23 +163,21 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           />
           <aside
             className={cn(
-              "fixed start-0 top-0 z-[25] flex h-full w-64 flex-col border-e border-slate-700/80 bg-slate-800 shadow-xl transition-transform duration-200 ease-out md:translate-x-0 md:transition-none",
+              "fixed right-0 top-0 z-[25] flex h-full min-h-dvh w-64 flex-col border-l border-primary/15 bg-[#1a1a35] pt-[5.5rem] shadow-xl transition-transform duration-200 ease-out md:translate-x-0 md:transition-none",
               sidebarOpen ? "translate-x-0" : "translate-x-full md:translate-x-0"
             )}
           >
-            <div className="flex items-center justify-between border-b border-slate-600/60 p-4 text-start md:block md:p-5">
-              <div>
-                <h2 className="text-lg font-bold text-white">אסק מי פלוס</h2>
-                <p className="mt-0.5 text-xs text-slate-400">ממשק מנהל</p>
-              </div>
+            <div className="relative flex flex-col items-center border-b border-white/10 px-4 pb-4 pt-2 text-center md:px-5">
               <button
                 type="button"
                 onClick={closeSidebar}
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:bg-white/10 hover:text-white md:hidden"
+                className="absolute start-3 top-3 flex h-9 w-9 items-center justify-center rounded-lg text-[#a8a8c4] hover:bg-white/10 hover:text-white md:hidden"
                 aria-label="סגור תפריט"
               >
                 <CloseIcon />
               </button>
+              <h2 className="text-lg font-bold text-white">אסק מי פלוס</h2>
+              <p className="mt-0.5 text-xs text-[#a8a8c4]">ממשק מנהל</p>
             </div>
             <AdminNav delayedQuestions={delayedQuestions} onNavigate={closeSidebar} />
           </aside>
@@ -148,8 +185,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       )}
       <main
         className={cn(
-          "font-sans min-h-screen flex-1 min-w-0 pb-8 pe-4 ps-4 md:pe-8",
-          hasSidebar ? "pt-14 md:pt-6 md:ps-[17rem]" : "pt-4 md:pt-6"
+          "font-sans min-h-0 flex-1 min-w-0 pb-8 pt-4",
+          hasSidebar
+            ? "px-4 md:px-8 md:pt-6 md:pr-64"
+            : "px-4 md:px-8 md:pt-6"
         )}
       >
         {showSidebar === false && pathname?.startsWith("/admin") && (

@@ -330,10 +330,10 @@ export function LoginForm() {
   return (
     <Card className="overflow-hidden rounded-2xl shadow-dialog">
       <CardHeader className="space-y-1 flex flex-col items-center text-center">
-        <CardTitle className="text-2xl font-bold text-center" style={{ color: "#FF2D73" }}>
+        <CardTitle className="text-2xl font-bold text-center text-primary">
           כניסת צוות - אסק מי פלוס
         </CardTitle>
-        <CardDescription className="text-slate-600 text-center">
+        <CardDescription className="text-muted-foreground text-center">
           הכנס פרטי התחברות כדי לגשת למערכת
         </CardDescription>
       </CardHeader>
@@ -387,12 +387,7 @@ export function LoginForm() {
               {error}
             </p>
           )}
-          <Button
-            type="submit"
-            className="w-full bg-green-600 hover:bg-green-700 text-white"
-            size="lg"
-            disabled={loading}
-          >
+          <Button type="submit" className="w-full" size="lg" disabled={loading}>
             {loading ? (
               <span className="inline-flex items-center justify-center" role="status" aria-live="polite">
                 <LoaderCircle className="h-5 w-5 text-white" />

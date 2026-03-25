@@ -70,8 +70,12 @@ export interface QuestionRow {
   deleted_at?: string | null;
   /** כשהשורה מהטבלה מגיעה מ-question_answers — מזהה התשובה (למודל ולפעולות) */
   answer_id?: string | null;
+  /** זמן עדכון אחרון לשימוש בעיכובים (מ־question_answers.updated_at או questions.updated_at) */
+  delay_source_updated_at?: string | null;
   /** מתי בוצע מיזוג תשובות (לשאלה עם כמה תשובות); עד אז לא ניתן ליצור PDF */
   answers_merged_at?: string | null;
   /** מספר תשובות (question_answers) לשאלה — להצגת כפתור מיזוג וחסימת PDF */
   answers_count?: number;
+  /** חתימה ל-PDF (עריכה לשונית) — מוצגת מיושרת לשמאל */
+  linguistic_signature?: string | null;
 }

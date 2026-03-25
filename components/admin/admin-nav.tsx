@@ -8,28 +8,60 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
+type NavSectionId = "main" | "roles" | "admin" | "archive";
+
 type NavItem = {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
+  section: NavSectionId;
   adminOnly?: boolean;
   needRespondent?: boolean;
   needProofreader?: boolean;
   needLinguistic?: boolean;
 };
 
+const SECTION_ORDER: NavSectionId[] = ["main", "roles", "admin", "archive"];
+
+const SECTION_TITLES: Record<NavSectionId, string> = {
+  main: "תפעול ושאלות",
+  roles: "הגהות, משיבים ועריכה לשונית",
+  admin: "ניהול ונתונים",
+  archive: "ארכיון ואשפה",
+};
+
 const navItems: NavItem[] = [
-  { href: "/admin", label: "לוח בקרה", icon: HomeIcon, adminOnly: true },
-  { href: "/admin/linguistic", label: "עריכה לשונית", icon: EditIcon, needLinguistic: true },
-  { href: "/admin/whatsapp-inbox", label: "דואר נכנס וואטסאפ", icon: ChatIcon, adminOnly: true },
-  { href: "/respondent", label: "אזור משיב", icon: RespondentIcon, needRespondent: true },
-  { href: "/proofreader", label: "לובי הגהה", icon: LobbyIcon, needProofreader: true },
-  { href: "/admin/team", label: "ניהול צוות", icon: UsersIcon, adminOnly: true },
-  { href: "/admin/topics", label: "נושאים והגהות", icon: BookIcon, adminOnly: true },
-  { href: "/admin/analytics", label: "נתונים ודיאגרמות", icon: ChartIcon, adminOnly: true },
-  { href: "/admin/archive", label: "ארכיון", icon: ArchiveIcon, adminOnly: true },
-  { href: "/admin/trash", label: "אשפה", icon: TrashIcon, adminOnly: true },
+  { href: "/admin", label: "לוח בקרה", icon: HomeIcon, section: "main", adminOnly: true },
+  { href: "/admin/whatsapp-inbox", label: "דואר נכנס וואטסאפ", icon: ChatIcon, section: "main", adminOnly: true },
+  { href: "/admin/linguistic", label: "עריכה לשונית", icon: EditIcon, section: "roles", needLinguistic: true },
+  { href: "/respondent", label: "אזור משיב", icon: RespondentIcon, section: "roles", needRespondent: true },
+  { href: "/proofreader", label: "לובי הגהה", icon: LobbyIcon, section: "roles", needProofreader: true },
+  { href: "/admin/team", label: "ניהול צוות", icon: UsersIcon, section: "admin", adminOnly: true },
+  { href: "/admin/topics", label: "נושאים והגהות", icon: BookIcon, section: "admin", adminOnly: true },
+  { href: "/admin/analytics", label: "נתונים ודיאגרמות", icon: ChartIcon, section: "admin", adminOnly: true },
+  { href: "/admin/archive", label: "ארכיון", icon: ArchiveIcon, section: "archive", adminOnly: true },
+  { href: "/admin/trash", label: "אשפה", icon: TrashIcon, section: "archive", adminOnly: true },
 ];
+
+function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
 
 function ChartIcon({ className }: { className?: string }) {
   return (
@@ -258,10 +290,27 @@ interface AdminNavProps {
   onNavigate?: () => void;
 }
 
+function groupNavBySection(items: NavItem[]): [NavSectionId, NavItem[]][] {
+  const map = new Map<NavSectionId, NavItem[]>();
+  for (const id of SECTION_ORDER) map.set(id, []);
+  for (const item of items) {
+    map.get(item.section)!.push(item);
+  }
+  return SECTION_ORDER.filter((id) => (map.get(id) ?? []).length > 0).map((id) => [id, map.get(id)!]);
+}
+
+const defaultOpenSections = (): Record<NavSectionId, boolean> => ({
+  main: false,
+  roles: false,
+  admin: false,
+  archive: false,
+});
+
 export function AdminNav({ delayedQuestions = [], onNavigate }: AdminNavProps = {}) {
   const pathname = usePathname();
   const router = useRouter();
   const [nav, setNav] = useState<NavItem[]>(navItems);
+  const [openSections, setOpenSections] = useState<Record<NavSectionId, boolean>>(defaultOpenSections);
 
   useEffect(() => {
     let cancelled = false;
@@ -290,6 +339,13 @@ export function AdminNav({ delayedQuestions = [], onNavigate }: AdminNavProps = 
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    const section = nav.find((i) => i.href === pathname)?.section;
+    if (section) {
+      setOpenSections((s) => ({ ...s, [section]: true }));
+    }
+  }, [pathname, nav]);
+
   const handleLogout = async () => {
     const supabase = getSupabaseBrowser();
     await supabase.auth.signOut();
@@ -302,33 +358,62 @@ export function AdminNav({ delayedQuestions = [], onNavigate }: AdminNavProps = 
     router.push(`/admin?open=${encodeURIComponent(questionId)}`);
   };
 
+  const sections = groupNavBySection(nav);
+
   return (
-    <nav className="flex flex-1 flex-col gap-0.5 p-3">
-      {nav.map((item) => {
-        const active = pathname === item.href;
+    <nav className="flex flex-1 flex-col gap-2 p-3">
+      {sections.map(([sectionId, items]) => {
+        const isOpen = openSections[sectionId] === true;
         return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            className={cn(
-              "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
-              active
-                ? "bg-white/15 text-white font-semibold"
-                : "text-slate-300 hover:bg-white/10 hover:text-white"
+          <div key={sectionId} className="rounded-lg border border-white/5 bg-black/10">
+            <button
+              type="button"
+              aria-expanded={isOpen}
+              onClick={() =>
+                setOpenSections((s) => ({
+                  ...s,
+                  [sectionId]: !isOpen,
+                }))
+              }
+              className="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2.5 text-start text-xs font-semibold text-slate-300 transition-colors hover:bg-white/5"
+            >
+              <span>{SECTION_TITLES[sectionId]}</span>
+              <ChevronDownIcon
+                className={cn("shrink-0 text-slate-500 transition-transform duration-200", isOpen && "rotate-180")}
+              />
+            </button>
+            {isOpen && (
+              <div className="flex flex-col gap-0.5 border-t border-white/5 px-1.5 pb-2 pt-1">
+                {items.map((item) => {
+                  const active = pathname === item.href;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={onNavigate}
+                      className={cn(
+                        "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
+                        active
+                          ? "bg-primary/30 font-semibold text-white"
+                          : "text-slate-300 hover:bg-white/10 hover:text-white"
+                      )}
+                    >
+                      <item.icon className="h-[18px] w-[18px] shrink-0 opacity-90" />
+                      <span className="leading-snug">{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
             )}
-          >
-            <item.icon className="shrink-0" />
-            {item.label}
-          </Link>
+          </div>
         );
       })}
       {delayedQuestions.length > 0 && (
-        <div className="mt-4 border-t border-slate-600/60 pt-3">
+        <div className="mt-4 border-t border-white/15 pt-3">
           <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-slate-400">עיכובים (5+ ימים)</p>
-          <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto">
+          <ul className="scrollbar-sidebar-muted flex max-h-40 flex-col gap-1 overflow-y-auto">
             {delayedQuestions.map((q) => (
-              <li key={q.id}>
+              <li key={q.answer_id ? `${q.id}-${q.answer_id}` : q.id}>
                 <button
                   type="button"
                   onClick={() => openDelayedInDashboard(q.id)}
@@ -343,7 +428,7 @@ export function AdminNav({ delayedQuestions = [], onNavigate }: AdminNavProps = 
           </ul>
         </div>
       )}
-      <div className="mt-auto border-t border-slate-600/60 pt-3">
+      <div className="mt-auto border-t border-white/15 pt-3">
         <button
           type="button"
           onClick={handleLogout}

@@ -11,6 +11,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { SignatureRichField } from "@/components/admin/signature-rich-field";
+import { sanitizeSignatureHtml } from "@/lib/response-text";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import type { QuestionRow } from "@/lib/types";
 import { STAGE_LABELS } from "@/lib/types";
@@ -87,7 +89,12 @@ interface QuestionDetailsModalProps {
   onMerge?: (questionId: string) => void;
   mergePending?: boolean;
   /** כשמועבר — שמירה דרך שרת (עוקף RLS). מומלץ במסך העריכה הלשונית. */
-  onSaveResponse?: (questionId: string, answerId: string | null, responseText: string) => Promise<{ ok: boolean; error?: string }>;
+  onSaveResponse?: (
+    questionId: string,
+    answerId: string | null,
+    responseText: string,
+    linguisticSignature?: string | null
+  ) => Promise<{ ok: boolean; error?: string }>;
 }
 
 interface ResponseVersion {
@@ -116,6 +123,8 @@ export function QuestionDetailsModal({
   const [canEdit, setCanEdit] = useState(false);
   const [responseText, setResponseText] = useState("");
   const [initialResponse, setInitialResponse] = useState("");
+  const [signatureText, setSignatureText] = useState("");
+  const [initialSignature, setInitialSignature] = useState("");
   const [savePending, setSavePending] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showPdfView, setShowPdfView] = useState(false);
@@ -148,16 +157,21 @@ export function QuestionDetailsModal({
       const value = question.response_text ?? "";
       setResponseText(value);
       setInitialResponse(value);
+      const sig = question.linguistic_signature ?? "";
+      setSignatureText(sig);
+      setInitialSignature(sig);
       setSaveError(null);
     }
-  }, [open, question?.id, question?.response_text]);
+  }, [open, question?.id, question?.response_text, question?.linguistic_signature]);
 
   /** מחזיר true אם השמירה הצליחה או שלא היו שינויים, false אם אירעה שגיאה */
   const handleSaveResponse = async (): Promise<boolean> => {
     if (!question) return false;
     const nextTrimmed = responseText.trim();
     const initialTrimmed = initialResponse.trim();
-    if (nextTrimmed === initialTrimmed) {
+    const nextSigTrim = sanitizeSignatureHtml(signatureText).trim();
+    const initialSigTrim = sanitizeSignatureHtml(initialSignature).trim();
+    if (nextTrimmed === initialTrimmed && nextSigTrim === initialSigTrim) {
       setSaveError(null);
       return true;
     }
@@ -165,10 +179,16 @@ export function QuestionDetailsModal({
     setSavePending(true);
     setSaveError(null);
     if (onSaveResponse) {
-      const result = await onSaveResponse(question.id, question.answer_id ?? null, nextTrimmed);
+      const result = await onSaveResponse(
+        question.id,
+        question.answer_id ?? null,
+        nextTrimmed,
+        nextSigTrim || null
+      );
       setSavePending(false);
       if (result.ok) {
         setInitialResponse(nextTrimmed);
+        setInitialSignature(signatureText);
         onSaveSuccess?.();
         return true;
       }
@@ -197,7 +217,9 @@ export function QuestionDetailsModal({
 
   const handleCreatePdfClick = async () => {
     if (!question || !onCreatePdf) return;
-    const hasUnsaved = responseText.trim() !== initialResponse.trim();
+    const hasUnsaved =
+      responseText.trim() !== initialResponse.trim() ||
+      sanitizeSignatureHtml(signatureText).trim() !== sanitizeSignatureHtml(initialSignature).trim();
     if (hasUnsaved && canEdit) {
       const saved = await handleSaveResponse();
       if (!saved) return;
@@ -211,15 +233,15 @@ export function QuestionDetailsModal({
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="flex max-h-[90vh] w-[95vw] max-w-2xl flex-col gap-4 overflow-hidden"
+        className="flex max-h-[90vh] w-[95vw] max-w-2xl flex-col gap-0 overflow-hidden p-0 px-0 pt-10 pb-0"
         dir="rtl"
       >
-        <DialogHeader className="shrink-0">
+        <DialogHeader className="shrink-0 px-4 sm:px-6">
           <DialogTitle>פירוט השאלה</DialogTitle>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="space-y-4">
+        <div className="min-h-0 w-full flex-1 overflow-y-auto">
+          <div className="space-y-4 px-4 pb-1 sm:px-6">
             <div className="space-y-1">
               {question.title && <p className="text-sm font-medium text-slate-800 text-start">{question.title}</p>}
               <p className="text-xs font-medium text-secondary text-start">תוכן השאלה</p>
@@ -272,16 +294,42 @@ export function QuestionDetailsModal({
                       {saveError && (
                         <p className="mt-1 text-sm text-red-600" role="alert">{saveError}</p>
                       )}
-                      <div className="mt-2 flex justify-end">
+                      {onSaveResponse && (
+                        <div className="mt-4 space-y-1" dir="rtl">
+                          <p className="text-xs font-medium text-secondary text-start">
+                            חתימה (ל-PDF, מיושרת לשמאל) — ניתן להדגיש בולד
+                          </p>
+                          <SignatureRichField
+                            key={`${question.id}-sig`}
+                            value={signatureText}
+                            onChange={(html) => {
+                              setSignatureText(html);
+                              setSaveError(null);
+                            }}
+                            placeholder="שם, תפקיד וכו׳ — יוצג בתחתית גוף התשובה ב-PDF, מיושר לשמאל."
+                            disabled={savePending}
+                            className="w-full"
+                          />
+                        </div>
+                      )}
+                      <div className="mt-2 flex flex-col items-end gap-1">
                         <Button
                           type="button"
                           size="sm"
                           className="bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
                           onClick={handleSaveResponse}
-                          disabled={savePending || responseText.trim() === initialResponse.trim()}
+                          disabled={
+                            savePending ||
+                            (responseText.trim() === initialResponse.trim() &&
+                              sanitizeSignatureHtml(signatureText).trim() ===
+                                sanitizeSignatureHtml(initialSignature).trim())
+                          }
                         >
                           {savePending ? "שומר…" : "שמור שינויים"}
                         </Button>
+                        <p className="max-w-full text-xs text-slate-500 text-start">
+                          שומר את גוף התשובה (למעלה) ואת החתימה — בפעולה אחת.
+                        </p>
                       </div>
                     </>
                   )}

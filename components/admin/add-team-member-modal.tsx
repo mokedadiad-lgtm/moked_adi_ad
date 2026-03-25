@@ -130,13 +130,13 @@ export function AddTeamMemberModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="flex max-h-[90vh] w-[95vw] max-w-2xl flex-col gap-4 overflow-hidden" dir="rtl">
-        <DialogHeader className="shrink-0">
+      <DialogContent className="flex max-h-[90vh] w-[95vw] max-w-2xl flex-col gap-0 overflow-hidden p-0 px-0 pt-10 pb-0" dir="rtl">
+        <DialogHeader className="shrink-0 px-4 sm:px-6">
           <DialogTitle>הוסף איש צוות</DialogTitle>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="grid gap-4 text-right" dir="rtl">
+        <div className="min-h-0 w-full flex-1 overflow-y-auto">
+        <div className="grid gap-4 px-4 pb-1 text-right sm:px-6" dir="rtl">
           <div className="space-y-2">
             <Label htmlFor="add-email">אימייל</Label>
             <Input
@@ -325,7 +325,7 @@ export function AddTeamMemberModal({
         </div>
         </div>
 
-        <DialogFooter className="shrink-0">
+        <DialogFooter className="shrink-0 px-4 pb-4 pt-2 sm:px-6">
           <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
             ביטול
           </Button>

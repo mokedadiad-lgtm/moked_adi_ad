@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/page-header";
 import { RoleSwitcher, useHasSidebar } from "@/components/role-switcher";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { cn } from "@/lib/utils";
+import { afterModalClose, cn } from "@/lib/utils";
 import { LobbyTaskModal } from "./lobby-task-modal";
 
 export interface LobbyQuestion {
@@ -164,7 +164,7 @@ export function ProofreaderDashboard() {
 
   const closeModal = () => {
     setModalOpen(false);
-    setSelected(null);
+    setTimeout(() => setSelected(null), 0);
   };
 
   const handleActionDone = () => {
@@ -178,7 +178,7 @@ export function ProofreaderDashboard() {
     const updated = questions.find((q) => (q.answer_id ? q.answer_id === selected.answer_id : q.id === selected.id));
     if (!updated) {
       setModalOpen(false);
-      setSelected(null);
+      afterModalClose(() => setSelected(null));
     } else if (updated !== selected) {
       setSelected(updated);
     }

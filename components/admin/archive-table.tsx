@@ -32,7 +32,7 @@ import type { QuestionRow, QuestionStage } from "@/lib/types";
 import { ACTIVE_STAGES, STAGE_LABELS } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { cn } from "@/lib/utils";
+import { afterModalClose, cn } from "@/lib/utils";
 
 function IconEye({ className }: { className?: string }) {
   return (
@@ -70,12 +70,16 @@ interface ArchiveTableProps {
 export function ArchiveTable({ questions }: ArchiveTableProps) {
   const router = useRouter();
   const [detailQuestion, setDetailQuestion] = useState<QuestionRow | null>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [viewPdfQuestionId, setViewPdfQuestionId] = useState<string | null>(null);
   const [returnModalQuestion, setReturnModalQuestion] = useState<QuestionRow | null>(null);
   const [returnSelectedStage, setReturnSelectedStage] = useState<QuestionStage | "">("");
   const [pendingId, setPendingId] = useState<string | null>(null);
 
-  const handleRowClick = (q: QuestionRow) => setDetailQuestion(q);
+  const handleRowClick = (q: QuestionRow) => {
+    setDetailQuestion(q);
+    setDetailModalOpen(true);
+  };
 
   const handleOpenReturnModal = (e: React.MouseEvent, q: QuestionRow) => {
     e.stopPropagation();
@@ -190,8 +194,11 @@ export function ArchiveTable({ questions }: ArchiveTableProps) {
 
     <QuestionDetailsModal
       question={detailQuestion}
-      open={!!detailQuestion}
-      onOpenChange={(open) => !open && setDetailQuestion(null)}
+      open={detailModalOpen}
+      onOpenChange={(open) => {
+        setDetailModalOpen(open);
+        if (!open) afterModalClose(() => setDetailQuestion(null));
+      }}
       showPdfActions
     />
 

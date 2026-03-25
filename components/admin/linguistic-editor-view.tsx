@@ -15,7 +15,7 @@ import type { QuestionRow } from "@/lib/types";
 import { STAGE_LABELS } from "@/lib/types";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { cn } from "@/lib/utils";
+import { afterModalClose, cn } from "@/lib/utils";
 
 function truncate(text: string, max = 80): string {
   const t = text.replace(/\s+/g, " ").trim();
@@ -234,11 +234,11 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
         open={modalOpen}
         onOpenChange={(open) => {
           setModalOpen(open);
-          if (!open) setSelected(null);
+          if (!open) afterModalClose(() => setSelected(null));
         }}
         onSaveSuccess={handleSaveSuccess}
-        onSaveResponse={async (questionId, answerId, responseText) => {
-          const r = await saveLinguisticResponse(questionId, answerId, responseText);
+        onSaveResponse={async (questionId, answerId, responseText, linguisticSignature) => {
+          const r = await saveLinguisticResponse(questionId, answerId, responseText, linguisticSignature);
           return r.ok ? { ok: true } : { ok: false, error: r.error };
         }}
         showPdfActions

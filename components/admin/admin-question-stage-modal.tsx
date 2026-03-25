@@ -526,7 +526,7 @@ export function AdminQuestionStageModal({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           className={cn(
-            "max-h-[85vh] w-[95vw] max-w-xl border-2 p-0 px-3 sm:pl-6 sm:pr-6 flex flex-col",
+            "max-h-[85vh] w-[95vw] max-w-xl border-2 flex flex-col overflow-hidden px-0 pt-10 pb-0",
             question && (MODAL_FRAME[question.stage].border + " bg-slate-100")
           )}
           dir="rtl"
@@ -1102,11 +1102,12 @@ export function AdminQuestionStageModal({
 
       {/* חלון שיוך משיבים לנושא חדש (נפתח אחרי שמירת נושא מהטבלה) */}
       <Dialog open={assignTopicModalOpen} onOpenChange={(open) => !open && closeAssignTopicModal()}>
-        <DialogContent className="max-w-md max-h-[85vh] flex flex-col overflow-hidden" dir="rtl">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[85vh] max-w-md flex-col gap-0 overflow-hidden p-0 px-0 pt-10 pb-0" dir="rtl">
+          <DialogHeader className="px-4 sm:px-6">
             <DialogTitle>שיוך משיבים לנושא: {assignTopicName || "—"}</DialogTitle>
           </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto space-y-4">
+          <div className="min-h-0 w-full flex-1 overflow-y-auto">
+          <div className="space-y-4 px-4 pb-1 sm:px-6">
             <div className="space-y-2">
               <p className="text-sm text-slate-600 text-right">
                 {userGender === "F" ? "בחרי אילו משיבים משויכים לנושא זה" : "בחר אילו משיבים משויכים לנושא זה"}
@@ -1140,7 +1141,8 @@ export function AdminQuestionStageModal({
               <p className="text-sm text-red-600 text-right">{assignTopicError}</p>
             )}
           </div>
-          <DialogFooter>
+          </div>
+          <DialogFooter className="px-4 pb-4 pt-2 sm:px-6">
             <Button variant="outline" onClick={closeAssignTopicModal}>
               ביטול
             </Button>

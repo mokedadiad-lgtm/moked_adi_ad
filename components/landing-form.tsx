@@ -1,5 +1,6 @@
 "use client";
 
+import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -99,6 +100,12 @@ export function LandingForm() {
 
   return (
     <>
+      <div className="mb-6 flex justify-center">
+        <BrandLogo
+          priority
+          imageClassName="max-w-[80px] sm:max-w-[92px] md:max-w-[100px]"
+        />
+      </div>
       <div className="mb-5 text-center">
         <p className="mb-1.5 text-2xl font-bold tracking-tight text-slate-800 md:text-3xl">
           ברוכה הבאה למוקד אסק-מי פלוס

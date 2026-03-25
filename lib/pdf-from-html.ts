@@ -4,11 +4,24 @@
  */
 import path from "path";
 import fs from "fs";
+import { getPdfLogoDataUri } from "./pdf-brand-assets";
 import { buildPdfHtml } from "./pdf-html-template";
 
 const CDN_BASE = "https://cdn.jsdelivr.net/npm/@fontsource/heebo@5.2.8/files";
 const FONT_400 = "heebo-hebrew-400-normal.woff";
 const FONT_700 = "heebo-hebrew-700-normal.woff";
+
+/** פוטר: קו ורוד 75% רוחב (פס מלא — לא border על div ריק) */
+const PDF_FOOTER_TEMPLATE = `
+<div style="width:100%;box-sizing:border-box;background:#FAF7F9!important;font-family:system-ui,'Segoe UI',sans-serif;direction:rtl;padding:0 28px 8px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+  <div style="width:75%;max-width:75%;height:2px;margin:0 auto;background:#E8B4C8;border-radius:1px;"></div>
+  <div style="font-size:8px;line-height:1.45;color:#5C5C78;text-align:center;padding-top:6px;background:#FAF7F9;">
+    <div style="font-weight:700;color:#2C2C54;">אסק מי פלוס – מענה אנונימי מטעם ארגון &quot;עדי עד&quot;</div>
+    <div style="color:#AD1457;margin-top:3px;">אתר עדי עד: www.adeyad.org</div>
+    <div style="margin-top:3px;">המידע בתשובה זו הינו כללי ואינו מהווה תחליף לייעוץ מקצועי אישי.</div>
+  </div>
+</div>
+`.trim();
 
 export type PdfHtmlOptions = Parameters<typeof buildPdfHtml>[0];
 
@@ -60,7 +73,8 @@ async function getHeeboFontFaceCss(): Promise<string> {
 export async function renderPdfFromHtml(options: PdfHtmlOptions): Promise<Buffer> {
   const isVercel = process.env.VERCEL === "1";
   const fontFaceCss = await getHeeboFontFaceCss().catch(() => undefined);
-  const html = buildPdfHtml({ ...options, fontFaceCss });
+  const logoDataUri = getPdfLogoDataUri();
+  const html = buildPdfHtml({ ...options, fontFaceCss, logoDataUri });
 
   interface BrowserLike {
     newPage(): Promise<{
@@ -114,10 +128,14 @@ export async function renderPdfFromHtml(options: PdfHtmlOptions): Promise<Buffer
       }).catch(() => {});
     }
     await page.emulateMediaType("print");
+    /** שוליים מ־@page ב־pdf-html-template (עמוד ראשון / 2 ס"מ למעלה מעמוד 2, תחתית לפוטר). לא לשכפל margin תחתון כאן. */
     const pdfBuffer = await page.pdf({
       format: "A4",
       printBackground: true,
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      margin: { top: "0", right: "0", bottom: "0", left: "0" },
+      displayHeaderFooter: true,
+      headerTemplate: '<div style="height:0;margin:0;padding:0;font-size:0;"></div>',
+      footerTemplate: PDF_FOOTER_TEMPLATE,
       preferCSSPageSize: true,
     });
     return Buffer.from(pdfBuffer);

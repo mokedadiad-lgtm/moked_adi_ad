@@ -140,14 +140,15 @@ export function LobbyTaskModal({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="flex max-h-[90vh] w-[95vw] max-w-2xl flex-col gap-4 overflow-hidden"
+        className="flex max-h-[90vh] w-[95vw] max-w-2xl flex-col gap-0 overflow-hidden p-0 px-0 pt-10 pb-0"
         dir="rtl"
       >
-        <DialogHeader className="shrink-0">
+        <DialogHeader className="shrink-0 px-4 sm:px-6">
           <DialogTitle>{isMine ? "משימה שלי" : "משימה בתור"}</DialogTitle>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto space-y-4 text-start">
+        <div className="min-h-0 w-full flex-1 overflow-y-auto">
+        <div className="space-y-4 px-4 pb-1 text-start sm:px-6">
           <div>
             {question.title && <p className="mb-1 text-sm font-medium text-slate-800">{question.title}</p>}
             <p className="mb-1 text-xs font-medium text-secondary">תוכן השאלה</p>
@@ -206,8 +207,9 @@ export function LobbyTaskModal({
             </p>
           )}
         </div>
+        </div>
 
-        <DialogFooter className="shrink-0 flex-wrap gap-2">
+        <DialogFooter className="shrink-0 flex-wrap gap-2 px-4 pb-4 pt-2 sm:px-6">
           {!isMine ? (
             <Button
               type="button"

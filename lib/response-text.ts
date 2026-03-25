@@ -26,10 +26,28 @@ export function parseResponseRich(value: string | null | undefined): ParsedRespo
   return { bodyHtml: body, footnotes };
 }
 
-const ALLOWED_TAGS = new Set(["p", "div", "h2", "h3", "strong", "b", "sup", "span", "br", "ul", "ol", "li"]);
+const ALLOWED_TAGS = new Set([
+  "p",
+  "div",
+  "h1",
+  "h2",
+  "h3",
+  "strong",
+  "b",
+  "em",
+  "i",
+  "u",
+  "sup",
+  "span",
+  "br",
+  "ul",
+  "ol",
+  "li",
+  "blockquote",
+]);
 
 /** Decode HTML entities so PDF/text doesn't show &amp; # etc. */
-function decodeHtmlEntities(s: string): string {
+export function decodeHtmlEntities(s: string): string {
   return s
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
@@ -51,6 +69,66 @@ export function sanitizeResponseHtml(html: string): string {
     .replace(/<(\/?)([a-z0-9]+)(\s[^>]*)?>/gi, (_, slash, tag) =>
       ALLOWED_TAGS.has(tag.toLowerCase()) ? `<${slash}${tag.toLowerCase()}>` : ""
     );
+}
+
+const SIGNATURE_TAGS = new Set(["b", "strong", "br", "div"]);
+
+/** HTML מותר לשדה חתימה ב-PDF: מודגש ושורות (בלי מאפיינים). */
+export function sanitizeSignatureHtml(html: string | null | undefined): string {
+  if (html == null || typeof html !== "string") return "";
+  if (!html.trim()) return "";
+  return html
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    .replace(/<style\b[\s\S]*?<\/style>/gi, "")
+    .replace(/<(\/?)([a-z0-9]+)(\s[^>]*)?>/gi, (_, slash, tag) => {
+      const t = tag.toLowerCase();
+      if (t === "br" && slash) return "";
+      if (t === "br") return "<br>";
+      if (!SIGNATURE_TAGS.has(t)) return "";
+      return `<${slash}${t}>`;
+    });
+}
+
+/** ל-react-pdf: פירוק חתימה למקטעי טקסט עם/בלי מודגש */
+export function parseSignatureHtmlSegments(html: string): { bold: boolean; text: string }[] {
+  let work = sanitizeSignatureHtml(html).trim();
+  if (!work) return [];
+  work = work.replace(/<br\s*\/?>/gi, "\n");
+  work = work.replace(/<div\s*>/gi, "").replace(/<\/div>/gi, "\n");
+  const segments: { bold: boolean; text: string }[] = [];
+  let bold = 0;
+  let buf = "";
+  let pos = 0;
+
+  function flush() {
+    if (buf.length) {
+      segments.push({ text: decodeHtmlEntities(buf), bold: bold > 0 });
+      buf = "";
+    }
+  }
+
+  while (pos < work.length) {
+    if (work[pos] === "<") {
+      const slice = work.slice(pos);
+      const m = slice.match(/^<(\/)?(b|strong)\s*>/i);
+      if (m) {
+        flush();
+        if (m[1]) bold = Math.max(0, bold - 1);
+        else bold++;
+        pos += m[0].length;
+        continue;
+      }
+      const skip = slice.match(/^<[^>]+>/);
+      if (skip) {
+        pos += skip[0].length;
+        continue;
+      }
+    }
+    buf += work[pos];
+    pos++;
+  }
+  flush();
+  return segments;
 }
 
 /**
@@ -96,7 +174,8 @@ export function responseToStructured(value: string | null | undefined): {
   return { bodyPlain: body, footnotes: noteLines };
 }
 
-const SUP_FN_REF = /<sup\s[^>]*data-fn-id="[^"]*"[^>]*>\[(\d+)\]<\/sup>/gi;
+/** מספרי הערה ב־sup עשויים לכלול רווחים בין הסוגריים לספרה */
+const SUP_FN_REF = /<sup\s[^>]*data-fn-id="[^"]*"[^>]*>\s*\[\s*(\d+)\s*\]\s*<\/sup>/gi;
 
 const DATA_FN_ID = /data-fn-id="([^"]+)"/gi;
 
