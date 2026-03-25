@@ -29,8 +29,26 @@
 | `NEXT_PUBLIC_APP_URL` | ✅ | כתובת האתר בפרודקשן, למשל `https://your-app.vercel.app` – **חשוב** לקישורים במיילים (שיבוץ משיב, איפוס סיסמה וכו') |
 | `RESEND_FROM_EMAIL` | אופציונלי | כתובת השולח, למשל `מערכת <noreply@yourdomain.com>` (אחרת משתמשים ב־onboarding@resend.dev) |
 | `CRON_SECRET` | מומלץ | מחרוזת אקראית סודית להפעלת ה־cron (תזכורות וסיכום לובי). יוצרים ב־Vercel ומעבירים ב־Authorization: Bearer |
-| `GREEN_API_ID_INSTANCE` | אופציונלי | ל־Green-API (הודעות וואטסאפ) |
+| `GREEN_API_ID_INSTANCE` | אופציונלי | ל־Green-API (הודעות וואטסאפ) – **legacy**; לפרודקשן מומלץ Meta למטה |
 | `GREEN_API_TOKEN_INSTANCE` | אופציונלי | טוקן Green-API |
+
+### וואטסאפ – Meta Cloud API (בוט + שליחה יוצאת)
+
+נדרש ל־webhook ב־`/api/whatsapp/webhook`, לשליחת הודעות מהבוט ולשליחת התראות לצוות/שואל לפי `communication_preference` / `asker_delivery_preference`.
+
+| משתנה | חובה | תיאור |
+|--------|------|--------|
+| `META_ACCESS_TOKEN` | לשליחה | Access Token של האפליקציה / System User (עם `whatsapp_business_messaging`) |
+| `META_PHONE_NUMBER_ID` | לשליחה | Phone number ID של מספר הוואטסאפ ב־Graph API |
+| `META_APP_SECRET` | חובה ל־webhook | App Secret – לאימות חתימת `X-Hub-Signature-256` ב־POST |
+| `WHATSAPP_VERIFY_TOKEN` | חובה ל־webhook | אותה מחרוזת שהגדרת ב־Meta ב־Webhook Verify Token (ל־GET) |
+| `META_GRAPH_API_VERSION` | אופציונלי | ברירת מחדל `v20.0` ב־[`lib/whatsapp/meta.ts`](lib/whatsapp/meta.ts) |
+
+**בדיקה מהירה:** אם `META_ACCESS_TOKEN` או `META_PHONE_NUMBER_ID` חסרים – שליחת וואטסאפ תיכשל (הקוד מדווח בלוג וב־`whatsapp_outbound_messages` עם `status=error`).
+
+**תבניות (Templates):** בתוך חלון ה־24 שעות אפשר הודעות סשן חופשיות; מחוץ לחלון נדרשות הודעות מאושרות מסוג Template ב־Meta (לא ממומש אוטומטית בקוד – תלוי במדיניות השליחה שלכם).
+
+**תור `whatsapp_outbound_messages`:** כל שליחה דרך Meta נרשמת בטבלה (לוג + מפתח idempotency במקומות רלוונטיים). **אין** כרגע worker שמריץ retry אוטומטי על שורות `error` – השליחה היא ישירות ל־Graph API; ניתן להרחיב בעתיד.
 
 אחרי הוספת משתנים – **Redeploy** כדי שהשינויים ייכנסו.
 

@@ -1,8 +1,17 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { wantsEmail, wantsWhatsApp } from "@/lib/communicationPreference";
 import { sendInactivityReminder } from "@/lib/email";
 import { NextResponse } from "next/server";
 
 const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
+
+const APP_URL =
+  process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ??
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+
+function goLink(pathWithQuery: string): string {
+  return `${APP_URL}/api/go?r=${encodeURIComponent(pathWithQuery.startsWith("/") ? pathWithQuery : `/${pathWithQuery}`)}`;
+}
 
 function isAuthorized(request: Request): boolean {
   const secret = process.env.CRON_SECRET;
@@ -12,7 +21,7 @@ function isAuthorized(request: Request): boolean {
 }
 
 /**
- * GET/POST: תזכורת 5 ימים – שולח מייל למשיבים/מגיהים שמשימתם לא עודכנה 5 ימים.
+ * GET/POST: תזכורת 5 ימים – שולח מייל ו/או וואטסאפ למשיבים/מגיהים שמשימתם לא עודכנה 5 ימים.
  * להפעלה: Vercel Cron או שירות חיצוני עם CRON_SECRET ב-Authorization: Bearer <CRON_SECRET>.
  */
 export async function GET(request: Request) {
@@ -32,6 +41,7 @@ export async function POST(request: Request) {
 async function runReminders() {
   const supabase = getSupabaseAdmin();
   const cutoff = new Date(Date.now() - FIVE_DAYS_MS).toISOString();
+  const dayKey = new Date().toISOString().slice(0, 10);
 
   const { data: questions, error } = await supabase
     .from("questions")
@@ -65,31 +75,84 @@ async function runReminders() {
     }
   }
 
-  const allIds = [...respondentIds, ...proofreaderIds];
+  const allIds = [...new Set([...respondentIds, ...proofreaderIds])];
   const emailMap: Record<string, string> = {};
+  const profById = new Map<string, { communication_preference: string | null; phone: string | null }>();
+
   if (allIds.length > 0) {
     const { data: authData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
     for (const u of authData?.users ?? []) {
       if (u.email) emailMap[u.id] = u.email;
     }
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("id, communication_preference, phone")
+      .in("id", allIds);
+    for (const p of profs ?? []) {
+      profById.set(p.id as string, {
+        communication_preference: p.communication_preference as string | null,
+        phone: (p.phone as string | null) ?? null,
+      });
+    }
   }
 
   let sent = 0;
+  const { sendMetaWhatsAppTextWithLog } = await import("@/lib/whatsapp/outbound");
+
   for (const uid of respondentIds) {
-    const email = emailMap[uid];
-    if (!email) continue;
     const tasks = byRespondent.get(uid) ?? [];
     const first = tasks[0];
-    const result = await sendInactivityReminder(email, "respondent", first?.content);
-    if (result.ok) sent++;
+    const prof = profById.get(uid);
+    const comm = prof?.communication_preference ?? "email";
+
+    if (wantsEmail(comm)) {
+      const email = emailMap[uid];
+      if (email) {
+        const result = await sendInactivityReminder(email, "respondent", first?.content);
+        if (result.ok) sent++;
+      }
+    }
+    if (wantsWhatsApp(comm)) {
+      const phone = prof?.phone?.trim();
+      if (phone) {
+        const link = goLink("/respondent");
+        const preview = first?.content ? ` (שאלה: ${first.content.slice(0, 50)}…)` : "";
+        const text = `שלום,\nמשימה שהוקצתה אליך כמשיב/ה לא עודכנה מזה 5 ימים${preview}.\nכניסה למערכת: ${link}`;
+        const wa = await sendMetaWhatsAppTextWithLog(phone, text, {
+          channel_event: "cron_inactivity_reminder",
+          idempotency_key: `remind5d_${dayKey}_${uid}_respondent`,
+        });
+        if (wa.ok) sent++;
+      }
+    }
   }
+
   for (const uid of proofreaderIds) {
-    const email = emailMap[uid];
-    if (!email) continue;
     const tasks = byProofreader.get(uid) ?? [];
     const first = tasks[0];
-    const result = await sendInactivityReminder(email, "proofreader", first?.content);
-    if (result.ok) sent++;
+    const prof = profById.get(uid);
+    const comm = prof?.communication_preference ?? "email";
+
+    if (wantsEmail(comm)) {
+      const email = emailMap[uid];
+      if (email) {
+        const result = await sendInactivityReminder(email, "proofreader", first?.content);
+        if (result.ok) sent++;
+      }
+    }
+    if (wantsWhatsApp(comm)) {
+      const phone = prof?.phone?.trim();
+      if (phone) {
+        const link = goLink("/proofreader");
+        const preview = first?.content ? ` (שאלה: ${first.content.slice(0, 50)}…)` : "";
+        const text = `שלום,\nמשימה שהוקצתה אליך כמגיה/ה לא עודכנה מזה 5 ימים${preview}.\nכניסה ללובי: ${link}`;
+        const wa = await sendMetaWhatsAppTextWithLog(phone, text, {
+          channel_event: "cron_inactivity_reminder",
+          idempotency_key: `remind5d_${dayKey}_${uid}_proofreader`,
+        });
+        if (wa.ok) sent++;
+      }
+    }
   }
 
   return NextResponse.json({

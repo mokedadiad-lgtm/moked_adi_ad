@@ -1,6 +1,11 @@
 const GRAPH_API_VERSION = process.env.META_GRAPH_API_VERSION ?? "v20.0";
 
-type MetaSendResult = { ok: true; idMessage?: string } | { ok: false; error: string };
+export type MetaSendResult = { ok: true; idMessage?: string } | { ok: false; error: string };
+
+/** True when outbound WhatsApp via Meta Cloud API can be attempted (env present). */
+export function isMetaWhatsAppConfigured(): boolean {
+  return Boolean(process.env.META_ACCESS_TOKEN && process.env.META_PHONE_NUMBER_ID);
+}
 
 function requireEnv(name: string): string {
   const v = process.env[name];

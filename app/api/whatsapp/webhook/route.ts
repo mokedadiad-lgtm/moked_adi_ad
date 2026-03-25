@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { runBotFsm, type BotConversationState, type BotContext } from "@/lib/whatsapp/botFsm";
 import { sendMetaWhatsAppButtons, sendMetaWhatsAppText } from "@/lib/whatsapp/meta";
+import { logWhatsAppOutbound } from "@/lib/whatsapp/outbound";
 
 function timingSafeEqual(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);
@@ -118,15 +119,48 @@ export async function POST(request: Request) {
     }
   }
 
-  async function sendOutbound(toPhoneRaw: string, outbound: Array<{ kind: string; [k: string]: unknown }>) {
+  async function sendOutbound(
+    toPhoneRaw: string,
+    convId: string | undefined,
+    outbound: Array<{ kind: string; [k: string]: unknown }>
+  ) {
     for (const o of outbound) {
       if (o.kind === "text") {
         const text = typeof o.text === "string" ? o.text : "";
         if (!text) continue;
         try {
-          await sendMetaWhatsAppText(toPhoneRaw, text);
+          const { isMetaWhatsAppConfigured } = await import("@/lib/whatsapp/meta");
+          if (!isMetaWhatsAppConfigured()) {
+            await logWhatsAppOutbound({
+              to_phone: toPhoneRaw,
+              channel_event: "bot_reply_text",
+              conversation_id: convId,
+              status: "error",
+              error: "Meta not configured",
+              payload: { preview: text.slice(0, 400) },
+            });
+            continue;
+          }
+          const result = await sendMetaWhatsAppText(toPhoneRaw, text);
+          await logWhatsAppOutbound({
+            to_phone: toPhoneRaw,
+            channel_event: "bot_reply_text",
+            conversation_id: convId,
+            status: result.ok ? "sent" : "error",
+            error: result.ok ? null : result.error,
+            provider_message_id: result.ok ? result.idMessage : null,
+            payload: { preview: text.slice(0, 400) },
+          });
         } catch (e) {
           console.error("whatsapp webhook: send text failed", e);
+          await logWhatsAppOutbound({
+            to_phone: toPhoneRaw,
+            channel_event: "bot_reply_text",
+            conversation_id: convId,
+            status: "error",
+            error: e instanceof Error ? e.message : "send_failed",
+            payload: {},
+          });
         }
       } else if (o.kind === "buttons") {
         const bodyText = typeof o.bodyText === "string" ? o.bodyText : "";
@@ -135,9 +169,38 @@ export async function POST(request: Request) {
           : [];
         if (buttons.length === 0) continue;
         try {
-          await sendMetaWhatsAppButtons(toPhoneRaw, bodyText || "בחירה", buttons.map((b) => ({ id: (b as any).id, title: (b as any).title })));
+          const { isMetaWhatsAppConfigured } = await import("@/lib/whatsapp/meta");
+          if (!isMetaWhatsAppConfigured()) {
+            await logWhatsAppOutbound({
+              to_phone: toPhoneRaw,
+              channel_event: "bot_reply_buttons",
+              conversation_id: convId,
+              status: "error",
+              error: "Meta not configured",
+              payload: { bodyPreview: bodyText.slice(0, 200) },
+            });
+            continue;
+          }
+          const result = await sendMetaWhatsAppButtons(toPhoneRaw, bodyText || "בחירה", buttons.map((b) => ({ id: (b as any).id, title: (b as any).title })));
+          await logWhatsAppOutbound({
+            to_phone: toPhoneRaw,
+            channel_event: "bot_reply_buttons",
+            conversation_id: convId,
+            status: result.ok ? "sent" : "error",
+            error: result.ok ? null : result.error,
+            provider_message_id: result.ok ? result.idMessage : null,
+            payload: { bodyPreview: bodyText.slice(0, 200), buttonIds: buttons.map((b: any) => b.id) },
+          });
         } catch (e) {
           console.error("whatsapp webhook: send buttons failed", e);
+          await logWhatsAppOutbound({
+            to_phone: toPhoneRaw,
+            channel_event: "bot_reply_buttons",
+            conversation_id: convId,
+            status: "error",
+            error: e instanceof Error ? e.message : "send_failed",
+            payload: {},
+          });
         }
       }
     }
@@ -264,7 +327,7 @@ export async function POST(request: Request) {
       .eq("id", conversationId);
 
     // Send outbound responses via Meta
-    await sendOutbound(msg.from_phone, fsmResult.outbound as any);
+    await sendOutbound(msg.from_phone, conversationId, fsmResult.outbound as any);
   }
 
   return NextResponse.json({ ok: true });

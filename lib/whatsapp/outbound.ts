@@ -1,0 +1,81 @@
+import { getSupabaseAdmin } from "@/lib/supabase/server";
+import type { MetaSendResult } from "./meta";
+import { isMetaWhatsAppConfigured, sendMetaWhatsAppText } from "./meta";
+
+/**
+ * Audit log for WhatsApp sends. The table supports a future retry worker; today we use direct Graph API calls + logging.
+ */
+export async function logWhatsAppOutbound(params: {
+  to_phone: string;
+  channel_event: string;
+  conversation_id?: string | null;
+  idempotency_key?: string | null;
+  payload?: Record<string, unknown>;
+  provider_message_id?: string | null;
+  status: "sent" | "error";
+  error?: string | null;
+}): Promise<void> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from("whatsapp_outbound_messages").insert({
+      provider: "meta",
+      to_phone: params.to_phone,
+      channel_event: params.channel_event,
+      conversation_id: params.conversation_id ?? null,
+      idempotency_key: params.idempotency_key ?? null,
+      payload: (params.payload ?? {}) as object,
+      provider_message_id: params.provider_message_id ?? null,
+      status: params.status,
+      error: params.error ?? null,
+      retry_count: 0,
+      last_attempt_at: new Date().toISOString(),
+    });
+    if (error) {
+      const msg = error.message?.toLowerCase() ?? "";
+      if (!msg.includes("duplicate") && !msg.includes("unique")) {
+        console.error("logWhatsAppOutbound insert:", error);
+      }
+    }
+  } catch (e) {
+    console.error("logWhatsAppOutbound:", e);
+  }
+}
+
+/**
+ * Send a text message via Meta and persist a row in `whatsapp_outbound_messages` (sent/error).
+ */
+export async function sendMetaWhatsAppTextWithLog(
+  toPhoneRaw: string,
+  text: string,
+  opts: {
+    channel_event: string;
+    conversation_id?: string | null;
+    idempotency_key?: string | null;
+  }
+): Promise<MetaSendResult> {
+  if (!isMetaWhatsAppConfigured()) {
+    await logWhatsAppOutbound({
+      to_phone: toPhoneRaw,
+      channel_event: opts.channel_event,
+      conversation_id: opts.conversation_id,
+      idempotency_key: opts.idempotency_key,
+      payload: { preview: text.slice(0, 400) },
+      status: "error",
+      error: "Meta WhatsApp not configured (META_ACCESS_TOKEN / META_PHONE_NUMBER_ID)",
+    });
+    return { ok: false, error: "Meta WhatsApp not configured" };
+  }
+
+  const result = await sendMetaWhatsAppText(toPhoneRaw, text);
+  await logWhatsAppOutbound({
+    to_phone: toPhoneRaw,
+    channel_event: opts.channel_event,
+    conversation_id: opts.conversation_id,
+    idempotency_key: opts.idempotency_key,
+    payload: { preview: text.slice(0, 400) },
+    provider_message_id: result.ok ? result.idMessage : null,
+    status: result.ok ? "sent" : "error",
+    error: result.ok ? null : result.error,
+  });
+  return result;
+}

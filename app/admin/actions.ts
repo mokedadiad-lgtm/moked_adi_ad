@@ -6,6 +6,7 @@ import { sendAssignmentLinkToRespondent, sendInactivityReminder, sendManualRemin
 import { notifyLobbyNewQuestion, notifyLinguisticNewQuestion } from "@/app/actions/notifications";
 import type { QuestionStage } from "@/lib/types";
 import { ADMIN_TABLE_STAGES } from "@/lib/types";
+import { getActiveQuestions } from "@/lib/admin-active-questions";
 
 function revalidateAdminTopics() {
   revalidatePath("/admin/topics");
@@ -14,6 +15,23 @@ function revalidateAdminTopics() {
 
 function safeError(message: string): string {
   return message || "שגיאה לא צפויה";
+}
+
+/** כפילות מינימלית מ־response-text — נשמר כאן כדי שלא ייבא ה־actions bundle מודולים מיותרים */
+function sanitizeLinguisticSignatureStored(html: unknown): string {
+  const s = typeof html === "string" ? html : html == null ? "" : String(html);
+  if (!s.trim()) return "";
+  return s
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    .replace(/<style\b[\s\S]*?<\/style>/gi, "")
+    .replace(/<(\/?)([a-z0-9]+)(\s[^>]*)?>/gi, (_, slash: string, tag: string) => {
+      const t = tag.toLowerCase();
+      const allowed = new Set(["b", "strong", "br", "div"]);
+      if (t === "br" && slash) return "";
+      if (t === "br") return "<br>";
+      if (!allowed.has(t)) return "";
+      return `<${slash}${t}>`;
+    });
 }
 
 export interface RespondentOption {
@@ -1356,28 +1374,34 @@ export interface DelayedQuestionItem {
   short_id: string | null;
   title: string | null;
   stage: QuestionStage;
+  /** כשהשורה מגיעה מ־question_answers — ל־key ייחודי ברשימה */
+  answer_id?: string | null;
 }
 
+/** עיכובים: אותה לוגיקת סטטוס כמו טבלת לוח הבקרה (כולל question_answers), לפי זמן עדכון הרלוונטי */
 export async function getDelayedQuestions(): Promise<DelayedQuestionItem[]> {
   try {
-    const supabase = getSupabaseAdmin();
     const fiveDaysAgo = new Date();
     fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
-    const iso = fiveDaysAgo.toISOString();
-    const { data, error } = await supabase
-      .from("questions")
-      .select("id, short_id, title, stage")
-      .in("stage", ADMIN_TABLE_STAGES)
-      .is("deleted_at", null)
-      .lt("updated_at", iso)
-      .order("updated_at", { ascending: true });
-    if (error) return [];
-    return (data ?? []).map((r) => ({
-      id: r.id,
-      short_id: r.short_id ?? null,
-      title: r.title ?? null,
-      stage: r.stage as QuestionStage,
-    }));
+    const rows = await getActiveQuestions();
+    return rows
+      .filter((r) => {
+        const t = r.delay_source_updated_at;
+        if (!t) return false;
+        return new Date(t) < fiveDaysAgo;
+      })
+      .sort(
+        (a, b) =>
+          new Date(a.delay_source_updated_at ?? 0).getTime() -
+          new Date(b.delay_source_updated_at ?? 0).getTime()
+      )
+      .map((r) => ({
+        id: r.id,
+        short_id: r.short_id ?? null,
+        title: r.title ?? null,
+        stage: r.stage,
+        answer_id: r.answer_id ?? null,
+      }));
   } catch {
     return [];
   }
@@ -1692,24 +1716,46 @@ export async function getAnalyticsChartData(filters: AnalyticsFilters = {}): Pro
 export async function saveLinguisticResponse(
   questionId: string,
   answerId: string | null,
-  responseText: string
+  responseText: string,
+  linguisticSignature?: string | null
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const supabase = getSupabaseAdmin();
-  const trimmed = responseText.trim();
-  if (answerId) {
-    const { error } = await supabase
-      .from("question_answers")
-      .update({ response_text: trimmed || null, updated_at: new Date().toISOString() })
-      .eq("id", answerId);
-    if (error) return { ok: false, error: error.message };
-  } else {
-    const { error } = await supabase
+  try {
+    const supabase = getSupabaseAdmin();
+    const trimmed = String(responseText ?? "").trim();
+    if (answerId) {
+      const { error } = await supabase
+        .from("question_answers")
+        .update({ response_text: trimmed || null, updated_at: new Date().toISOString() })
+        .eq("id", answerId);
+      if (error) return { ok: false, error: error.message };
+    } else {
+      const { error } = await supabase
+        .from("questions")
+        .update({ response_text: trimmed || null, updated_at: new Date().toISOString() })
+        .eq("id", questionId);
+      if (error) return { ok: false, error: error.message };
+    }
+    const sigTrim = sanitizeLinguisticSignatureStored(linguisticSignature).trim();
+    const { error: sigError } = await supabase
       .from("questions")
-      .update({ response_text: trimmed || null, updated_at: new Date().toISOString() })
+      .update({ linguistic_signature: sigTrim || null, updated_at: new Date().toISOString() })
       .eq("id", questionId);
-    if (error) return { ok: false, error: error.message };
+    if (sigError) {
+      const msg = (sigError.message ?? "").toLowerCase();
+      if (msg.includes("linguistic_signature")) {
+        return {
+          ok: false,
+          error:
+            "עמודת החתימה חסרה במסד הנתונים. הרץ את המיגרציה (linguistic_signature) ב-Supabase.",
+        };
+      }
+      return { ok: false, error: sigError.message };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error("saveLinguisticResponse", e);
+    return { ok: false, error: e instanceof Error ? e.message : "שגיאה בשמירה" };
   }
-  return { ok: true };
 }
 
 // =========================
@@ -1898,6 +1944,7 @@ export async function approveQuestionIntakeDraft(
         asker_age: draft.asker_age != null ? String(draft.asker_age) : null,
         response_type: draft.response_type ?? "short",
         publication_consent: draft.publication_consent ?? "none",
+        asker_delivery_preference: draft.delivery_preference ?? null,
         terms_accepted: true,
         updated_at: new Date().toISOString(),
       })
@@ -1963,7 +2010,7 @@ export async function approveQuestionIntakeDraft(
     // Notify asker (if they requested WhatsApp)
     try {
       if (draft.delivery_preference === "whatsapp" || draft.delivery_preference === "both") {
-        const { sendMetaWhatsAppText } = await import("@/lib/whatsapp/meta");
+        const { sendMetaWhatsAppTextWithLog } = await import("@/lib/whatsapp/outbound");
         const msg = [
           "הפנייה שלך אושרה.",
           shortId ? `מספר פנייה: ${shortId}` : "",
@@ -1980,7 +2027,10 @@ export async function approveQuestionIntakeDraft(
         ]
           .filter(Boolean)
           .join("\n");
-        await sendMetaWhatsAppText(draft.phone, msg);
+        await sendMetaWhatsAppTextWithLog(draft.phone, msg, {
+          channel_event: "draft_approved_ack",
+          idempotency_key: `draft_approved_${draftId}`,
+        });
       }
     } catch (e) {
       console.error("approveQuestionIntakeDraft: failed sending ack", e);
