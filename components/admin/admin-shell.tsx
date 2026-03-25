@@ -122,7 +122,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-background" dir="rtl">
       <InactivityLogout />
-      <div className="fixed right-0 top-4 z-[35] flex w-64 justify-center">
+      {/* לוגו עגול: רק בדסקטופ — במובייל הלוגו מופיע בתוך הסרגל כשהוא פתוח */}
+      <div className="fixed right-0 top-4 z-[35] hidden w-64 justify-center md:flex">
         <Link
           href="/"
           className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-border bg-card shadow-md ring-1 ring-border/50 md:h-[4.75rem] md:w-[4.75rem]"
@@ -140,17 +141,35 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       </div>
       {hasSidebar && (
         <>
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(true)}
+          {/* שורת כותרת במובייל ברוחב המלא — התוכן מתחיל מתחתיה, בלי לצמצם את רוחב כל העמוד */}
+          <div
             className={cn(
-              "fixed end-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-card text-foreground shadow-sm transition-opacity hover:bg-muted md:hidden",
-              sidebarOpen && "pointer-events-none opacity-0"
+              "fixed inset-x-0 top-0 z-40 h-14 border-b border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden",
+              sidebarOpen && "hidden"
             )}
-            aria-label="פתח תפריט"
           >
-            <HamburgerIcon />
-          </button>
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="absolute start-4 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-card text-foreground shadow-sm hover:bg-muted"
+              aria-label="פתח תפריט"
+            >
+              <HamburgerIcon />
+            </button>
+            <Link
+              href="/"
+              className="absolute end-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm"
+              aria-label="אסק מי פלוס"
+            >
+              <Image
+                src="/brand/logo-full.png"
+                alt=""
+                width={40}
+                height={40}
+                className="h-full w-full object-contain object-center p-1"
+              />
+            </Link>
+          </div>
           <button
             type="button"
             aria-hidden
@@ -163,11 +182,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           />
           <aside
             className={cn(
-              "fixed right-0 top-0 z-[25] flex h-full min-h-dvh w-64 flex-col border-l border-primary/15 bg-[#1a1a35] pt-[5.5rem] shadow-xl transition-transform duration-200 ease-out md:translate-x-0 md:transition-none",
+              "fixed right-0 top-0 z-[25] flex h-full min-h-dvh w-64 flex-col border-l border-primary/15 bg-[#1a1a35] pt-0 shadow-xl transition-transform duration-200 ease-out md:pt-[5.5rem] md:translate-x-0 md:transition-none",
               sidebarOpen ? "translate-x-0" : "translate-x-full md:translate-x-0"
             )}
           >
-            <div className="relative flex flex-col items-center border-b border-white/10 px-4 pb-4 pt-2 text-center md:px-5">
+            <div className="relative flex flex-col items-center border-b border-white/10 px-4 pb-4 pt-12 text-center md:px-5 md:pt-2">
               <button
                 type="button"
                 onClick={closeSidebar}
@@ -176,6 +195,20 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               >
                 <CloseIcon />
               </button>
+              <Link
+                href="/"
+                className="mb-2 flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/30 bg-white shadow-md md:hidden"
+                aria-label="אסק מי פלוס"
+                onClick={closeSidebar}
+              >
+                <Image
+                  src="/brand/logo-full.png"
+                  alt=""
+                  width={80}
+                  height={80}
+                  className="h-full w-full object-contain p-1.5"
+                />
+              </Link>
               <h2 className="text-lg font-bold text-white">אסק מי פלוס</h2>
               <p className="mt-0.5 text-xs text-[#a8a8c4]">ממשק מנהל</p>
             </div>
@@ -185,10 +218,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       )}
       <main
         className={cn(
-          "font-sans min-h-0 flex-1 min-w-0 pb-8 pt-4",
+          "font-sans min-h-0 flex-1 min-w-0 pb-8",
           hasSidebar
-            ? "px-4 md:px-8 md:pt-6 md:pr-64"
-            : "px-4 md:px-8 md:pt-6"
+            ? // במובייל: רק ריווח עליון לגובה שורת ההמבורגר — הרוחב המלא לתוכן (px-4) כמו קודם
+              "px-4 pt-14 md:px-8 md:pt-6 md:pr-64"
+            : "px-4 pt-4 md:px-8 md:pt-6"
         )}
       >
         {showSidebar === false && pathname?.startsWith("/admin") && (

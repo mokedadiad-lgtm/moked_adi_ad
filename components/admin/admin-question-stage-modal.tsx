@@ -37,6 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { PageLoadingSpinner } from "@/components/ui/page-loading";
 import type { QuestionRow, QuestionStage } from "@/lib/types";
 import { STAGE_LABELS, STAGE_ORDER } from "@/lib/types";
 import { PdfViewModal } from "@/components/admin/pdf-view-modal";
@@ -1113,7 +1114,10 @@ export function AdminQuestionStageModal({
                 {userGender === "F" ? "בחרי אילו משיבים משויכים לנושא זה" : "בחר אילו משיבים משויכים לנושא זה"}
               </p>
               {assignTopicLoading ? (
-                <p className="text-sm text-slate-500 text-right">טוען...</p>
+                <div className="flex min-h-[6rem] items-center justify-center py-4" role="status" aria-live="polite">
+                  <span className="sr-only">טוען…</span>
+                  <PageLoadingSpinner />
+                </div>
               ) : (
                 <ul className="flex flex-col gap-1 rounded-xl border border-card-border bg-slate-50 p-3 list-none max-h-48 overflow-y-auto">
                   {assignTopicRespondentsList.map((r) => (

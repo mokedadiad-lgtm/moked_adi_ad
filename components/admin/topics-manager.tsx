@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PageLoadingSpinner } from "@/components/ui/page-loading";
 import {
   Select,
   SelectContent,
@@ -575,7 +576,10 @@ export function TopicsManager({
                 {userGender === "F" ? "בחרי אילו משיבים משויכים לנושא זה" : "בחר אילו משיבים משויכים לנושא זה"}
               </Label>
               {assignLoading ? (
-                <p className="text-sm text-slate-500 text-right">טוען...</p>
+                <div className="flex min-h-[6rem] items-center justify-center py-4" role="status" aria-live="polite">
+                  <span className="sr-only">טוען…</span>
+                  <PageLoadingSpinner />
+                </div>
               ) : (
                 <ul className="flex flex-col gap-1 rounded-xl border border-card-border bg-slate-50 p-3 list-none max-h-48 overflow-y-auto">
                   {assignRespondentsList.map((r) => (

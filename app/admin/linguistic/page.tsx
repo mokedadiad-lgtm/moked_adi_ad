@@ -1,6 +1,7 @@
 import { LinguisticEditorView } from "@/components/admin/linguistic-editor-view";
 import { PageHeader } from "@/components/page-header";
 import { RoleSwitcher } from "@/components/role-switcher";
+import { PageLoadingFallback } from "@/components/ui/page-loading";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { QuestionRow } from "@/lib/types";
 import { Suspense } from "react";
@@ -226,7 +227,7 @@ export default async function LinguisticEditorPage() {
       >
         <RoleSwitcher className="shrink-0" />
       </PageHeader>
-      <Suspense fallback={<div className="text-secondary py-8">טוען…</div>}>
+      <Suspense fallback={<PageLoadingFallback minHeight="min-h-[12rem]" />}>
         <LinguisticEditorView questions={questions} />
       </Suspense>
     </div>

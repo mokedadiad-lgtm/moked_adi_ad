@@ -4,6 +4,7 @@ import type { CategoryOption, ProofreaderTypeOption, TeamProfileRow, TopicOption
 import { seedDefaultCategories } from "@/app/admin/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PageLoadingSpinner } from "@/components/ui/page-loading";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -67,7 +68,14 @@ export function TeamTable({ profiles, categories, proofreaderTypes, topics }: Te
             onClick={handleSeedCategories}
             disabled={seeding}
           >
-            {seeding ? "טוען…" : "טען קטגוריות ברירת מחדל"}
+            {seeding ? (
+              <span className="inline-flex items-center gap-2" role="status" aria-live="polite">
+                <PageLoadingSpinner size="sm" />
+                <span>טוען…</span>
+              </span>
+            ) : (
+              "טען קטגוריות ברירת מחדל"
+            )}
           </Button>
         </div>
       )}

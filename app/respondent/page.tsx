@@ -1,4 +1,5 @@
 import { RespondentDashboard } from "@/components/respondent/respondent-dashboard";
+import { PageLoadingFallback } from "@/components/ui/page-loading";
 import { Suspense } from "react";
 
 export const metadata = {
@@ -9,7 +10,7 @@ export const metadata = {
 export default function RespondentPage() {
   return (
     <div className="min-h-screen bg-background" dir="rtl">
-      <Suspense fallback={<div className="flex min-h-screen items-center justify-center text-slate-500">טוען…</div>}>
+      <Suspense fallback={<PageLoadingFallback minHeight="min-h-screen" />}>
         <RespondentDashboard />
       </Suspense>
     </div>

@@ -4,6 +4,7 @@ import { responseToPlainText } from "@/lib/response-text";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageLoadingSpinner } from "@/components/ui/page-loading";
 import { PageHeader } from "@/components/page-header";
 import { RoleSwitcher, useHasSidebar } from "@/components/role-switcher";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -217,7 +218,10 @@ export function ProofreaderDashboard() {
 
       <main className="mx-auto max-w-4xl px-4 py-6 space-y-8">
         {loading ? (
-          <p className="text-start text-secondary">טוען…</p>
+          <div className="flex min-h-[12rem] items-center justify-start" role="status" aria-live="polite">
+            <span className="sr-only">טוען…</span>
+            <PageLoadingSpinner />
+          </div>
         ) : (
           <>
             {mine.length > 0 && (

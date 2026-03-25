@@ -9,13 +9,13 @@ const heebo = Heebo({
 });
 
 export const metadata: Metadata = {
-  title: "מערכת שאלות ותשובות",
+  title: "אסק מי פלוס",
   description: "מערכת ניהול שאלות אנונימיות",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "אסק מי+",
+    title: "אסק מי פלוס",
   },
   icons: {
     apple: "/icon-192.png",

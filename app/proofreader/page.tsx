@@ -1,4 +1,5 @@
 import { ProofreaderDashboard } from "@/components/proofreader/proofreader-dashboard";
+import { PageLoadingFallback } from "@/components/ui/page-loading";
 import { Suspense } from "react";
 
 export const metadata = {
@@ -9,7 +10,7 @@ export const metadata = {
 export default function ProofreaderPage() {
   return (
     <div className="min-h-screen bg-background" dir="rtl">
-      <Suspense fallback={<div className="flex min-h-[12rem] items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-primary" /></div>}>
+      <Suspense fallback={<PageLoadingFallback />}>
         <ProofreaderDashboard />
       </Suspense>
     </div>

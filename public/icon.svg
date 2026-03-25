@@ -1,37 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- מקור עזר לפאביקון; אייקוני PWA נוצרים מ־scripts/generate-pwa-icons.mjs -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <rect width="512" height="512" rx="96" fill="#2C2C54"/>
-  <!-- House outline (magenta line-art) -->
+  <rect width="512" height="512" rx="96" fill="#faf7f9"/>
+  <text x="256" y="420" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="40" font-weight="600" fill="#1a1a35">אסק מי פלוס</text>
+  <!-- סמל בית מקוצר — התמונה המלאה ב־PNG מ־generate-pwa-icons -->
   <path
-    d="M256 108 L404 228 V404 H108 V228 Z"
+    d="M256 108 L404 228 V380 H108 V228 Z"
     stroke="#D81B60"
-    stroke-width="18"
+    stroke-width="16"
     stroke-linejoin="round"
     stroke-linecap="round"
     fill="none"
   />
-  <!-- Wine glasses (slate fill) -->
-  <path
-    d="M176 268 L196 352 L236 352 L216 268 H176Z"
-    fill="#3F3D56"
-    stroke="#2C2C54"
-    stroke-width="4"
-  />
-  <path d="M196 352 L196 372 H236 V352" fill="#3F3D56"/>
-  <path
-    d="M276 268 L296 352 L336 352 L316 268 H276Z"
-    fill="#3F3D56"
-    stroke="#2C2C54"
-    stroke-width="4"
-  />
-  <path d="M296 352 L296 372 H336V352" fill="#3F3D56"/>
-  <!-- Small question accent above left glass -->
-  <path
-    d="M208 248 Q208 232 220 232 Q232 232 232 246"
-    stroke="#D81B60"
-    stroke-width="6"
-    stroke-linecap="round"
-    fill="none"
-  />
-  <circle cx="220" cy="258" r="4" fill="#D81B60"/>
 </svg>

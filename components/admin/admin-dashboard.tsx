@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { PageLoadingSpinner } from "@/components/ui/page-loading";
 import {
   Table,
   TableBody,
@@ -515,7 +516,10 @@ export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpe
           )}
           <div className="min-h-0 w-full flex-1 overflow-y-auto">
             {emailModalLoading ? (
-              <p className="px-4 py-4 text-center text-sm text-slate-500 sm:px-6">טוען...</p>
+              <div className="flex justify-center px-4 py-8 sm:px-6" role="status" aria-live="polite">
+                <span className="sr-only">טוען…</span>
+                <PageLoadingSpinner />
+              </div>
             ) : (
               <ul className="space-y-2 px-4 py-2 sm:px-6">
                 {emailModalList.map((item) => (
