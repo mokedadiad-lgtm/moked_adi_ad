@@ -69,6 +69,7 @@
 | `WHATSAPP_TEMPLATE_ASKER_PDF_SENT` | שם תבנית — PDF לשואל |
 | `WHATSAPP_TEMPLATE_CRON_LOBBY_SUMMARY` | שם תבנית — סיכום לובי יומי (cron) |
 | `WHATSAPP_TEMPLATE_CRON_INACTIVITY_REMINDER` | שם תבנית — תזכורת חוסר פעילות 5 ימים |
+| `WHATSAPP_TEMPLATE_TEAM_OPENING` | שם תבנית — פתיחת שיחה יזומה לצוות מתוך Inbox |
 
 **גוף התבנית ב־Manager (חייב להתאים לפרמטרים בקוד):**
 
@@ -141,6 +142,12 @@
 משימה שהוקצתה אליך כ{{2}} לא עודכנה מזה 5 ימים.
 לחץ/י על הכפתור כדי להיכנס.
 לטיפולך.
+```
+
+7. **team_opening_v1**
+
+```text
+שלום, מה נשמע?
 ```
 
 #### הגדרת כפתור URL דינמי ב־WhatsApp Manager

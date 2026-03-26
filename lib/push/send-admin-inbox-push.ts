@@ -94,3 +94,87 @@ export async function sendAdminInboxPush(payload: InboxPushPayload = {}): Promis
     })
   );
 }
+
+export async function sendInboxPushToProfile(
+  profileId: string,
+  payload: InboxPushPayload = {},
+  opts: { ignoreMute?: boolean } = {}
+): Promise<void> {
+  if (!configureWebPush()) return;
+
+  const supabase = getSupabaseAdmin();
+  const { data: rows, error } = await supabase
+    .from("push_subscriptions")
+    .select(`
+      id,
+      endpoint,
+      p256dh,
+      auth,
+      profiles ( is_admin, is_technical_lead, push_notifications_muted_until, push_notifications_muted_forever )
+    `)
+    .eq("profile_id", profileId);
+
+  if (error) {
+    console.error("[sendInboxPushToProfile] query failed", error);
+    return;
+  }
+
+  type Row = {
+    id: string;
+    endpoint: string;
+    p256dh: string;
+    auth: string;
+    profiles: {
+      is_admin?: boolean | null;
+      is_technical_lead?: boolean | null;
+      push_notifications_muted_until?: string | null;
+      push_notifications_muted_forever?: boolean | null;
+    } | null;
+  };
+
+  const now = Date.now();
+  const ignoreMute = opts.ignoreMute === true;
+  const list = ((rows ?? []) as Row[]).filter((r) => {
+    const raw = r.profiles;
+    const p = Array.isArray(raw) ? raw[0] : raw;
+    if (!(p?.is_admin === true || p?.is_technical_lead === true)) return false;
+    if (!ignoreMute) {
+      if (p.push_notifications_muted_forever === true) return false;
+      const muted = p.push_notifications_muted_until;
+      if (muted && new Date(muted).getTime() > now) return false;
+    }
+    return true;
+  });
+
+  if (list.length === 0) return;
+
+  const body = JSON.stringify({
+    title: payload.title ?? "דואר נכנס WhatsApp",
+    body: payload.body ?? "התקבלה הודעה חדשה",
+    url: payload.url ?? "/admin/whatsapp-inbox",
+  });
+
+  const subscription = (row: (typeof list)[0]) =>
+    ({
+      endpoint: row.endpoint,
+      keys: { p256dh: row.p256dh, auth: row.auth },
+    }) as webpush.PushSubscription;
+
+  await Promise.allSettled(
+    list.map(async (row) => {
+      try {
+        await webpush.sendNotification(subscription(row), body, {
+          TTL: 120,
+          urgency: "high",
+        });
+      } catch (e: unknown) {
+        const status = (e as { statusCode?: number })?.statusCode;
+        if (status === 404 || status === 410) {
+          await supabase.from("push_subscriptions").delete().eq("id", row.id);
+        } else {
+          console.error("[sendInboxPushToProfile] send failed", row.id, e);
+        }
+      }
+    })
+  );
+}

@@ -9,6 +9,7 @@ export const WHATSAPP_TEMPLATE_ENV_KEYS = {
   asker_pdf_sent: "WHATSAPP_TEMPLATE_ASKER_PDF_SENT",
   cron_lobby_summary: "WHATSAPP_TEMPLATE_CRON_LOBBY_SUMMARY",
   cron_inactivity_reminder: "WHATSAPP_TEMPLATE_CRON_INACTIVITY_REMINDER",
+  team_opening: "WHATSAPP_TEMPLATE_TEAM_OPENING",
 } as const;
 
 export type WhatsAppInitiatedTemplateKey = keyof typeof WHATSAPP_TEMPLATE_ENV_KEYS;

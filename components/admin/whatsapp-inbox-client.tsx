@@ -14,7 +14,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { getQuestionIntakeDraftDetails, getWaitingQuestionIntakeDrafts, updateQuestionIntakeDraft, approveQuestionIntakeDraft, type DraftStatus, type QuestionIntakeDraftItem, type QuestionIntakeDraftDetails } from "@/app/admin/actions";
+import {
+  getQuestionIntakeDraftDetails,
+  getWaitingQuestionIntakeDrafts,
+  updateQuestionIntakeDraft,
+  approveQuestionIntakeDraft,
+  discardQuestionIntakeDraft,
+  type DraftStatus,
+  type QuestionIntakeDraftItem,
+  type QuestionIntakeDraftDetails,
+} from "@/app/admin/actions";
 
 const GENDER_LABEL: Record<string, string> = { M: "זכר", F: "נקבה" };
 const RESPONSE_LABEL: Record<string, string> = { short: "קצר ולעניין", detailed: "מורחב" };
@@ -51,6 +60,7 @@ export function WhatsappInboxClient({ initialDrafts }: { initialDrafts: Question
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [saving, setSaving] = useState(false);
   const [approvePending, setApprovePending] = useState(false);
+  const [discardPending, setDiscardPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refreshList = async () => {
@@ -130,6 +140,24 @@ export function WhatsappInboxClient({ initialDrafts }: { initialDrafts: Question
     }
   };
 
+  const handleDiscard = async () => {
+    if (!details) return;
+    const ok = window.confirm("להשליך את הטיוטה לאשפה?");
+    if (!ok) return;
+    setDiscardPending(true);
+    setError(null);
+    try {
+      const res = await discardQuestionIntakeDraft(details.id);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      router.push("/admin/trash");
+    } finally {
+      setDiscardPending(false);
+    }
+  };
+
   const updateDetailsField = <K extends keyof QuestionIntakeDraftDetails>(key: K, value: QuestionIntakeDraftDetails[K]) => {
     setDetails((prev) => (prev ? { ...prev, [key]: value } : prev));
   };
@@ -182,6 +210,16 @@ export function WhatsappInboxClient({ initialDrafts }: { initialDrafts: Question
                         </Button>
                         <Button type="button" size="sm" onClick={() => void handleApprove()} disabled={approvePending}>
                           {approvePending ? "מאשר…" : "אישור"}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => void handleDiscard()}
+                          disabled={discardPending || saving || approvePending}
+                          className="hidden sm:inline-flex"
+                        >
+                          {discardPending ? "שולך לאשפה…" : "השלך"}
                         </Button>
                       </div>
                     </div>

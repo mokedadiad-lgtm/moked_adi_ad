@@ -365,7 +365,10 @@ export function AdminNav({ delayedQuestions = [], onNavigate }: AdminNavProps = 
       {sections.map(([sectionId, items]) => {
         const isOpen = openSections[sectionId] === true;
         return (
-          <div key={sectionId} className="rounded-lg border border-white/5 bg-black/10">
+          <div
+            key={sectionId}
+            className="rounded-lg border border-slate-200/90 bg-white/80 shadow-sm md:border-white/5 md:bg-black/10 md:shadow-none"
+          >
             <button
               type="button"
               aria-expanded={isOpen}
@@ -375,15 +378,18 @@ export function AdminNav({ delayedQuestions = [], onNavigate }: AdminNavProps = 
                   [sectionId]: !isOpen,
                 }))
               }
-              className="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2.5 text-start text-xs font-semibold text-slate-300 transition-colors hover:bg-white/5"
+              className="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2.5 text-start text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 md:text-slate-300 md:hover:bg-white/5"
             >
               <span>{SECTION_TITLES[sectionId]}</span>
               <ChevronDownIcon
-                className={cn("shrink-0 text-slate-500 transition-transform duration-200", isOpen && "rotate-180")}
+                className={cn(
+                  "shrink-0 text-slate-500 transition-transform duration-200 md:text-slate-500",
+                  isOpen && "rotate-180"
+                )}
               />
             </button>
             {isOpen && (
-              <div className="flex flex-col gap-0.5 border-t border-white/5 px-1.5 pb-2 pt-1">
+              <div className="flex flex-col gap-0.5 border-t border-slate-200/80 px-1.5 pb-2 pt-1 md:border-white/5">
                 {items.map((item) => {
                   const active = pathname === item.href;
                   return (
@@ -394,8 +400,8 @@ export function AdminNav({ delayedQuestions = [], onNavigate }: AdminNavProps = 
                       className={cn(
                         "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
                         active
-                          ? "bg-primary/30 font-semibold text-white"
-                          : "text-slate-300 hover:bg-white/10 hover:text-white"
+                          ? "bg-primary/15 font-semibold text-primary md:bg-primary/30 md:text-white"
+                          : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 md:text-slate-300 md:hover:bg-white/10 md:hover:text-white"
                       )}
                     >
                       <item.icon className="h-[18px] w-[18px] shrink-0 opacity-90" />
@@ -409,30 +415,32 @@ export function AdminNav({ delayedQuestions = [], onNavigate }: AdminNavProps = 
         );
       })}
       {delayedQuestions.length > 0 && (
-        <div className="mt-4 border-t border-white/15 pt-3">
-          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-slate-400">עיכובים (5+ ימים)</p>
-          <ul className="scrollbar-sidebar-muted flex max-h-40 flex-col gap-1 overflow-y-auto">
+        <div className="mt-4 border-t border-slate-200/90 pt-3 md:border-white/15">
+          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-slate-600 md:text-slate-400">
+            עיכובים (5+ ימים)
+          </p>
+          <ul className="scrollbar-sidebar-nav flex max-h-40 flex-col gap-1 overflow-y-auto">
             {delayedQuestions.map((q) => (
               <li key={q.answer_id ? `${q.id}-${q.answer_id}` : q.id}>
                 <button
                   type="button"
                   onClick={() => openDelayedInDashboard(q.id)}
-                  className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-start text-xs text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+                  className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-start text-xs text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 md:text-slate-300 md:hover:bg-white/10 md:hover:text-white"
                 >
                   <span className="font-medium">{q.short_id ?? q.id.slice(0, 8)}</span>
-                  <span className="line-clamp-1 text-slate-400">{q.title || "—"}</span>
-                  <span className="text-[10px] text-amber-400/90">{STAGE_LABELS[q.stage]}</span>
+                  <span className="line-clamp-1 text-slate-500 md:text-slate-400">{q.title || "—"}</span>
+                  <span className="text-[10px] text-amber-700 md:text-amber-400/90">{STAGE_LABELS[q.stage]}</span>
                 </button>
               </li>
             ))}
           </ul>
         </div>
       )}
-      <div className="mt-auto border-t border-white/15 pt-3">
+      <div className="mt-auto border-t border-slate-200/90 pt-3 md:border-white/15">
         <button
           type="button"
           onClick={handleLogout}
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-200"
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 md:text-slate-400 md:hover:bg-white/10 md:hover:text-slate-200"
         >
           <LogoutIcon className="shrink-0" />
           יציאה

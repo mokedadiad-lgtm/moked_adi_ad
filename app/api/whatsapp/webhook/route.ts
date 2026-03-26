@@ -2,7 +2,8 @@ import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { runBotFsm, type BotConversationState, type BotContext } from "@/lib/whatsapp/botFsm";
-import { sendMetaWhatsAppButtons, sendMetaWhatsAppText } from "@/lib/whatsapp/meta";
+import { classifyConversationKind } from "@/lib/whatsapp/inboxKind";
+import { normalizeMetaPhone, sendMetaWhatsAppButtons, sendMetaWhatsAppText } from "@/lib/whatsapp/meta";
 import { logWhatsAppOutbound } from "@/lib/whatsapp/outbound";
 
 function timingSafeEqual(a: string, b: string): boolean {
@@ -68,6 +69,13 @@ type MetaWebhookPayload = {
   }>;
 };
 
+function normalizedPhoneKey(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const n = normalizeMetaPhone(raw);
+  if (n) return n;
+  return raw.replace(/\D/g, "");
+}
+
 export async function POST(request: Request) {
   const rawBody = await request.text();
   const sig = request.headers.get("x-hub-signature-256");
@@ -84,6 +92,19 @@ export async function POST(request: Request) {
 
   const supabase = getSupabaseAdmin();
   const nowIso = new Date().toISOString();
+  const teamPhoneSet = new Set<string>();
+  try {
+    const { data: teamProfiles } = await supabase
+      .from("profiles")
+      .select("phone")
+      .or("is_admin.eq.true,is_technical_lead.eq.true,is_respondent.eq.true,is_proofreader.eq.true,is_linguistic_editor.eq.true");
+    for (const p of teamProfiles ?? []) {
+      const k = normalizedPhoneKey((p as { phone?: string | null }).phone ?? null);
+      if (k) teamPhoneSet.add(k);
+    }
+  } catch (e) {
+    console.error("whatsapp webhook: team phone preload failed", e);
+  }
 
   const messages: Array<{
     provider_message_id: string;
@@ -211,7 +232,7 @@ export async function POST(request: Request) {
     // Find or create conversation by phone
     const { data: conv, error: convErr } = await supabase
       .from("whatsapp_conversations")
-      .select("id, unread_count, mode, state, context")
+      .select("id, unread_count, mode, state, context, inbox_kind")
       .eq("phone", msg.from_phone)
       .maybeSingle();
     if (convErr) {
@@ -219,13 +240,21 @@ export async function POST(request: Request) {
       continue;
     }
 
+    const isTeam = teamPhoneSet.has(normalizedPhoneKey(msg.from_phone));
+    const modeBefore = ((conv as any)?.mode ?? "bot") as "bot" | "human";
+    const { mode: conversationMode, inboxKind } = classifyConversationKind({
+      isTeam,
+      existingMode: modeBefore,
+    });
+
     let conversationId = conv?.id as string | undefined;
     if (!conversationId) {
       const { data: created, error: createErr } = await supabase
         .from("whatsapp_conversations")
         .insert({
           phone: msg.from_phone,
-          mode: "bot",
+          mode: conversationMode,
+          inbox_kind: inboxKind,
           state: "start",
           context: {},
           last_inbound_at: nowIso,
@@ -239,11 +268,14 @@ export async function POST(request: Request) {
       }
       conversationId = created.id as string;
     } else {
+      // Unread is one "needs attention" unit per conversation (not per inbound message).
       await supabase
         .from("whatsapp_conversations")
         .update({
+          mode: conversationMode,
+          inbox_kind: inboxKind,
           last_inbound_at: nowIso,
-          unread_count: ((conv?.unread_count as number | null) ?? 0) + 1,
+          unread_count: 1,
           updated_at: nowIso,
         })
         .eq("id", conversationId);
@@ -274,19 +306,19 @@ export async function POST(request: Request) {
     const preview =
       (msg.text_body && msg.text_body.trim().slice(0, 120)) ||
       (msg.message_type === "button" ? "לחיצה על כפתור" : "הודעה חדשה");
+    const inboxKindLabel =
+      inboxKind === "team" ? "צוות" : inboxKind === "anonymous" ? "אנונימי" : "בוט";
     void import("@/lib/push/send-admin-inbox-push")
       .then(({ sendAdminInboxPush }) =>
         sendAdminInboxPush({
           title: "דואר נכנס WhatsApp",
-          body: preview,
+          body: `סוג: ${inboxKindLabel}\n${preview}`,
           url: "/admin/whatsapp-inbox",
         })
       )
       .catch((e) => console.error("whatsapp webhook: push notify failed", e));
 
     // Bot handling: only for conversation.mode=bot
-    // (We use conv from earlier select; if conversation was just created, conv.mode/state may be undefined.)
-    const conversationMode = (conv as any)?.mode ?? "bot";
     if (conversationMode !== "bot") continue;
 
     const currentState = ((conv as any)?.state ?? "start") as BotConversationState;

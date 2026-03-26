@@ -3,6 +3,8 @@ import { TrashAnswersTable } from "@/components/admin/trash-answers-table";
 import { PageHeader } from "@/components/page-header";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { QuestionRow } from "@/lib/types";
+import { Card, CardContent } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 async function getTrashedQuestions(): Promise<QuestionRow[]> {
   const supabase = getSupabaseAdmin();
@@ -74,14 +76,85 @@ async function getTrashedAnswers(): Promise<
   }));
 }
 
+async function getCancelledIntakeDrafts(): Promise<
+  {
+    id: string;
+    phone: string;
+    title: string | null;
+    content_preview: string;
+    updated_at: string | null;
+  }[]
+> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("question_intake_drafts")
+    .select("id, phone, title, content, updated_at")
+    .eq("status", "cancelled")
+    .order("updated_at", { ascending: false })
+    .limit(200);
+
+  if (error) return [];
+  return (data ?? []).map((d) => ({
+    id: d.id as string,
+    phone: (d.phone as string) ?? "",
+    title: (d.title as string | null) ?? null,
+    content_preview: (((d.content as string | null) ?? "").slice(0, 120) as string) || "",
+    updated_at: (d.updated_at as string | null) ?? null,
+  }));
+}
+
 export default async function AdminTrashPage() {
   const [questions, answers] = await Promise.all([getTrashedQuestions(), getTrashedAnswers()]);
+  const cancelledDrafts = await getCancelledIntakeDrafts();
 
   return (
     <div className="space-y-6">
       <PageHeader title="אשפה" subtitle="שאלות שהושלכו לאשפה" />
       <TrashTable questions={questions} />
       <TrashAnswersTable answers={answers} />
+
+      <Card className="overflow-hidden rounded-2xl">
+        <CardContent className="p-0">
+          <div className="border-b px-4 py-2 text-right text-sm font-semibold text-slate-700">
+            טיוטות שבוטלו (WhatsApp)
+          </div>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>ID טיוטה</TableHead>
+                  <TableHead>טלפון</TableHead>
+                  <TableHead>כותרת / תקציר</TableHead>
+                  <TableHead>תאריך ביטול</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {cancelledDrafts.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="py-8 text-center text-secondary">
+                      אין טיוטות שבוטלו
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  cancelledDrafts.map((d) => (
+                    <TableRow key={d.id}>
+                      <TableCell className="font-mono text-xs text-secondary">{d.id.slice(0, 8)}…</TableCell>
+                      <TableCell className="text-sm text-slate-800">{d.phone}</TableCell>
+                      <TableCell className="max-w-[420px] text-right">
+                        {d.title && <div className="text-sm font-medium text-slate-800">{d.title}</div>}
+                        <div className="line-clamp-2 text-sm text-slate-600">{d.title ? d.content_preview : d.content_preview}</div>
+                      </TableCell>
+                      <TableCell className="text-sm text-secondary">
+                        {d.updated_at ? new Date(d.updated_at).toLocaleDateString("he-IL") : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

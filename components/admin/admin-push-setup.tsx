@@ -35,6 +35,8 @@ export function AdminPushSetup() {
   const [ui, setUi] = useState<UiState>("loading");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [testBusy, setTestBusy] = useState(false);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
   /** ISO — עד מתי השתקה זמנית פעילה (רק כשיש מנוי) */
   const [mutedUntil, setMutedUntil] = useState<string | null>(null);
   const [mutedForever, setMutedForever] = useState(false);
@@ -97,6 +99,33 @@ export function AdminPushSetup() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const testNotification = async () => {
+    setTestBusy(true);
+    setTestMsg(null);
+    setErrorMsg(null);
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        setErrorMsg("לא מחובר");
+        return;
+      }
+      const res = await fetch("/api/push/test-inbox", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok || j.ok !== true) {
+        setErrorMsg(j.error ?? "טסט התראה נכשל");
+        return;
+      }
+      setTestMsg("טסט נשלח (אם יש מנוי פעיל, אמורה להגיע הודעה למכשיר).");
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "שגיאת טסט התראה");
+    } finally {
+      setTestBusy(false);
+    }
+  };
 
   const subscribe = async () => {
     setBusy(true);
@@ -420,6 +449,19 @@ export function AdminPushSetup() {
             )}
           </>
         )}
+      </div>
+
+      <div className="mt-4 flex flex-col gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void testNotification()}
+          disabled={testBusy || ui !== "subscribed"}
+        >
+          {testBusy ? "שולח טסט…" : "טסט התראות"}
+        </Button>
+        {testMsg ? <p className="text-xs text-secondary">{testMsg}</p> : null}
       </div>
     </div>
   );

@@ -55,3 +55,37 @@ body {
 .scrollbar-sidebar-muted::-webkit-scrollbar-thumb:hover {
   background: #f8fafc;
 }
+
+/* גלגלת סרגל ניווט: בהיר במובייל, כהה מ־md (מתאים לרקע הסרגל) */
+.scrollbar-sidebar-nav {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+.scrollbar-sidebar-nav::-webkit-scrollbar {
+  width: 8px;
+}
+.scrollbar-sidebar-nav::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+.scrollbar-sidebar-nav::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.scrollbar-sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+@media (min-width: 768px) {
+  .scrollbar-sidebar-nav {
+    scrollbar-color: #e2e8f0 #52525b;
+  }
+  .scrollbar-sidebar-nav::-webkit-scrollbar-track {
+    background: #52525b;
+  }
+  .scrollbar-sidebar-nav::-webkit-scrollbar-thumb {
+    background: #e2e8f0;
+  }
+  .scrollbar-sidebar-nav::-webkit-scrollbar-thumb:hover {
+    background: #f8fafc;
+  }
+}

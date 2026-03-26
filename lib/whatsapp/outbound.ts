@@ -95,20 +95,30 @@ export async function sendMetaWhatsAppTemplateWithLog(
     languageCode: string;
     bodyParameters: string[];
     buttonDynamicParam?: string;
+    /** Shown in admin inbox / logs — approximates what the user sees (body vars or fallback copy). */
+    displayPreview?: string;
   }
 ): Promise<MetaSendResult> {
+  const paramLines = opts.bodyParameters.map((p) => p.trim()).filter(Boolean);
+  const previewForLog =
+    opts.displayPreview?.trim() ||
+    (paramLines.length > 0 ? paramLines.join("\n") : undefined);
+
+  const templatePayload = {
+    kind: "template" as const,
+    templateName: opts.templateName,
+    ...(previewForLog ? { preview: previewForLog.slice(0, 2000) } : {}),
+    bodyParamsPreview: opts.bodyParameters.map((p) => p.slice(0, 120)),
+    buttonDynamicParamPreview: opts.buttonDynamicParam?.slice(0, 200) ?? null,
+  };
+
   if (!isMetaWhatsAppConfigured()) {
     await logWhatsAppOutbound({
       to_phone: toPhoneRaw,
       channel_event: opts.channel_event,
       conversation_id: opts.conversation_id,
       idempotency_key: opts.idempotency_key,
-      payload: {
-        kind: "template",
-        templateName: opts.templateName,
-        bodyParamsPreview: opts.bodyParameters.map((p) => p.slice(0, 120)),
-        buttonDynamicParamPreview: opts.buttonDynamicParam?.slice(0, 200) ?? null,
-      },
+      payload: templatePayload,
       status: "error",
       error: "Meta WhatsApp not configured (META_ACCESS_TOKEN / META_PHONE_NUMBER_ID)",
     });
@@ -127,12 +137,7 @@ export async function sendMetaWhatsAppTemplateWithLog(
     channel_event: opts.channel_event,
     conversation_id: opts.conversation_id,
     idempotency_key: opts.idempotency_key,
-    payload: {
-      kind: "template",
-      templateName: opts.templateName,
-      bodyParamsPreview: opts.bodyParameters.map((p) => p.slice(0, 120)),
-      buttonDynamicParamPreview: opts.buttonDynamicParam?.slice(0, 200) ?? null,
-    },
+    payload: templatePayload,
     provider_message_id: result.ok ? result.idMessage : null,
     status: result.ok ? "sent" : "error",
     error: result.ok ? null : result.error,
@@ -157,6 +162,8 @@ export async function sendMetaWhatsAppInitiatedWithLog(
 ): Promise<MetaSendResult> {
   const templateName = getWhatsAppTemplateName(opts.templateKey);
   if (templateName) {
+    const paramLines = opts.bodyParameters.map((p) => p.trim()).filter(Boolean);
+    const displayPreview = paramLines.length > 0 ? paramLines.join("\n") : opts.legacyText;
     return sendMetaWhatsAppTemplateWithLog(toPhoneRaw, {
       channel_event: opts.channel_event,
       conversation_id: opts.conversation_id,
@@ -165,6 +172,7 @@ export async function sendMetaWhatsAppInitiatedWithLog(
       languageCode: getWhatsAppTemplateLanguageCode(),
       bodyParameters: opts.bodyParameters,
       buttonDynamicParam: opts.buttonDynamicParam,
+      displayPreview,
     });
   }
   return sendMetaWhatsAppTextWithLog(toPhoneRaw, opts.legacyText, {

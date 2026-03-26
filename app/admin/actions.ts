@@ -2032,10 +2032,13 @@ export async function approveQuestionIntakeDraft(
   try {
     const { data: draft, error: dErr } = await supabase
       .from("question_intake_drafts")
-      .select("id, phone, asker_gender, asker_age, title, content, response_type, publication_consent, delivery_preference, asker_email")
+      .select("id, phone, status, asker_gender, asker_age, title, content, response_type, publication_consent, delivery_preference, asker_email")
       .eq("id", draftId)
       .maybeSingle();
     if (dErr || !draft) return { ok: false, error: "טיוטה לא נמצאה" };
+    if ((draft as any).status !== "waiting_admin_approval") {
+      return { ok: false, error: "אפשר לאשר רק טיוטות שממתינות לאישור" };
+    }
     if (!draft.title || !draft.content) return { ok: false, error: "חסרים פרטים בטיוטה" };
 
     const { data: q, error: qErr } = await supabase
@@ -2101,6 +2104,50 @@ export async function approveQuestionIntakeDraft(
     }
 
     return { ok: true, short_id: shortId ?? undefined };
+  } catch (e) {
+    return { ok: false, error: safeError((e as Error)?.message) };
+  }
+}
+
+export async function discardQuestionIntakeDraft(
+  draftId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = getSupabaseAdmin();
+  try {
+    const { data: draft, error: dErr } = await supabase
+      .from("question_intake_drafts")
+      .select("id, phone, status")
+      .eq("id", draftId)
+      .maybeSingle();
+    if (dErr || !draft) return { ok: false, error: "טיוטה לא נמצאה" };
+    if ((draft as any).status !== "waiting_admin_approval") {
+      return { ok: false, error: "אפשר להשליך רק טיוטות שממתינות לאישור" };
+    }
+
+    // If this draft is the active one for the phone conversation, clear it.
+    const { data: conv, error: convErr } = await supabase
+      .from("whatsapp_conversations")
+      .select("context")
+      .eq("phone", draft.phone)
+      .maybeSingle();
+
+    if (!convErr && conv?.context) {
+      const activeDraftId = (conv.context as any)?.activeDraftId as string | undefined;
+      if (activeDraftId === draftId) {
+        await supabase
+          .from("whatsapp_conversations")
+          .update({ context: {} as any, updated_at: new Date().toISOString() })
+          .eq("phone", draft.phone);
+      }
+    }
+
+    const { error: upErr } = await supabase
+      .from("question_intake_drafts")
+      .update({ status: "cancelled", updated_at: new Date().toISOString() })
+      .eq("id", draftId);
+
+    if (upErr) return { ok: false, error: upErr.message };
+    return { ok: true };
   } catch (e) {
     return { ok: false, error: safeError((e as Error)?.message) };
   }

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { sendAdminInboxPush } from "@/lib/push/send-admin-inbox-push";
 
 export type SubmitState = { ok: true } | { ok: false; error: string };
 
@@ -26,19 +27,31 @@ export async function submitQuestion(formData: FormData): Promise<SubmitState> {
 
   try {
     const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from("questions").insert({
-      stage: "waiting_assignment",
-      title: title || null,
-      content,
-      asker_email: email || null,
-      asker_gender: asker_gender === "M" || asker_gender === "F" ? asker_gender : null,
-      asker_age: asker_age || null,
-      response_type: response_type as "short" | "detailed",
-      publication_consent: publication_consent as "publish" | "blur" | "none",
-      terms_accepted: true,
-    });
+    const { data, error } = await supabase
+      .from("questions")
+      .insert({
+        stage: "waiting_assignment",
+        title: title || null,
+        content,
+        asker_email: email || null,
+        asker_gender: asker_gender === "M" || asker_gender === "F" ? asker_gender : null,
+        asker_age: asker_age || null,
+        response_type: response_type as "short" | "detailed",
+        publication_consent: publication_consent as "publish" | "blur" | "none",
+        terms_accepted: true,
+      })
+      .select("id")
+      .single();
 
     if (error) return { ok: false, error: error.message };
+
+    // Push notification for admins (inbox bell/settings)
+    void sendAdminInboxPush({
+      title: "דואר נכנס",
+      body: "שאלה חדשה נכנסה דרך הטופס",
+      url: `/admin?open=${encodeURIComponent(data?.id ?? "")}`,
+    }).catch((e) => console.error("submitQuestion: push notify failed", e));
+
     revalidatePath("/admin");
     return { ok: true };
   } catch (e) {
