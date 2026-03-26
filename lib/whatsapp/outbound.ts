@@ -1,6 +1,8 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { MetaSendResult } from "./meta";
-import { isMetaWhatsAppConfigured, sendMetaWhatsAppText } from "./meta";
+import { isMetaWhatsAppConfigured, sendMetaWhatsAppTemplate, sendMetaWhatsAppText } from "./meta";
+import type { WhatsAppInitiatedTemplateKey } from "./templateConfig";
+import { getWhatsAppTemplateLanguageCode, getWhatsAppTemplateName } from "./templateConfig";
 
 /**
  * Audit log for WhatsApp sends. The table supports a future retry worker; today we use direct Graph API calls + logging.
@@ -59,7 +61,7 @@ export async function sendMetaWhatsAppTextWithLog(
       channel_event: opts.channel_event,
       conversation_id: opts.conversation_id,
       idempotency_key: opts.idempotency_key,
-      payload: { preview: text.slice(0, 400) },
+      payload: { kind: "text", preview: text.slice(0, 400) },
       status: "error",
       error: "Meta WhatsApp not configured (META_ACCESS_TOKEN / META_PHONE_NUMBER_ID)",
     });
@@ -72,10 +74,102 @@ export async function sendMetaWhatsAppTextWithLog(
     channel_event: opts.channel_event,
     conversation_id: opts.conversation_id,
     idempotency_key: opts.idempotency_key,
-    payload: { preview: text.slice(0, 400) },
+    payload: { kind: "text", preview: text.slice(0, 400) },
     provider_message_id: result.ok ? result.idMessage : null,
     status: result.ok ? "sent" : "error",
     error: result.ok ? null : result.error,
   });
   return result;
+}
+
+/**
+ * Send a template message via Meta and persist a row in `whatsapp_outbound_messages`.
+ */
+export async function sendMetaWhatsAppTemplateWithLog(
+  toPhoneRaw: string,
+  opts: {
+    channel_event: string;
+    conversation_id?: string | null;
+    idempotency_key?: string | null;
+    templateName: string;
+    languageCode: string;
+    bodyParameters: string[];
+    buttonDynamicParam?: string;
+  }
+): Promise<MetaSendResult> {
+  if (!isMetaWhatsAppConfigured()) {
+    await logWhatsAppOutbound({
+      to_phone: toPhoneRaw,
+      channel_event: opts.channel_event,
+      conversation_id: opts.conversation_id,
+      idempotency_key: opts.idempotency_key,
+      payload: {
+        kind: "template",
+        templateName: opts.templateName,
+        bodyParamsPreview: opts.bodyParameters.map((p) => p.slice(0, 120)),
+        buttonDynamicParamPreview: opts.buttonDynamicParam?.slice(0, 200) ?? null,
+      },
+      status: "error",
+      error: "Meta WhatsApp not configured (META_ACCESS_TOKEN / META_PHONE_NUMBER_ID)",
+    });
+    return { ok: false, error: "Meta WhatsApp not configured" };
+  }
+
+  const result = await sendMetaWhatsAppTemplate(
+    toPhoneRaw,
+    opts.templateName,
+    opts.languageCode,
+    opts.bodyParameters,
+    opts.buttonDynamicParam
+  );
+  await logWhatsAppOutbound({
+    to_phone: toPhoneRaw,
+    channel_event: opts.channel_event,
+    conversation_id: opts.conversation_id,
+    idempotency_key: opts.idempotency_key,
+    payload: {
+      kind: "template",
+      templateName: opts.templateName,
+      bodyParamsPreview: opts.bodyParameters.map((p) => p.slice(0, 120)),
+      buttonDynamicParamPreview: opts.buttonDynamicParam?.slice(0, 200) ?? null,
+    },
+    provider_message_id: result.ok ? result.idMessage : null,
+    status: result.ok ? "sent" : "error",
+    error: result.ok ? null : result.error,
+  });
+  return result;
+}
+
+/**
+ * If `WHATSAPP_TEMPLATE_*` is set for this channel, sends an approved template; otherwise free-form text.
+ */
+export async function sendMetaWhatsAppInitiatedWithLog(
+  toPhoneRaw: string,
+  opts: {
+    templateKey: WhatsAppInitiatedTemplateKey;
+    channel_event: string;
+    conversation_id?: string | null;
+    idempotency_key?: string | null;
+    bodyParameters: string[];
+    buttonDynamicParam?: string;
+    legacyText: string;
+  }
+): Promise<MetaSendResult> {
+  const templateName = getWhatsAppTemplateName(opts.templateKey);
+  if (templateName) {
+    return sendMetaWhatsAppTemplateWithLog(toPhoneRaw, {
+      channel_event: opts.channel_event,
+      conversation_id: opts.conversation_id,
+      idempotency_key: opts.idempotency_key,
+      templateName,
+      languageCode: getWhatsAppTemplateLanguageCode(),
+      bodyParameters: opts.bodyParameters,
+      buttonDynamicParam: opts.buttonDynamicParam,
+    });
+  }
+  return sendMetaWhatsAppTextWithLog(toPhoneRaw, opts.legacyText, {
+    channel_event: opts.channel_event,
+    conversation_id: opts.conversation_id,
+    idempotency_key: opts.idempotency_key,
+  });
 }

@@ -77,7 +77,7 @@ async function runReminders() {
 
   const allIds = [...new Set([...respondentIds, ...proofreaderIds])];
   const emailMap: Record<string, string> = {};
-  const profById = new Map<string, { communication_preference: string | null; phone: string | null }>();
+  const profById = new Map<string, { communication_preference: string | null; phone: string | null; full_name_he: string | null }>();
 
   if (allIds.length > 0) {
     const { data: authData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
@@ -86,18 +86,21 @@ async function runReminders() {
     }
     const { data: profs } = await supabase
       .from("profiles")
-      .select("id, communication_preference, phone")
+      .select("id, communication_preference, phone, full_name_he")
       .in("id", allIds);
     for (const p of profs ?? []) {
       profById.set(p.id as string, {
         communication_preference: p.communication_preference as string | null,
         phone: (p.phone as string | null) ?? null,
+        full_name_he: (p.full_name_he as string | null) ?? null,
       });
     }
   }
 
   let sent = 0;
-  const { sendMetaWhatsAppTextWithLog } = await import("@/lib/whatsapp/outbound");
+  const { sendMetaWhatsAppInitiatedWithLog } = await import("@/lib/whatsapp/outbound");
+  const { waTemplateBodyParam } = await import("@/lib/whatsapp/templateConfig");
+  const { extractWhatsAppUrlSuffix } = await import("@/lib/whatsapp/urlSuffix");
 
   for (const uid of respondentIds) {
     const tasks = byRespondent.get(uid) ?? [];
@@ -116,11 +119,19 @@ async function runReminders() {
       const phone = prof?.phone?.trim();
       if (phone) {
         const link = goLink("/respondent");
-        const preview = first?.content ? ` (שאלה: ${first.content.slice(0, 50)}…)` : "";
-        const text = `שלום,\nמשימה שהוקצתה אליך כמשיב/ה לא עודכנה מזה 5 ימים${preview}.\nכניסה למערכת: ${link}`;
-        const wa = await sendMetaWhatsAppTextWithLog(phone, text, {
+        const linkSuffix = extractWhatsAppUrlSuffix(link);
+        const name = prof?.full_name_he?.trim() ?? "";
+        const greetingLegacy = name ? `שלום ${name}` : "שלום";
+        const nameParam = waTemplateBodyParam(name);
+        const text = `${greetingLegacy},\nמשימה שהוקצתה אליך כמשיב/ה לא עודכנה מזה 5 ימים.\nכניסה למערכת: ${link}`;
+        const wa = await sendMetaWhatsAppInitiatedWithLog(phone, {
+          templateKey: "cron_inactivity_reminder",
           channel_event: "cron_inactivity_reminder",
           idempotency_key: `remind5d_${dayKey}_${uid}_respondent`,
+          // Template begins with fixed "שלום וברכה" so param 1 must be name-only (or invisible).
+          bodyParameters: [nameParam, "משיב/ה"],
+          buttonDynamicParam: linkSuffix,
+          legacyText: text,
         });
         if (wa.ok) sent++;
       }
@@ -144,11 +155,19 @@ async function runReminders() {
       const phone = prof?.phone?.trim();
       if (phone) {
         const link = goLink("/proofreader");
-        const preview = first?.content ? ` (שאלה: ${first.content.slice(0, 50)}…)` : "";
-        const text = `שלום,\nמשימה שהוקצתה אליך כמגיה/ה לא עודכנה מזה 5 ימים${preview}.\nכניסה ללובי: ${link}`;
-        const wa = await sendMetaWhatsAppTextWithLog(phone, text, {
+        const linkSuffix = extractWhatsAppUrlSuffix(link);
+        const name = prof?.full_name_he?.trim() ?? "";
+        const greetingLegacy = name ? `שלום ${name}` : "שלום";
+        const nameParam = waTemplateBodyParam(name);
+        const text = `${greetingLegacy},\nמשימה שהוקצתה אליך כמגיה/ה לא עודכנה מזה 5 ימים.\nכניסה ללובי: ${link}`;
+        const wa = await sendMetaWhatsAppInitiatedWithLog(phone, {
+          templateKey: "cron_inactivity_reminder",
           channel_event: "cron_inactivity_reminder",
           idempotency_key: `remind5d_${dayKey}_${uid}_proofreader`,
+          // Template begins with fixed "שלום וברכה" so param 1 must be name-only (or invisible).
+          bodyParameters: [nameParam, "מגיה/ה"],
+          buttonDynamicParam: linkSuffix,
+          legacyText: text,
         });
         if (wa.ok) sent++;
       }

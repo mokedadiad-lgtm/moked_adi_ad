@@ -1,5 +1,6 @@
 "use client";
 
+import { AdminPushSetup } from "@/components/admin/admin-push-setup";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { InactivityLogout } from "@/components/inactivity-logout";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
@@ -225,6 +226,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             : "px-4 pt-4 md:px-8 md:pt-6"
         )}
       >
+        {showSidebar === true && <AdminPushSetup />}
         {showSidebar === false && pathname?.startsWith("/admin") && (
           <div className="mx-auto max-w-6xl px-2 sm:px-4 md:px-6">
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-right text-amber-900">

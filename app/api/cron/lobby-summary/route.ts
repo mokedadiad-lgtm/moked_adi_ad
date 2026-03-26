@@ -50,7 +50,7 @@ async function runLobbySummary() {
   }
 
   let totalSent = 0;
-  const { sendMetaWhatsAppTextWithLog } = await import("@/lib/whatsapp/outbound");
+  const { sendMetaWhatsAppInitiatedWithLog } = await import("@/lib/whatsapp/outbound");
 
   const { data: authData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
   const emailMap: Record<string, string> = {};
@@ -84,17 +84,18 @@ async function runLobbySummary() {
     }
 
     const lobbyUrl = goLink("/proofreader");
-    const typeName = (pt.name_he as string)?.trim() ?? "";
-    const waLine = typeName ? ` (${typeName})` : "";
 
     for (const p of list) {
       if (!wantsWhatsApp(p.communication_preference)) continue;
       const phone = (p.phone as string | null)?.trim();
       if (!phone) continue;
-      const text = `שלום,\nהיום יש ${count} משימה/ות ממתינות בלובי ההגהה${waLine}.\nכניסה: ${lobbyUrl}`;
-      const wa = await sendMetaWhatsAppTextWithLog(phone, text, {
+      const text = `שלום,\nהיום יש ${count} משימה/ות ממתינות בלובי ההגהה.\nכניסה: ${lobbyUrl}`;
+      const wa = await sendMetaWhatsAppInitiatedWithLog(phone, {
+        templateKey: "cron_lobby_summary",
         channel_event: "cron_lobby_summary",
         idempotency_key: `lobby_sum_${dayKey}_${pt.id}_${p.id}`,
+        bodyParameters: [String(count), lobbyUrl],
+        legacyText: text,
       });
       if (wa.ok) totalSent++;
     }

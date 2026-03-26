@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { wantsEmail, wantsWhatsApp } from "@/lib/communicationPreference";
 import { sendAssignmentLinkToRespondent, sendInactivityReminder, sendManualReminderToRespondent } from "@/lib/email";
 import { notifyLobbyNewQuestion, notifyLinguisticNewQuestion } from "@/app/actions/notifications";
 import type { QuestionStage } from "@/lib/types";
@@ -15,6 +16,111 @@ function revalidateAdminTopics() {
 
 function safeError(message: string): string {
   return message || "שגיאה לא צפויה";
+}
+
+const APP_URL_FOR_LINKS =
+  process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ??
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+
+/** קישור דרך /api/go — כמו במיילים ובהתראות אחרות */
+function goLinkRespondentAssignment(questionId: string): string {
+  const path = `/respondent?open=${encodeURIComponent(questionId)}`;
+  return `${APP_URL_FOR_LINKS}/api/go?r=${encodeURIComponent(path.startsWith("/") ? path : `/${path}`)}`;
+}
+
+function buildRespondentAssignmentWhatsAppParts(params: {
+  fullNameHe: string | null;
+  topicName: string | null;
+  subTopicName: string | null;
+  managerMessage: string | null;
+  questionId: string;
+}): {
+  nameOnly: string;
+  greetingLegacy: string;
+  topicPart: string;
+  managerNote: string;
+  linkUrl: string;
+} {
+  const name = params.fullNameHe?.trim() ?? "";
+  const nameOnly = name;
+  const greetingLegacy = name ? `שלום ${name}` : "שלום";
+  const topicPart = [params.topicName?.trim(), params.subTopicName?.trim()].filter(Boolean).join(" – ") || "כללי";
+  const managerNote =
+    params.managerMessage?.trim() ? `הערת מנהל: ${params.managerMessage.trim()}` : "";
+  const linkUrl = goLinkRespondentAssignment(params.questionId);
+  return { nameOnly, greetingLegacy, topicPart, managerNote, linkUrl };
+}
+
+/**
+ * מייל + וואטסאפ לפי communication_preference (כמו לובי/לשוני).
+ */
+async function sendRespondentAssignmentNotifications(opts: {
+  supabase: ReturnType<typeof getSupabaseAdmin>;
+  respondentId: string;
+  questionId: string;
+  questionLabel: string | null;
+  topicName: string | null;
+  subTopicName: string | null;
+  managerMessage: string | null;
+  profile: {
+    full_name_he: string | null;
+    communication_preference: string | null;
+    gender: string | null;
+    phone: string | null;
+  };
+  whatsappIdempotencyKey: string;
+}): Promise<void> {
+  const pref = opts.profile.communication_preference ?? undefined;
+  const respondentGender = (opts.profile.gender === "F" || opts.profile.gender === "M" ? opts.profile.gender : null) as
+    | "M"
+    | "F"
+    | null;
+
+  if (wantsEmail(pref)) {
+    const { data: authUser } = await opts.supabase.auth.admin.getUserById(opts.respondentId);
+    const email = authUser?.user?.email?.trim();
+    if (email) {
+      await sendAssignmentLinkToRespondent(
+        email,
+        opts.profile.full_name_he ?? null,
+        opts.managerMessage?.trim() || null,
+        opts.questionLabel,
+        opts.questionId,
+        opts.topicName,
+        opts.subTopicName,
+        respondentGender
+      );
+    }
+  }
+
+  if (wantsWhatsApp(pref)) {
+    const phone = opts.profile.phone?.trim();
+    if (!phone) {
+      console.warn("[sendRespondentAssignmentNotifications] wants WhatsApp but no phone on profile", opts.respondentId);
+      return;
+    }
+    const parts = buildRespondentAssignmentWhatsAppParts({
+      fullNameHe: opts.profile.full_name_he,
+      topicName: opts.topicName,
+      subTopicName: opts.subTopicName,
+      managerMessage: opts.managerMessage,
+      questionId: opts.questionId,
+    });
+    const waBody = `${parts.greetingLegacy},\nשובצה לך שאלה חדשה לטיפול בנושא ${parts.topicPart}.\nכניסה למערכת: ${parts.linkUrl}${parts.managerNote ? `\n${parts.managerNote}` : ""}`;
+    const { sendMetaWhatsAppInitiatedWithLog } = await import("@/lib/whatsapp/outbound");
+    const { waTemplateBodyParam } = await import("@/lib/whatsapp/templateConfig");
+    const { extractWhatsAppUrlSuffix } = await import("@/lib/whatsapp/urlSuffix");
+    const linkSuffix = extractWhatsAppUrlSuffix(parts.linkUrl);
+    await sendMetaWhatsAppInitiatedWithLog(phone, {
+      templateKey: "respondent_assignment",
+      channel_event: "respondent_assignment",
+      idempotency_key: opts.whatsappIdempotencyKey,
+      // Template begins with fixed "שלום וברכה" so param 1 must be name-only (or invisible).
+      bodyParameters: [waTemplateBodyParam(parts.nameOnly), parts.topicPart, waTemplateBodyParam(parts.managerNote)],
+      buttonDynamicParam: linkSuffix,
+      legacyText: waBody,
+    });
+  }
 }
 
 /** כפילות מינימלית מ־response-text — נשמר כאן כדי שלא ייבא ה־actions bundle מודולים מיותרים */
@@ -314,7 +420,7 @@ export async function sendReminderToProofreaders(questionId: string, answerId?: 
 
 export type AssignResult = { ok: true } | { ok: false; error: string };
 
-/** Create a question_answer row (one assignment per topic+respondent) and send email. Does not update questions table. */
+/** Create a question_answer row (one assignment per topic+respondent) and notify (מייל + וואטסאפ לפי העדפה). Does not update questions table. */
 export async function assignQuestion(
   questionId: string,
   respondentId: string,
@@ -366,29 +472,29 @@ export async function assignQuestion(
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("full_name_he, communication_preference, gender")
+        .select("full_name_he, communication_preference, gender, phone")
         .eq("id", respondentId)
         .single();
-      const pref = profile?.communication_preference as string | undefined;
-      const respondentGender = profile?.gender as "M" | "F" | null | undefined;
-      if (pref === "email" || pref === "both") {
-        const { data: authUser } = await supabase.auth.admin.getUserById(respondentId);
-        const email = authUser?.user?.email?.trim();
-        if (email) {
-          await sendAssignmentLinkToRespondent(
-            email,
-            profile?.full_name_he ?? null,
-            managerMessage?.trim() || null,
-            questionLabel,
-            questionId,
-            topicName,
-            subTopicName,
-            respondentGender ?? null
-          );
-        }
+      if (profile) {
+        await sendRespondentAssignmentNotifications({
+          supabase,
+          respondentId,
+          questionId,
+          questionLabel,
+          topicName,
+          subTopicName,
+          managerMessage: managerMessage?.trim() || null,
+          profile: {
+            full_name_he: profile.full_name_he as string | null,
+            communication_preference: profile.communication_preference as string | null,
+            gender: profile.gender as string | null,
+            phone: profile.phone as string | null,
+          },
+          whatsappIdempotencyKey: `respondent_assign_${questionId}_${respondentId}`,
+        });
       }
     } catch (mailErr) {
-      console.error("assignQuestion: email send failed", mailErr);
+      console.error("assignQuestion: assignment notification failed", mailErr);
     }
     revalidatePath("/admin");
     return { ok: true };
@@ -461,29 +567,29 @@ export async function replaceQuestionAssignment(
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("full_name_he, communication_preference, gender")
+        .select("full_name_he, communication_preference, gender, phone")
         .eq("id", respondentId)
         .single();
-      const pref = profile?.communication_preference as string | undefined;
-      const respondentGender = profile?.gender as "M" | "F" | null | undefined;
-      if (pref === "email" || pref === "both") {
-        const { data: authUser } = await supabase.auth.admin.getUserById(respondentId);
-        const email = authUser?.user?.email?.trim();
-        if (email) {
-          await sendAssignmentLinkToRespondent(
-            email,
-            profile?.full_name_he ?? null,
-            managerMessage?.trim() || null,
-            questionLabel,
-            questionId,
-            topicName,
-            subTopicName,
-            respondentGender ?? null
-          );
-        }
+      if (profile) {
+        await sendRespondentAssignmentNotifications({
+          supabase,
+          respondentId,
+          questionId,
+          questionLabel,
+          topicName,
+          subTopicName,
+          managerMessage: managerMessage?.trim() || null,
+          profile: {
+            full_name_he: profile.full_name_he as string | null,
+            communication_preference: profile.communication_preference as string | null,
+            gender: profile.gender as string | null,
+            phone: profile.phone as string | null,
+          },
+          whatsappIdempotencyKey: `respondent_reassign_${answerId}_${respondentId}`,
+        });
       }
     } catch (mailErr) {
-      console.error("replaceQuestionAssignment: email send failed", mailErr);
+      console.error("replaceQuestionAssignment: assignment notification failed", mailErr);
     }
 
     revalidatePath("/admin");
@@ -1955,19 +2061,6 @@ export async function approveQuestionIntakeDraft(
 
     const shortId = (q.short_id ?? null) as string | null;
 
-    const genderLabel = draft.asker_gender === "M" ? "זכר" : draft.asker_gender === "F" ? "נקבה" : "—";
-    const responseLabel = draft.response_type === "short" ? "קצר ולעניין" : "מורחב";
-    const pubLabel =
-      draft.publication_consent === "publish" ? "אפשר לפרסם" : draft.publication_consent === "blur" ? "פרסום בטשטוש" : "ללא פרסום";
-    const deliveryLabel =
-      draft.delivery_preference === "whatsapp"
-        ? "וואטסאפ"
-        : draft.delivery_preference === "email"
-          ? "אימייל"
-          : draft.delivery_preference === "both"
-            ? "גם וואטסאפ וגם אימייל"
-            : "—";
-
     const { error: upErr } = await supabase
       .from("question_intake_drafts")
       .update({
@@ -2005,35 +2098,6 @@ export async function approveQuestionIntakeDraft(
           updated_at: new Date().toISOString(),
         })
         .eq("phone", draft.phone);
-    }
-
-    // Notify asker (if they requested WhatsApp)
-    try {
-      if (draft.delivery_preference === "whatsapp" || draft.delivery_preference === "both") {
-        const { sendMetaWhatsAppTextWithLog } = await import("@/lib/whatsapp/outbound");
-        const msg = [
-          "הפנייה שלך אושרה.",
-          shortId ? `מספר פנייה: ${shortId}` : "",
-          `מגדר: ${genderLabel}`,
-          `גיל: ${draft.asker_age ?? "—"}`,
-          `כותרת: ${draft.title}`,
-          "תוכן השאלה:",
-          draft.content,
-          `מסלול מענה: ${responseLabel}`,
-          `אפשרות פרסום: ${pubLabel}`,
-          `ערוץ קבלת תשובה: ${deliveryLabel}`,
-          "",
-          "אם ברצונך לשנות משהו — אנא פנה/י לנציג אנושי בהודעה זו.",
-        ]
-          .filter(Boolean)
-          .join("\n");
-        await sendMetaWhatsAppTextWithLog(draft.phone, msg, {
-          channel_event: "draft_approved_ack",
-          idempotency_key: `draft_approved_${draftId}`,
-        });
-      }
-    } catch (e) {
-      console.error("approveQuestionIntakeDraft: failed sending ack", e);
     }
 
     return { ok: true, short_id: shortId ?? undefined };

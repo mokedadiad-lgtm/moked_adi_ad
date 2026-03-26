@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- מקור עזר לפאביקון; אייקוני PWA נוצרים מ־scripts/generate-pwa-icons.mjs -->
+<!-- מקור עזר לפאביקון; אייקוני PWA (לוגו בלבד) נוצרים מ־scripts/generate-pwa-icons.mjs -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
   <rect width="512" height="512" rx="96" fill="#faf7f9"/>
-  <text x="256" y="420" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="40" font-weight="600" fill="#1a1a35">אסק מי פלוס</text>
   <!-- סמל בית מקוצר — התמונה המלאה ב־PNG מ־generate-pwa-icons -->
   <path
     d="M256 108 L404 228 V380 H108 V228 Z"

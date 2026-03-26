@@ -42,7 +42,7 @@ The system MUST strictly follow these stages in the database:
 
 Waiting for Assignment (מחכה לשיבוץ): New anonymous question landed.
 
-With Respondent (אצל משיב/ה): Assigned to a specific person; link sent via WhatsApp/Email.
+With Respondent (אצל משיב/ה): Assigned to a specific person; link sent via WhatsApp/Email per `communication_preference` (implementation: `assignQuestion` + Meta WhatsApp when phone is set; email via Resend).
 
 In Proofreading Lobby (בלובי ההגהה): Answered; waiting for a proofreader of the matching type to "claim" it.
 

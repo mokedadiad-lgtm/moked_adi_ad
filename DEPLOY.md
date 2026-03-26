@@ -44,9 +44,111 @@
 | `WHATSAPP_VERIFY_TOKEN` | חובה ל־webhook | אותה מחרוזת שהגדרת ב־Meta ב־Webhook Verify Token (ל־GET) |
 | `META_GRAPH_API_VERSION` | אופציונלי | ברירת מחדל `v20.0` ב־[`lib/whatsapp/meta.ts`](lib/whatsapp/meta.ts) |
 
+### התראות דחיפה (Web Push) — דואר נכנס WhatsApp לאדמין
+
+| משתנה | חובה | תיאור |
+|--------|------|--------|
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | מומלץ | מפתח VAPID ציבורי (פלט `npx web-push generate-vapid-keys`) |
+| `VAPID_PRIVATE_KEY` | מומלץ | מפתח VAPID פרטי (רק בשרת) |
+| `VAPID_SUBJECT` | מומלץ | לרוב `mailto:` לתמיכה, למשל `mailto:support@yourdomain.com` |
+
+בלי מפתחות אלה ההתראות לא נשלחות; ממשק המנהל עדיין מציג הסבר. להריץ ב־Supabase את המיגרציות: `push_subscriptions`, ועמודות `profiles` להשתקה (`push_notifications_muted_until`, `push_notifications_muted_forever`).
+
 **בדיקה מהירה:** אם `META_ACCESS_TOKEN` או `META_PHONE_NUMBER_ID` חסרים – שליחת וואטסאפ תיכשל (הקוד מדווח בלוג וב־`whatsapp_outbound_messages` עם `status=error`).
 
-**תבניות (Templates):** בתוך חלון ה־24 שעות אפשר הודעות סשן חופשיות; מחוץ לחלון נדרשות הודעות מאושרות מסוג Template ב־Meta (לא ממומש אוטומטית בקוד – תלוי במדיניות השליחה שלכם).
+### תבניות WhatsApp (הודעות יזומות — מחוץ לחלון 24 שעות)
+
+ב־[WhatsApp Manager](https://business.facebook.com/) יוצרים תבניות **באותה שפה** כמו `WHATSAPP_TEMPLATE_LANGUAGE` (ברירת מחדל בקוד: `he`). אם משתנה `WHATSAPP_TEMPLATE_*` **לא** מוגדר — הקוד שולח **טקסט חופשי** כמו קודם (מתאים בעיקר לחלון 24 שעות). אם מגדירים שם תבנית — נשלח `type: template` עם פרמטרי גוף {{1}}… לפי הסדר למטה.
+
+| משתנה סביבה | תיאור |
+|---------------|--------|
+| `WHATSAPP_TEMPLATE_LANGUAGE` | אופציונלי — קוד שפה ל־Graph API (ברירת מחדל: `he`) |
+| `WHATSAPP_TEMPLATE_LOBBY_NEW_QUESTION` | שם תבנית — לובי: שאלה חדשה |
+| `WHATSAPP_TEMPLATE_LINGUISTIC_NEW_QUESTION` | שם תבנית — עריכה לשונית |
+| `WHATSAPP_TEMPLATE_RESPONDENT_ASSIGNMENT` | שם תבנית — שיבוץ משיב |
+| `WHATSAPP_TEMPLATE_ASKER_PDF_SENT` | שם תבנית — PDF לשואל |
+| `WHATSAPP_TEMPLATE_CRON_LOBBY_SUMMARY` | שם תבנית — סיכום לובי יומי (cron) |
+| `WHATSAPP_TEMPLATE_CRON_INACTIVITY_REMINDER` | שם תבנית — תזכורת חוסר פעילות 5 ימים |
+
+**גוף התבנית ב־Manager (חייב להתאים לפרמטרים בקוד):**
+
+1. **lobby_new_question** — `{{1}}` = שם בלבד (או תו בלתי נראה אם אין שם); `{{2}}` = `short_id` (או fallback); `{{3}}` = נושא (כולל תת־נושא אם יש). **כפתור URL דינמי**: מקבל suffix לקישור (למשל `api/go?r=...`).
+2. **linguistic_new_question** — `{{1}}` = שם בלבד (או תו בלתי נראה אם אין שם); `{{2}}` = `short_id` (או fallback); `{{3}}` = נושא (כולל תת־נושא אם יש). **כפתור URL דינמי**: מקבל suffix.
+3. **respondent_assignment** — `{{1}}` = שם בלבד (או תו בלתי נראה אם אין שם); `{{2}}` = נושא; `{{3}}` = הערת מנהל (ריק או `הערת מנהל: …`). **כפתור URL דינמי**: מקבל suffix לקישור השיבוץ.
+4. **asker_pdf_sent** — `{{1}}` = URL להורדת PDF.
+5. **cron_lobby_summary** — `{{1}}` = מספר משימות (מחרוזת); `{{2}}` = קישור.
+6. **cron_inactivity_reminder** — `{{1}}` = שם בלבד (או תו בלתי נראה אם אין שם); `{{2}}` = `משיב/ה` או `מגיה/ה`. **כפתור URL דינמי**: מקבל suffix (קישור למשיב/לובי).
+
+#### נוסחים סופיים לתבניות (להדבקה ל־WhatsApp Manager)
+
+1. **lobby_new_question_v2** (CTA: כפתור URL דינמי)
+
+```text
+שלום וברכה {{1}},
+נכנסה שאלה חדשה ללובי ההגהה.
+*מס' פנייה:* {{2}}
+*נושא:* {{3}}
+לחץ/י על הכפתור כדי להיכנס לטיפול.
+בהצלחה!
+```
+
+2. **linguistic_new_question_v2** (CTA: כפתור URL דינמי)
+
+```text
+שלום וברכה {{1}},
+שאלה הועברה לעריכה לשונית.
+*מס' פנייה:* {{2}}
+*נושא:* {{3}}
+לחץ/י על הכפתור כדי להיכנס.
+בהצלחה!
+```
+
+3. **respondent_assignment_v2** (CTA: כפתור URL דינמי)
+
+```text
+שלום וברכה {{1}},
+שובצה לך שאלה חדשה לטיפול בנושא {{2}}.
+לחץ/י על הכפתור כדי להיכנס למערכת.
+{{3}}
+בהצלחה!
+```
+
+4. **asker_pdf_sent_v2**
+
+```text
+שלום וברכה,
+
+שמחים לעדכן כי צוות אסק מי פלוס השיב לפנייתך.
+*להורדת קובץ התשובה (PDF) לחץ/י על הקישור:*
+{{1}}
+
+הערה: המידע בתשובה הינו כללי ואינו מהווה תחליף לייעוץ מקצועי אישי.
+```
+
+5. **cron_lobby_summary_v2**
+
+```text
+שלום וברכה,
+היום יש {{1}} משימה/ות ממתינות בלובי ההגהה.
+*כניסה:* {{2}}
+יום נעים!
+```
+
+6. **cron_inactivity_reminder_v2** (CTA: כפתור URL דינמי)
+
+```text
+שלום וברכה {{1}},
+משימה שהוקצתה אליך כ{{2}} לא עודכנה מזה 5 ימים.
+לחץ/י על הכפתור כדי להיכנס.
+לטיפולך.
+```
+
+#### הגדרת כפתור URL דינמי ב־WhatsApp Manager
+
+בכל אחת מהתבניות עם CTA, להוסיף כפתור מסוג **Call to action → Visit website** עם **Dynamic URL**.\n
+להגדיר את ה־URL הבסיסי כ־`NEXT_PUBLIC_APP_URL` ולהוסיף בסוף `/{variable}`. לדוגמה:\n
+`https://your-app.vercel.app/{{1}}`\n
+הקוד שולח לכפתור רק את ה־suffix (למשל `api/go?r=...`). אם לא ניתן לחלץ suffix, יישלח URL מלא כ־fallback.
 
 **תור `whatsapp_outbound_messages`:** כל שליחה דרך Meta נרשמת בטבלה (לוג + מפתח idempotency במקומות רלוונטיים). **אין** כרגע worker שמריץ retry אוטומטי על שורות `error` – השליחה היא ישירות ל־Graph API; ניתן להרחיב בעתיד.
 

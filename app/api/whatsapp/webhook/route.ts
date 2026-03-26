@@ -271,6 +271,19 @@ export async function POST(request: Request) {
       continue;
     }
 
+    const preview =
+      (msg.text_body && msg.text_body.trim().slice(0, 120)) ||
+      (msg.message_type === "button" ? "לחיצה על כפתור" : "הודעה חדשה");
+    void import("@/lib/push/send-admin-inbox-push")
+      .then(({ sendAdminInboxPush }) =>
+        sendAdminInboxPush({
+          title: "דואר נכנס WhatsApp",
+          body: preview,
+          url: "/admin/whatsapp-inbox",
+        })
+      )
+      .catch((e) => console.error("whatsapp webhook: push notify failed", e));
+
     // Bot handling: only for conversation.mode=bot
     // (We use conv from earlier select; if conversation was just created, conv.mode/state may be undefined.)
     const conversationMode = (conv as any)?.mode ?? "bot";

@@ -1,6 +1,6 @@
 /**
  * יוצר icon-192.png, icon-512.png ומעתיק ל-app/icon.png:
- * רקע בהיר, לוגו ממורכז, טקסט "אסק מי פלוס" בתחתית.
+ * רקע בהיר ולוגו ממורכז בלבד (ללא טקסט).
  * שימוש: npm run generate-pwa-icons
  */
 import fs from "fs";
@@ -13,20 +13,19 @@ const publicDir = path.join(__dirname, "..", "public");
 const logoPath = path.join(publicDir, "brand", "logo-full.png");
 
 const BG = { r: 250, g: 247, b: 249, alpha: 1 };
-const TEXT_FILL = "#1a1a35";
 
 async function buildIcon(size) {
   if (!fs.existsSync(logoPath)) {
     throw new Error(`Logo not found: ${logoPath}`);
   }
 
-  const textBand = Math.round(size * 0.24);
-  const verticalPadding = Math.round(size * 0.06);
-  const logoMaxHeight = size - textBand - verticalPadding * 2;
+  const padding = Math.round(size * 0.1);
+  const inner = size - padding * 2;
 
   const logoBuf = await sharp(logoPath)
     .resize({
-      height: logoMaxHeight,
+      width: inner,
+      height: inner,
       fit: "inside",
       withoutEnlargement: true,
     })
@@ -38,18 +37,7 @@ async function buildIcon(size) {
   const lw = meta.width ?? 0;
   const lh = meta.height ?? 0;
   const logoLeft = Math.round((size - lw) / 2);
-  const logoTop = verticalPadding;
-
-  const fontSize = Math.max(11, Math.round(size * 0.052));
-  const textSvg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${textBand}">
-  <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" direction="rtl"
-    font-family="Segoe UI, Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="600"
-    fill="${TEXT_FILL}">אסק מי פלוס</text>
-</svg>`;
-
-  const textBuf = await sharp(Buffer.from(textSvg)).png().toBuffer();
-  const textTop = size - textBand;
+  const logoTop = Math.round((size - lh) / 2);
 
   const outPath = path.join(publicDir, `icon-${size}.png`);
   await sharp({
@@ -60,10 +48,7 @@ async function buildIcon(size) {
       background: BG,
     },
   })
-    .composite([
-      { input: logoBuf, top: logoTop, left: logoLeft },
-      { input: textBuf, top: textTop, left: 0 },
-    ])
+    .composite([{ input: logoBuf, top: logoTop, left: logoLeft }])
     .png()
     .toFile(outPath);
 

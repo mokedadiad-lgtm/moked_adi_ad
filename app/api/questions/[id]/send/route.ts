@@ -6,15 +6,31 @@ const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ??
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
-function buildAskerPdfWhatsAppBody(downloadUrl: string, questionTitle: string): string {
-  const titleLine = questionTitle ? `בנושא: ${questionTitle}\n\n` : "";
+function buildAskerPdfWhatsAppBody(downloadUrl: string, _questionTitle: string): string {
   return `שלום וברכה,
 
 שמחים לעדכן כי צוות אסק מי פלוס השיב לפנייתך.
-${titleLine}להורדת קובץ התשובה (PDF) לחץ/י על הקישור:
+להורדת קובץ התשובה (PDF) לחץ/י על הקישור:
 ${downloadUrl}
 
 הערה: המידע בתשובה הינו כללי ואינו מהווה תחליף לייעוץ מקצועי אישי.`;
+}
+
+async function sendAskerPdfWhatsApp(
+  phone: string,
+  downloadUrl: string,
+  questionTitle: string,
+  idempotencyKey: string
+) {
+  const { sendMetaWhatsAppInitiatedWithLog } = await import("@/lib/whatsapp/outbound");
+  const waText = buildAskerPdfWhatsAppBody(downloadUrl, questionTitle);
+  return sendMetaWhatsAppInitiatedWithLog(phone, {
+    templateKey: "asker_pdf_sent",
+    channel_event: "asker_pdf_sent",
+    idempotency_key: idempotencyKey,
+    bodyParameters: [downloadUrl],
+    legacyText: waText,
+  });
 }
 
 /**
@@ -78,12 +94,7 @@ export async function POST(
         { status: 400 }
       );
     }
-    const { sendMetaWhatsAppTextWithLog } = await import("@/lib/whatsapp/outbound");
-    const waText = buildAskerPdfWhatsAppBody(downloadUrlForAsker, questionTitle);
-    const waResult = await sendMetaWhatsAppTextWithLog(phone, waText, {
-      channel_event: "asker_pdf_sent",
-      idempotency_key: `asker_pdf_${id}`,
-    });
+    const waResult = await sendAskerPdfWhatsApp(phone, downloadUrlForAsker, questionTitle, `asker_pdf_${id}`);
     if (!waResult.ok) {
       return NextResponse.json(
         { error: waResult.error ?? "שליחת וואטסאפ נכשלה. בדוק הגדרות Meta." },
@@ -103,12 +114,7 @@ export async function POST(
         { status: 400 }
       );
     }
-    const { sendMetaWhatsAppTextWithLog } = await import("@/lib/whatsapp/outbound");
-    const waText = buildAskerPdfWhatsAppBody(downloadUrlForAsker, questionTitle);
-    const waResult = await sendMetaWhatsAppTextWithLog(phone, waText, {
-      channel_event: "asker_pdf_sent",
-      idempotency_key: `asker_pdf_${id}_wa`,
-    });
+    const waResult = await sendAskerPdfWhatsApp(phone, downloadUrlForAsker, questionTitle, `asker_pdf_${id}_wa`);
     if (!waResult.ok) {
       return NextResponse.json(
         { error: waResult.error ?? "שליחת וואטסאפ נכשלה. בדוק הגדרות Meta." },

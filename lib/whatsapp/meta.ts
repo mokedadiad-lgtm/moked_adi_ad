@@ -29,6 +29,13 @@ export function normalizeMetaPhone(raw: string): string | null {
   return null;
 }
 
+function extractSentMessageId(data: {
+  messages?: Array<{ id?: string }>;
+  idMessage?: string;
+}): string | undefined {
+  return data.messages?.[0]?.id ?? data.idMessage;
+}
+
 async function postJson(path: string, body: unknown): Promise<MetaSendResult> {
   try {
     const accessToken = requireEnv("META_ACCESS_TOKEN");
@@ -38,12 +45,15 @@ async function postJson(path: string, body: unknown): Promise<MetaSendResult> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const data = (await res.json().catch(() => ({}))) as { idMessage?: string; error?: { message?: string } };
+    const data = (await res.json().catch(() => ({}))) as {
+      messages?: Array<{ id?: string }>;
+      idMessage?: string;
+      error?: { message?: string };
+    };
     if (!res.ok) {
       return { ok: false, error: data.error?.message ?? res.statusText };
     }
-    // Meta usually returns `messages` response with an id.
-    return { ok: true, idMessage: data.idMessage };
+    return { ok: true, idMessage: extractSentMessageId(data) };
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : "Network error";
     return { ok: false, error: errMsg };
@@ -81,6 +91,57 @@ export async function sendMetaWhatsAppText(toPhoneRaw: string, text: string): Pr
     to,
     type: "text",
     text: { body: text },
+  });
+}
+
+/**
+ * Send an approved template message (business-initiated / outside 24h session).
+ * `bodyParameters` map to {{1}}, {{2}}, … in the template body (same order).
+ */
+export async function sendMetaWhatsAppTemplate(
+  toPhoneRaw: string,
+  templateName: string,
+  languageCode: string,
+  bodyParameters: string[],
+  buttonDynamicParam?: string
+): Promise<MetaSendResult> {
+  const to = normalizeMetaPhone(toPhoneRaw);
+  if (!to) return { ok: false, error: "Invalid phone number" };
+
+  const phoneNumberId = requireEnv("META_PHONE_NUMBER_ID");
+  const components: Array<Record<string, unknown>> = [
+    {
+      type: "body",
+      parameters: bodyParameters.map((text) => ({
+        type: "text",
+        text,
+      })),
+    },
+  ];
+
+  if (buttonDynamicParam) {
+    components.push({
+      type: "button",
+      sub_type: "url",
+      index: "0",
+      parameters: [
+        {
+          type: "text",
+          text: buttonDynamicParam,
+        },
+      ],
+    });
+  }
+
+  return postJson(`/${phoneNumberId}/messages`, {
+    messaging_product: "whatsapp",
+    to,
+    type: "template",
+    template: {
+      name: templateName,
+      language: { code: languageCode },
+      components,
+    },
   });
 }
 
