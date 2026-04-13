@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import React from "react";
 import * as ReactPDF from "@react-pdf/renderer";
 import { ResponsePdfDocument, type ResponsePdfProps } from "@/lib/pdf-response-document";
-import { getPdfLogoDataUri } from "@/lib/pdf-brand-assets";
+import { getPdfLogoAssets } from "@/lib/pdf-brand-assets";
 import { ensureHeeboFontFiles, registerHeeboFont } from "@/lib/pdf-register-font";
 
 const BUCKET = "response-pdfs";
@@ -189,7 +189,7 @@ export async function POST(
       const doc = React.createElement(ResponsePdfDocument, {
         ...pdfOptions,
         bodyPlain,
-        logoDataUri: getPdfLogoDataUri(),
+        ...getPdfLogoAssets(),
       } as ResponsePdfProps);
       buffer = await ReactPDF.renderToBuffer(doc as React.ReactElement<ReactPDF.DocumentProps>);
     } catch (fallbackErr) {

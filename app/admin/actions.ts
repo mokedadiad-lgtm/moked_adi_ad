@@ -8,6 +8,7 @@ import { notifyLobbyNewQuestion, notifyLinguisticNewQuestion } from "@/app/actio
 import type { QuestionStage } from "@/lib/types";
 import { ADMIN_TABLE_STAGES } from "@/lib/types";
 import { getActiveQuestions } from "@/lib/admin-active-questions";
+import { normalizeAskerAgeRangeInput } from "@/lib/asker-age-ranges";
 
 function revalidateAdminTopics() {
   revalidatePath("/admin/topics");
@@ -1876,7 +1877,7 @@ export interface QuestionIntakeDraftItem {
   status: DraftStatus;
   created_at: string;
   asker_gender: "M" | "F" | null;
-  asker_age: number | null;
+  asker_age: string | null;
   title: string | null;
   content_preview: string;
   response_type: "short" | "detailed" | null;
@@ -1994,7 +1995,7 @@ export async function updateQuestionIntakeDraft(
   draftId: string,
   patch: Partial<{
     asker_gender: "M" | "F" | null;
-    asker_age: number | null;
+    asker_age: string | null;
     title: string | null;
     content: string | null;
     response_type: "short" | "detailed" | null;
@@ -2007,7 +2008,22 @@ export async function updateQuestionIntakeDraft(
   try {
     const update: Record<string, unknown> = {};
     if (patch.asker_gender !== undefined) update.asker_gender = patch.asker_gender;
-    if (patch.asker_age !== undefined) update.asker_age = patch.asker_age;
+    if (patch.asker_age !== undefined) {
+      if (patch.asker_age == null || patch.asker_age.trim() === "") {
+        update.asker_age = null;
+      } else {
+        const trimmed = patch.asker_age.trim();
+        const normalizedRange = normalizeAskerAgeRangeInput(trimmed);
+        // Allow legacy numeric ages (historical drafts) OR the new fixed ranges.
+        if (normalizedRange) {
+          update.asker_age = normalizedRange;
+        } else if (/^\d{1,3}$/.test(trimmed)) {
+          update.asker_age = trimmed;
+        } else {
+          return { ok: false, error: "גיל לא תקין" };
+        }
+      }
+    }
     if (patch.title !== undefined) update.title = patch.title;
     if (patch.content !== undefined) update.content = patch.content;
     if (patch.response_type !== undefined) update.response_type = patch.response_type;
@@ -2050,7 +2066,7 @@ export async function approveQuestionIntakeDraft(
         asker_email: draft.asker_email ?? null,
         asker_phone: draft.phone,
         asker_gender: draft.asker_gender ?? null,
-        asker_age: draft.asker_age != null ? String(draft.asker_age) : null,
+        asker_age: draft.asker_age ?? null,
         response_type: draft.response_type ?? "short",
         publication_consent: draft.publication_consent ?? "none",
         asker_delivery_preference: draft.delivery_preference ?? null,

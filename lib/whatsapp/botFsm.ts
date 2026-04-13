@@ -1,3 +1,4 @@
+import { ASKER_AGE_RANGE_LABELS, normalizeAskerAgeRangeInput, type AskerAgeRangeLabel } from "@/lib/asker-age-ranges";
 import { renderBotText } from "@/lib/whatsapp/botTexts";
 
 export type Gender = "M" | "F";
@@ -31,7 +32,7 @@ export type BotConversationState =
 
 export type BotContext = {
   asker_gender?: Gender;
-  asker_age?: number;
+  asker_age?: AskerAgeRangeLabel;
   bodyParts?: string[];
   humanParts?: string[];
   humanPromptShown?: boolean;
@@ -50,11 +51,19 @@ export type BotContext = {
 export type InboundBotEvent = {
   text?: string | null;
   buttonId?: string | null;
+  listReplyId?: string | null;
 };
 
 export type OutboundAction =
   | { kind: "text"; text: string }
-  | { kind: "buttons"; bodyText: string; buttons: Array<{ id: string; title: string }> };
+  | { kind: "buttons"; bodyText: string; buttons: Array<{ id: string; title: string }> }
+  | {
+      kind: "list";
+      bodyText: string;
+      buttonText: string;
+      sectionTitle: string;
+      rows: Array<{ id: string; title: string; description?: string }>;
+    };
 
 export type BotFsmResult =
   | {
@@ -71,13 +80,35 @@ function safeTrim(s: string | undefined | null): string {
   return (s ?? "").trim();
 }
 
-function parseAge(text: string | undefined | null): number | null {
-  const t = safeTrim(text);
-  if (!t) return null;
-  if (!/^\d{1,3}$/.test(t)) return null;
-  const n = Number(t);
-  if (!Number.isFinite(n)) return null;
-  return n;
+function parseAgeRangeFromInbound(inbound: InboundBotEvent): AskerAgeRangeLabel | null {
+  const id = safeTrim(inbound.listReplyId ?? undefined);
+  if (id && id.startsWith("AGE_RANGE_")) {
+    const suffix = id.slice("AGE_RANGE_".length);
+    const fromId = normalizeAskerAgeRangeInput(suffix.replace(/_/g, "-"));
+    if (fromId) return fromId;
+  }
+
+  const btn = safeTrim(inbound.buttonId ?? undefined);
+  if (btn && btn.startsWith("AGE_RANGE_")) {
+    const suffix = btn.slice("AGE_RANGE_".length);
+    const fromBtn = normalizeAskerAgeRangeInput(suffix.replace(/_/g, "-"));
+    if (fromBtn) return fromBtn;
+  }
+
+  return normalizeAskerAgeRangeInput(inbound.text);
+}
+
+function sendAgeRangeList(outbound: OutboundAction[], ctx: BotContext) {
+  outbound.push({
+    kind: "list",
+    bodyText: renderText("age", ctx).trimEnd(),
+    buttonText: "בחירת גיל",
+    sectionTitle: "טווח גיל",
+    rows: ASKER_AGE_RANGE_LABELS.map((label) => ({
+      id: `AGE_RANGE_${label.replace(/\+/g, "PLUS").replace(/-/g, "_")}`,
+      title: label,
+    })),
+  });
 }
 
 function normalizeTextCommand(raw: string | undefined | null): string {
@@ -95,49 +126,13 @@ function isNewProcessKeyword(text: string | undefined | null): boolean {
   );
 }
 
-// =========================
-// BOT TEXTS (synchronized with WHATSAPP_BOT_TEXTS.md)
-// =========================
-const START_TEXT =
-  "ברוכים הבאים לבוט של 'אסק מי פלוס' מבית עדי-עד!\n\nהמספר שממנו שלחת את ההודעה מזוהה לצורך שליחת המענה לפניתך.\nיש לבחור את האפשרות הנכונה עבורך כדי שנמשיך.\n";
-
-const GENDER_INVALID_FIRST_TEXT =
-  "לא זיהיתי בחירה תקינה.\nנא לבחור את האפשרות הרצויה באמצעות הכפתורים: `זכר` או `נקבה`.";
-
-const CHOOSE_MODE_TEXT = "תודה.\nאתה מעוניין בפניה ושאלה במוקד או להשאיר הודעה לנציג אנושי?\n";
-
-const HUMAN_HANDOFF_TEXT = "פנייתך הועברה למענה אנושי אנושי.\nניצור עמך קשר בהקדם האפשרי.\n";
-
-const AGE_TEXT = "נא להזין את הגיל שלך באמצעות מספר בלבד.";
-
-const AGE_INVALID_FIRST_TEXT =
-  "הגיל שהוזן אינו בטווח הנדרש או שאינו מספר.\nנא להזין את גילך.";
-
-const AGE_INVALID_SECOND_TEXT =
-  "השירות אינו מיועד לפונה בגילך.\nתודה על פנייתך. השיחה תיסגר כעת.\n";
-
-const BODY_COLLECT_TEXT =
-  "כעת נא לכתוב את השאלה שלך.\nניתן לשלוח את התוכן במספר הודעות.\nלאחר שתסיים/י, לחץ/י על האפשרות המתאימה.\n";
-
-const BODY_INVALID_OR_EMPTY_TEXT =
-  "לא נקלט תוכן שאלה תקין.\nנא לכתוב את השאלה באופן ברור.\n";
-
-const TITLE_COLLECT_TEXT = "נא להזין כותרת קצרה לשאלה.\n";
-
-const RESPONSE_TYPE_TEXT = "באיזו רמת פירוט תרצה/י לקבל מענה?\n";
 const RESPONSE_SHORT_BUTTON_TITLE = "תשובה קצרה, מתומצתת ומעשית";
 const RESPONSE_DETAILED_BUTTON_TITLE = "תשובה מקיפה, ארוכה ומורחבת";
-
-const PUBLICATION_CONSENT_TEXT =
-  "פעמים רבות השאלות שאנו נשאלים יכולות לסייע למתמודדים/ות נוספים/ות. את/ה חשוב/ה לנו ולעולם לא נפרסם את השאלה שלך אם לא תסכים/מי.\n\n" +
-  "את התשובות שאנו עונים יש לנו את הזכות לפרסם לתועלת נערים/ות נוספים/ות, בטשטוש פרטים מזהים.\n\n" +
-  "האם את/ה מאשר לנו לפרסם את שאלתך?\n";
 
 const PUBLICATION_PUBLISH_BUTTON_TITLE = "אפשר לפרסם";
 const PUBLICATION_BLUR_BUTTON_TITLE = "פרסום בטשטוש פרטים מזהים";
 const PUBLICATION_NONE_BUTTON_TITLE = "לא לפרסום";
 
-const DELIVERY_PREFERENCE_TEXT = "כיצד תרצה/י לקבל את התשובה?\n";
 const DELIVERY_WHATSAPP_BUTTON_TITLE = "וואטסאפ";
 const DELIVERY_EMAIL_BUTTON_TITLE = "אימייל";
 const DELIVERY_BOTH_BUTTON_TITLE = "גם וואטסאפ וגם אימייל";
@@ -175,35 +170,9 @@ const WA_REPLY_HUMAN_ADD_MORE = "המשך עוד";
 const HUMAN_DONE_BUTTON_ID = "HUMAN_DONE";
 const WA_REPLY_HUMAN_DONE = "סיימתי";
 
-const COLLECT_EMAIL_TEXT = "נא להזין כתובת אימייל לקבלת התשובה.\n";
-const EMAIL_INVALID_TEXT =
-  "כתובת האימייל שהוזנה אינה תקינה.\nנא להזין כתובת אימייל תקינה.\n";
-
 const CONFIRM_EDIT_BUTTONS_BODY = "בחירה";
 const CONFIRM_DONE_BUTTON_ID = "CONFIRM_DONE";
 const CONFIRM_CHANGE_BUTTON_ID = "CONFIRM_CHANGE";
-
-const WAITING_ADMIN_APPROVAL_TEXT =
-  "תודה.\nהפנייה שלך התקבלה והועברה למערכת המוקד.\nבעז\"ה נשלח לך תשובה בהמשך\n";
-
-const EXTRA_INBOX_MESSAGE_WHILE_WAITING_TEXT =
-  "קיבלנו הודעה נוספת מהשואל.\nהיא תועבר לעיון הנציג האנושי.\nלא נבצע עדכונים אוטומטיים עד לסיום הבדיקה והאישור.\n";
-
-const START_NEW_PROCESS_WHILE_WAITING_TEXT =
-  "פתחנו פנייה חדשה.\nהפנייה הקודמת עדיין נמצאת בבדיקה במערכת.\n";
-
-const MAX_EDITS_REACHED_TEXT =
-  "הגעת למספר השינויים המקסימלי האפשרי.\nבאפשרותך לאשר את הפנייה כפי שהיא כעת.\n";
-
-const EDIT_GENDER_TEXT =
-  "נא להזין מחדש את המגדר באמצעות הכפתורים: `זכר` או `נקבה`.\n";
-const EDIT_AGE_TEXT = "נא להזין גיל במספרים.\n";
-const EDIT_BODY_TEXT =
-  "נא לכתוב את תוכן השאלה החדש.\nניתן לשלוח במספר הודעות.\nלאחר שתסיים/י לחץ/י על האפשרות המתאימה.\n";
-const EDIT_TITLE_TEXT = "נא להזין כותרת חדשה לשאלה.\n";
-const EDIT_RESPONSE_TYPE_TEXT = "באיזו רמת פירוט תרצה/י לקבל מענה?\n";
-const EDIT_PUBLICATION_CONSENT_TEXT = "נא לבחור אפשרות לפרסום:\n";
-const EDIT_DELIVERY_PREFERENCE_TEXT = "כיצד תרצה/י לקבל את התשובה?\n";
 
 function responseTypeLabel(rt: ResponseType): string {
   return rt === "short" ? RESPONSE_SHORT_BUTTON_TITLE : RESPONSE_DETAILED_BUTTON_TITLE;
@@ -255,7 +224,7 @@ export async function runBotFsm(params: {
   createDraftFn: (draft: {
     phone: string;
     asker_gender: Gender;
-    asker_age: number;
+    asker_age: AskerAgeRangeLabel;
     title: string;
     content: string;
     response_type: ResponseType;
@@ -268,6 +237,7 @@ export async function runBotFsm(params: {
   const { currentState, currentContext, inbound, toPhoneRaw, createDraftFn } = params;
   const text = normalizeTextCommand(inbound.text);
   const buttonId = safeTrim(inbound.buttonId ?? undefined) || null;
+  const listReplyId = safeTrim(inbound.listReplyId ?? undefined) || null;
 
   const ctx: BotContext = { ...(currentContext ?? {}) };
   ctx.edit_count = ctx.edit_count ?? 0;
@@ -334,6 +304,7 @@ export async function runBotFsm(params: {
       // Default to bot flow
       ctx.delivery_preference = ctx.delivery_preference ?? "whatsapp";
       sendText(renderText("age", ctx).trimEnd());
+      sendAgeRangeList(outbound, ctx);
       return { ok: true, nextState: "age", nextContext: ctx, outbound };
     }
 
@@ -383,8 +354,8 @@ export async function runBotFsm(params: {
     }
 
     case "age": {
-      const n = parseAge(text);
-      if (n == null || n < 18 || n > 99) {
+      const picked = parseAgeRangeFromInbound({ ...inbound, text, buttonId, listReplyId });
+      if (!picked) {
         // Track attempts via a simple counter in context
         const prevBad = (ctx as any).age_bad_count ?? 0;
         const badCount = prevBad + 1;
@@ -394,9 +365,10 @@ export async function runBotFsm(params: {
           return { ok: true, nextState: "done", nextContext: ctx, outbound };
         }
         sendText(renderText("age_invalid_first", ctx).trimEnd());
+        sendAgeRangeList(outbound, ctx);
         return { ok: true, nextState: "age", nextContext: ctx, outbound };
       }
-      ctx.asker_age = n;
+      ctx.asker_age = picked;
       ctx.bodyParts = [];
       sendText(renderText("body_collect", ctx).trimEnd());
       return { ok: true, nextState: "body_collect", nextContext: ctx, outbound };
@@ -598,7 +570,7 @@ export async function runBotFsm(params: {
       ) {
         // Create draft
         const asker_gender = ctx.asker_gender as Gender | undefined;
-        const asker_age = ctx.asker_age as number | undefined;
+        const asker_age = ctx.asker_age as AskerAgeRangeLabel | undefined;
         const title = (ctx.title ?? "").trim();
         const content = (((ctx as any).content ?? "") as string).trim();
         const response_type = ctx.response_type as ResponseType | undefined;
@@ -680,6 +652,7 @@ export async function runBotFsm(params: {
           return { ok: true, nextState: "edit_gender", nextContext: ctx, outbound };
         case "EDIT_AGE":
           sendText(renderText("edit_age", ctx).trimEnd());
+          sendAgeRangeList(outbound, ctx);
           return { ok: true, nextState: "edit_age", nextContext: ctx, outbound };
         case "EDIT_BODY":
           ctx.bodyParts = [];
@@ -737,6 +710,7 @@ export async function runBotFsm(params: {
       }
       if (field === "גיל") {
         sendText(renderText("edit_age", ctx).trimEnd());
+        sendAgeRangeList(outbound, ctx);
         return { ok: true, nextState: "edit_age", nextContext: ctx, outbound };
       }
       if (field === "שאלה") {
@@ -794,12 +768,13 @@ export async function runBotFsm(params: {
     }
 
     case "edit_age": {
-      const n = parseAge(text);
-      if (n == null || n < 18 || n > 99) {
+      const picked = parseAgeRangeFromInbound({ ...inbound, text, buttonId, listReplyId });
+      if (!picked) {
         sendText(renderText("edit_age", ctx).trimEnd());
+        sendAgeRangeList(outbound, ctx);
         return { ok: true, nextState: "edit_age", nextContext: ctx, outbound };
       }
-      ctx.asker_age = n;
+      ctx.asker_age = picked;
       ctx.edit_count = (ctx.edit_count ?? 0) + 1;
       // After edit, go back confirm
       return showConfirm(outbound, ctx);

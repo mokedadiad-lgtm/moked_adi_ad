@@ -4,7 +4,7 @@
  */
 import path from "path";
 import fs from "fs";
-import { getPdfLogoDataUri } from "./pdf-brand-assets";
+import { getPdfLogoAssets } from "./pdf-brand-assets";
 import { buildPdfHtml } from "./pdf-html-template";
 
 const CDN_BASE = "https://cdn.jsdelivr.net/npm/@fontsource/heebo@5.2.8/files";
@@ -73,8 +73,8 @@ async function getHeeboFontFaceCss(): Promise<string> {
 export async function renderPdfFromHtml(options: PdfHtmlOptions): Promise<Buffer> {
   const isVercel = process.env.VERCEL === "1";
   const fontFaceCss = await getHeeboFontFaceCss().catch(() => undefined);
-  const logoDataUri = getPdfLogoDataUri();
-  const html = buildPdfHtml({ ...options, fontFaceCss, logoDataUri });
+  const logoAssets = getPdfLogoAssets();
+  const html = buildPdfHtml({ ...options, fontFaceCss, ...logoAssets });
 
   interface BrowserLike {
     newPage(): Promise<{

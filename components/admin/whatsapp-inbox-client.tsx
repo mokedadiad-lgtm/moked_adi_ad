@@ -24,6 +24,7 @@ import {
   type QuestionIntakeDraftItem,
   type QuestionIntakeDraftDetails,
 } from "@/app/admin/actions";
+import { ASKER_AGE_RANGE_LABELS } from "@/lib/asker-age-ranges";
 
 const GENDER_LABEL: Record<string, string> = { M: "זכר", F: "נקבה" };
 const RESPONSE_LABEL: Record<string, string> = { short: "קצר ולעניין", detailed: "מורחב" };
@@ -37,6 +38,23 @@ const DELIVERY_LABEL: Record<string, string> = {
   email: "אימייל",
   both: "גם וואטסאפ וגם אימייל",
 };
+
+function ageSelectValue(raw: string | null | undefined): string {
+  const v = (raw ?? "").trim();
+  if (!v) return "";
+  if ((ASKER_AGE_RANGE_LABELS as readonly string[]).includes(v)) return v;
+  // legacy numeric ages saved before ranges rollout
+  if (/^\d{1,3}$/.test(v)) return v;
+  return "";
+}
+
+function ageSelectLabel(raw: string | null | undefined): string {
+  const v = (raw ?? "").trim();
+  if (!v) return "";
+  if ((ASKER_AGE_RANGE_LABELS as readonly string[]).includes(v)) return `טווח ${v}`;
+  if (/^\d{1,3}$/.test(v)) return `גיל (ישן): ${v}`;
+  return v;
+}
 
 function formatDateTime(iso: string) {
   try {
@@ -244,12 +262,30 @@ export function WhatsappInboxClient({ initialDrafts }: { initialDrafts: Question
 
                       <div className="space-y-1">
                         <p className="text-xs text-slate-500">גיל</p>
-                        <Input
-                          type="number"
-                          value={details.asker_age ?? ""}
-                          onChange={(e) => updateDetailsField("asker_age", e.target.value ? Number(e.target.value) : null)}
+                        <Select
+                          value={ageSelectValue(details.asker_age)}
+                          onValueChange={(v) => updateDetailsField("asker_age", v ? v : null)}
                           disabled={loadingDetails}
-                        />
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="בחר/י טווח גיל" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {details.asker_age &&
+                              (details.asker_age ?? "").trim() &&
+                              !(ASKER_AGE_RANGE_LABELS as readonly string[]).includes((details.asker_age ?? "").trim()) &&
+                              /^\d{1,3}$/.test((details.asker_age ?? "").trim()) && (
+                                <SelectItem value={(details.asker_age ?? "").trim()}>
+                                  {ageSelectLabel(details.asker_age)}
+                                </SelectItem>
+                              )}
+                            {ASKER_AGE_RANGE_LABELS.map((label) => (
+                              <SelectItem key={label} value={label}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
 
                       <div className="space-y-1">

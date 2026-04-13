@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { submitQuestion, type SubmitState } from "@/app/actions/submit-question";
+import { ASKER_AGE_RANGE_LABELS } from "@/lib/asker-age-ranges";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion } from "framer-motion";
 import { startTransition, useActionState, useEffect, useState } from "react";
@@ -27,7 +28,7 @@ import { z } from "zod";
 const schema = z.object({
   asker_email: z.string().min(1, "נא להזין אימייל לשליחת המענה.").email("נא להזין אימייל תקין."),
   asker_gender: z.enum(["M", "F"]).optional(),
-  asker_age: z.string().optional(),
+  asker_age: z.enum(ASKER_AGE_RANGE_LABELS, { message: "נא לבחור טווח גיל." }),
   title: z.string().min(1, "נא להזין כותרת השאלה."),
   content: z.string().min(1, "נא להזין את פירוט השאלה."),
   response_type: z.enum(["short", "detailed"]),
@@ -40,7 +41,7 @@ type FormValues = z.infer<typeof schema>;
 const defaultValues: FormValues = {
   asker_email: "",
   asker_gender: undefined,
-  asker_age: "",
+  asker_age: "23-26",
   title: "",
   content: "",
   response_type: "short",
@@ -172,15 +173,26 @@ export function LandingForm() {
               </button>
             </div>
           </div>
-          <div className="w-full max-w-[120px] space-y-1.5">
+          <div className="w-full max-w-[220px] space-y-1.5">
             <Label htmlFor="asker_age" className="text-base font-bold">גיל</Label>
-            <Input
-              id="asker_age"
-              type="text"
-              placeholder="למשל 24"
-              {...form.register("asker_age")}
-              className="w-full text-center"
-            />
+            <Select
+              value={form.watch("asker_age")}
+              onValueChange={(v) => form.setValue("asker_age", v as FormValues["asker_age"])}
+            >
+              <SelectTrigger id="asker_age" className="w-full text-center">
+                <SelectValue placeholder="בחר/י טווח גיל" />
+              </SelectTrigger>
+              <SelectContent>
+                {ASKER_AGE_RANGE_LABELS.map((label) => (
+                  <SelectItem key={label} value={label}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {form.formState.errors.asker_age && (
+              <p className="text-center text-xs text-red-600">{form.formState.errors.asker_age.message}</p>
+            )}
           </div>
         </div>
       </section>

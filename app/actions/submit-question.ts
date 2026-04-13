@@ -3,13 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { sendAdminInboxPush } from "@/lib/push/send-admin-inbox-push";
+import { normalizeAskerAgeRangeInput } from "@/lib/asker-age-ranges";
 
 export type SubmitState = { ok: true } | { ok: false; error: string };
 
 export async function submitQuestion(formData: FormData): Promise<SubmitState> {
   const email = String(formData.get("asker_email") ?? "").trim();
   const asker_gender = formData.get("asker_gender") as string | null;
-  const asker_age = String(formData.get("asker_age") ?? "").trim();
+  const asker_age_raw = String(formData.get("asker_age") ?? "").trim();
   const title = String(formData.get("title") ?? "").trim();
   const content = String(formData.get("content") ?? "").trim();
   const response_type = formData.get("response_type") as string | null;
@@ -25,6 +26,9 @@ export async function submitQuestion(formData: FormData): Promise<SubmitState> {
     return { ok: false, error: "נא לבחור אפשרות פרסום." };
   if (!terms_accepted) return { ok: false, error: "נא לאשר את תנאי השימוש." };
 
+  const asker_age = normalizeAskerAgeRangeInput(asker_age_raw);
+  if (!asker_age) return { ok: false, error: "נא לבחור טווח גיל תקין." };
+
   try {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
@@ -35,7 +39,7 @@ export async function submitQuestion(formData: FormData): Promise<SubmitState> {
         content,
         asker_email: email || null,
         asker_gender: asker_gender === "M" || asker_gender === "F" ? asker_gender : null,
-        asker_age: asker_age || null,
+        asker_age,
         response_type: response_type as "short" | "detailed",
         publication_consent: publication_consent as "publish" | "blur" | "none",
         terms_accepted: true,

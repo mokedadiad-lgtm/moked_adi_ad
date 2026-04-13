@@ -62,8 +62,15 @@ async function postJson(path: string, body: unknown): Promise<MetaSendResult> {
 
 export type MetaButton = { id: string; title: string };
 
+export type MetaListRow = { id: string; title: string; description?: string };
+
 /** Meta Graph API: reply button `title` must be at most 20 characters. */
 const MAX_REPLY_BUTTON_TITLE_LENGTH = 20;
+const MAX_LIST_ROW_TITLE_LENGTH = 24;
+const MAX_LIST_ROW_DESC_LENGTH = 72;
+const MAX_LIST_SECTION_TITLE_LENGTH = 24;
+const MAX_LIST_BUTTON_TEXT_LENGTH = 20;
+const MAX_LIST_BODY_TEXT_LENGTH = 1024;
 
 function clipReplyButtonTitle(title: string): string {
   const chars = [...title];
@@ -75,6 +82,14 @@ function clipReplyButtonTitle(title: string): string {
     "→",
     clipped
   );
+  return clipped;
+}
+
+function clipListText(text: string, maxChars: number): string {
+  const chars = [...text];
+  if (chars.length <= maxChars) return text;
+  const clipped = chars.slice(0, maxChars).join("");
+  console.warn(`[WhatsApp] List text too long (${chars.length} > ${maxChars}), clipped:`, text, "→", clipped);
   return clipped;
 }
 
@@ -167,12 +182,54 @@ export async function sendMetaWhatsAppButtons(
     type: "interactive",
     interactive: {
       type: "button",
-      body: { text: bodyText },
+      body: { text: clipListText(bodyText, MAX_LIST_BODY_TEXT_LENGTH) },
       action: {
         buttons: safeButtons.map((b) => ({
           type: "reply",
           reply: { id: b.id, title: clipReplyButtonTitle(b.title) },
         })),
+      },
+    },
+  });
+}
+
+/**
+ * Send interactive list message (type=list).
+ * Useful for more than 3 discrete choices (WhatsApp quick-reply buttons max ~3).
+ */
+export async function sendMetaWhatsAppList(params: {
+  toPhoneRaw: string;
+  bodyText: string;
+  buttonText: string;
+  sectionTitle: string;
+  rows: MetaListRow[];
+}): Promise<MetaSendResult> {
+  const to = normalizeMetaPhone(params.toPhoneRaw);
+  if (!to) return { ok: false, error: "Invalid phone number" };
+
+  const phoneNumberId = requireEnv("META_PHONE_NUMBER_ID");
+
+  const safeRows = params.rows.slice(0, 10).map((r) => ({
+    id: r.id,
+    title: clipListText(r.title, MAX_LIST_ROW_TITLE_LENGTH),
+    ...(r.description ? { description: clipListText(r.description, MAX_LIST_ROW_DESC_LENGTH) } : {}),
+  }));
+
+  return postJson(`/${phoneNumberId}/messages`, {
+    messaging_product: "whatsapp",
+    to,
+    type: "interactive",
+    interactive: {
+      type: "list",
+      body: { text: clipListText(params.bodyText, MAX_LIST_BODY_TEXT_LENGTH) },
+      action: {
+        button: clipListText(params.buttonText, MAX_LIST_BUTTON_TEXT_LENGTH),
+        sections: [
+          {
+            title: clipListText(params.sectionTitle, MAX_LIST_SECTION_TITLE_LENGTH),
+            rows: safeRows,
+          },
+        ],
       },
     },
   });

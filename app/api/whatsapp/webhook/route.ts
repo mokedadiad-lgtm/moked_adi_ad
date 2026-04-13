@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { runBotFsm, type BotConversationState, type BotContext } from "@/lib/whatsapp/botFsm";
 import { classifyConversationKind } from "@/lib/whatsapp/inboxKind";
-import { normalizeMetaPhone, sendMetaWhatsAppButtons, sendMetaWhatsAppText } from "@/lib/whatsapp/meta";
+import { normalizeMetaPhone, sendMetaWhatsAppButtons, sendMetaWhatsAppList, sendMetaWhatsAppText } from "@/lib/whatsapp/meta";
 import { logWhatsAppOutbound } from "@/lib/whatsapp/outbound";
 
 function timingSafeEqual(a: string, b: string): boolean {
@@ -112,6 +112,7 @@ export async function POST(request: Request) {
     message_type: string | null;
     text_body: string | null;
     buttonId: string | null;
+    listReplyId: string | null;
     payload: unknown;
   }> = [];
 
@@ -124,16 +125,26 @@ export async function POST(request: Request) {
         if (!id || !from) continue;
         const type = typeof m.type === "string" ? m.type : null;
         const text = typeof m.text?.body === "string" ? m.text.body : null;
+        const interactive = (m as { interactive?: unknown }).interactive as
+          | {
+              type?: string;
+              button_reply?: { id?: string };
+              list_reply?: { id?: string; title?: string };
+            }
+          | undefined;
         const buttonId =
-          typeof (m as any)?.interactive?.button_reply?.id === "string"
-            ? (m as any).interactive.button_reply.id
-            : null;
+          typeof interactive?.button_reply?.id === "string" ? interactive.button_reply.id : null;
+        const listReplyId =
+          typeof interactive?.list_reply?.id === "string" ? interactive.list_reply.id : null;
+        const listTitle =
+          typeof interactive?.list_reply?.title === "string" ? interactive.list_reply.title : null;
         messages.push({
           provider_message_id: id,
           from_phone: from,
           message_type: type,
-          text_body: text,
+          text_body: text ?? listTitle,
           buttonId,
+          listReplyId,
           payload: m,
         });
       }
@@ -217,6 +228,58 @@ export async function POST(request: Request) {
           await logWhatsAppOutbound({
             to_phone: toPhoneRaw,
             channel_event: "bot_reply_buttons",
+            conversation_id: convId,
+            status: "error",
+            error: e instanceof Error ? e.message : "send_failed",
+            payload: {},
+          });
+        }
+      } else if (o.kind === "list") {
+        const bodyText = typeof o.bodyText === "string" ? o.bodyText : "";
+        const buttonText = typeof o.buttonText === "string" ? o.buttonText : "בחר/י";
+        const sectionTitle = typeof o.sectionTitle === "string" ? o.sectionTitle : "אפשרויות";
+        const rows = Array.isArray(o.rows)
+          ? o.rows.filter((r) => r && typeof (r as any).id === "string" && typeof (r as any).title === "string")
+          : [];
+        if (rows.length === 0) continue;
+        try {
+          const { isMetaWhatsAppConfigured } = await import("@/lib/whatsapp/meta");
+          if (!isMetaWhatsAppConfigured()) {
+            await logWhatsAppOutbound({
+              to_phone: toPhoneRaw,
+              channel_event: "bot_reply_list",
+              conversation_id: convId,
+              status: "error",
+              error: "Meta not configured",
+              payload: { bodyPreview: bodyText.slice(0, 200) },
+            });
+            continue;
+          }
+          const result = await sendMetaWhatsAppList({
+            toPhoneRaw,
+            bodyText: bodyText || "בחירה",
+            buttonText,
+            sectionTitle,
+            rows: rows.map((r) => ({
+              id: (r as any).id,
+              title: (r as any).title,
+              description: typeof (r as any).description === "string" ? (r as any).description : undefined,
+            })),
+          });
+          await logWhatsAppOutbound({
+            to_phone: toPhoneRaw,
+            channel_event: "bot_reply_list",
+            conversation_id: convId,
+            status: result.ok ? "sent" : "error",
+            error: result.ok ? null : result.error,
+            provider_message_id: result.ok ? result.idMessage : null,
+            payload: { bodyPreview: bodyText.slice(0, 200), rowIds: rows.map((r: any) => r.id) },
+          });
+        } catch (e) {
+          console.error("whatsapp webhook: send list failed", e);
+          await logWhatsAppOutbound({
+            to_phone: toPhoneRaw,
+            channel_event: "bot_reply_list",
             conversation_id: convId,
             status: "error",
             error: e instanceof Error ? e.message : "send_failed",
@@ -331,6 +394,7 @@ export async function POST(request: Request) {
       inbound: {
         text: msg.text_body,
         buttonId: msg.buttonId,
+        listReplyId: msg.listReplyId,
       },
       createDraftFn: async (draft) => {
         try {

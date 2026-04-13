@@ -14,10 +14,24 @@ export function buildPdfHtml(options: {
   linguisticSignature?: string | null;
   /** אופציונלי: @font-face עם גופני Heebo כ-base64 – מונע בעיות כשגופנים לא נטענים מהרשת */
   fontFaceCss?: string;
-  /** לוגו מוטמע (data URI) – מ־public/brand/logo-full.png */
-  logoDataUri?: string;
+  /** לוגו שמאלי מוטמע (data URI) */
+  leftLogoDataUri?: string;
+  /** לוגו מרכזי מוטמע (data URI) */
+  centerLogoDataUri?: string;
+  /** לוגו ימני מוטמע (data URI) */
+  rightLogoDataUri?: string;
 }): string {
-  const { questionContent, bodyHtmlForPdf, footnotes, createdAt, linguisticSignature, fontFaceCss, logoDataUri } = options;
+  const {
+    questionContent,
+    bodyHtmlForPdf,
+    footnotes,
+    createdAt,
+    linguisticSignature,
+    fontFaceCss,
+    leftLogoDataUri,
+    centerLogoDataUri,
+    rightLogoDataUri,
+  } = options;
   const safeBody = sanitizeResponseHtml(bodyHtmlForPdf);
   const sigSan = sanitizeSignatureHtml(linguisticSignature ?? "").trim();
   const signatureHtml = sigSan
@@ -84,9 +98,9 @@ export function buildPdfHtml(options: {
     /* שורה אחת: תאריך (שמאל) | לוגו (מרכז) | ב"ה (ימין) — dir=ltr ליישור פיזי */
     .pdf-header-row {
       display: grid;
-      grid-template-columns: 1fr auto 1fr;
+      grid-template-columns: minmax(0, 1fr) auto auto auto minmax(0, 1fr);
       align-items: center;
-      gap: 10px;
+      gap: 12px;
       width: 100%;
       min-height: 72px;
       direction: ltr;
@@ -105,6 +119,7 @@ export function buildPdfHtml(options: {
       display: flex;
       align-items: center;
       justify-content: center;
+      min-width: 64px;
     }
     .pdf-logo {
       max-height: 80px;
@@ -238,7 +253,13 @@ export function buildPdfHtml(options: {
     <div class="pdf-header-row">
       <span class="pdf-header-date">${dateStr ? `נוצר ב: ${escapeHtml(dateStr)}` : "\u00A0"}</span>
       <div class="pdf-header-logo-wrap">
-        ${logoDataUri ? `<img class="pdf-logo" src="${logoDataUri}" alt="" />` : ""}
+        ${rightLogoDataUri ? `<img class="pdf-logo" src="${rightLogoDataUri}" alt="" />` : ""}
+      </div>
+      <div class="pdf-header-logo-wrap">
+        ${centerLogoDataUri ? `<img class="pdf-logo" src="${centerLogoDataUri}" alt="" />` : ""}
+      </div>
+      <div class="pdf-header-logo-wrap">
+        ${leftLogoDataUri ? `<img class="pdf-logo" src="${leftLogoDataUri}" alt="" />` : ""}
       </div>
       <p class="pdf-header-bh">ב"ה</p>
     </div>

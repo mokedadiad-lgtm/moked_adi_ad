@@ -41,25 +41,32 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     bottom: 0,
-    width: "32%",
+    width: "24%",
     justifyContent: "center",
     alignItems: "flex-start",
   },
-  headerLogoAbs: {
+  headerLogosAbs: {
     position: "absolute",
-    left: "32%",
-    width: "36%",
+    left: "24%",
+    width: "52%",
     top: 0,
     bottom: 0,
+    flexDirection: "row",
+    direction: "ltr",
     justifyContent: "center",
     alignItems: "center",
+  },
+  headerLogoSlot: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   headerBhAbs: {
     position: "absolute",
     right: 0,
     top: 0,
     bottom: 0,
-    width: "32%",
+    width: "24%",
     justifyContent: "center",
     alignItems: "flex-end",
   },
@@ -197,7 +204,9 @@ export interface ResponsePdfProps {
   bodyHtmlForPdf?: string | null;
   footnotes: string[];
   createdAt?: string;
-  logoDataUri?: string;
+  leftLogoDataUri?: string;
+  centerLogoDataUri?: string;
+  rightLogoDataUri?: string;
   linguisticSignature?: string | null;
 }
 
@@ -223,7 +232,9 @@ export function ResponsePdfDocument({
   bodyHtmlForPdf,
   footnotes,
   createdAt,
-  logoDataUri,
+  leftLogoDataUri,
+  centerLogoDataUri,
+  rightLogoDataUri,
   linguisticSignature,
 }: ResponsePdfProps) {
   const useStructuredBody = Boolean(bodyHtmlForPdf && String(bodyHtmlForPdf).trim());
@@ -246,11 +257,25 @@ export function ResponsePdfDocument({
                 <Text style={styles.dateText}> </Text>
               )}
             </View>
-            <View style={styles.headerLogoAbs}>
-              {logoDataUri ? (
-                /* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image is not DOM img */
-                <Image src={logoDataUri} style={styles.logo} />
-              ) : null}
+            <View style={styles.headerLogosAbs}>
+              <View style={styles.headerLogoSlot}>
+                {rightLogoDataUri ? (
+                  /* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image is not DOM img */
+                  <Image src={rightLogoDataUri} style={styles.logo} />
+                ) : null}
+              </View>
+              <View style={styles.headerLogoSlot}>
+                {centerLogoDataUri ? (
+                  /* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image is not DOM img */
+                  <Image src={centerLogoDataUri} style={styles.logo} />
+                ) : null}
+              </View>
+              <View style={styles.headerLogoSlot}>
+                {leftLogoDataUri ? (
+                  /* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image is not DOM img */
+                  <Image src={leftLogoDataUri} style={styles.logo} />
+                ) : null}
+              </View>
             </View>
             <View style={styles.headerBhAbs}>
               <Text style={styles.bH}>ב&quot;ה</Text>
