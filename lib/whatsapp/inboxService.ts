@@ -62,9 +62,10 @@ function buildTeamRoleLabels(profile: {
   is_proofreader?: boolean | null;
   is_linguistic_editor?: boolean | null;
 }): string[] {
+  // אחראי טכני — תג יחיד (גם אם יש is_admin; אדמין לא ידרוס את התצוגה)
+  if (profile.is_technical_lead === true) return ["אחראי טכני"];
   if (profile.is_admin === true) return ["מנהל מערכת"];
   const labels: string[] = [];
-  if (profile.is_technical_lead === true) labels.push("אחראי טכני");
   if (profile.is_respondent === true) labels.push("משיב");
   if (profile.is_proofreader === true) labels.push("מגיה");
   if (profile.is_linguistic_editor === true) labels.push("עורך לשוני");

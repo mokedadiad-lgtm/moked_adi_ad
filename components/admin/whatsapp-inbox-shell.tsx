@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { WhatsappConversationsClient } from "@/components/admin/whatsapp-conversations-client";
@@ -45,6 +46,14 @@ export function WhatsappInboxShell({
           onClick={() => setTab("drafts")}
         >
           טיוטות ממתינות לאישור
+        </Button>
+        <Button
+          asChild
+          variant="outline"
+          size="sm"
+          className="border-blue-200 bg-white text-blue-700 hover:bg-blue-50"
+        >
+          <Link href="/admin/whatsapp-bot-demo">דוגמת בוט וואטסאפ</Link>
         </Button>
       </div>
 

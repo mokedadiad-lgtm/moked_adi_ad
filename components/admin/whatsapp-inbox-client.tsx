@@ -87,7 +87,11 @@ export function WhatsappInboxClient({ initialDrafts }: { initialDrafts: Question
   const refreshList = async () => {
     const list = await getWaitingQuestionIntakeDrafts();
     setDrafts(list);
-    if (!selectedId && list.length > 0) setSelectedId(list[0]!.id);
+    setSelectedId((prev) => {
+      if (prev && list.some((d) => d.id === prev)) return prev;
+      return list[0]?.id ?? null;
+    });
+    if (list.length === 0) setDetails(null);
   };
 
   const loadDetails = async (id: string) => {
@@ -109,6 +113,7 @@ export function WhatsappInboxClient({ initialDrafts }: { initialDrafts: Question
 
   // Poll list lightly so new inbound messages/drafts appear
   useEffect(() => {
+    void refreshList();
     const t = setInterval(() => {
       void refreshList();
       if (selectedId) {
@@ -233,57 +238,21 @@ export function WhatsappInboxClient({ initialDrafts }: { initialDrafts: Question
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="h-8 w-8 p-0"
+                        className="h-8 shrink-0 gap-1 px-2"
                         onClick={() => setMobileView("list")}
                         aria-label="חזרה לרשימת טיוטות"
                       >
                         <span aria-hidden className="text-lg font-bold leading-none">‹</span>
+                        <span className="text-xs font-medium">חזרה</span>
                       </Button>
                       <div className="min-w-0 flex-1 text-right">
                         <div className="truncate text-sm font-semibold">{selectedDraftTitle}</div>
                         <div className="truncate text-[11px] text-slate-500">מספר טיוטה: {details.id}</div>
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 md:hidden">
-                      <Button type="button" variant="outline" size="sm" onClick={() => void handleSave()} disabled={saving}>
-                        {saving ? "שומר…" : "שמור"}
-                      </Button>
-                      <Button type="button" size="sm" onClick={() => void handleApprove()} disabled={approvePending}>
-                        {approvePending ? "מאשר…" : "אישור"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        onClick={handleDiscard}
-                        disabled={discardPending || saving || approvePending}
-                      >
-                        {discardPending ? "שולך…" : "השלך"}
-                      </Button>
-                    </div>
-                    <div className="hidden items-start justify-between gap-3 md:flex">
-                      <div>
-                        <div className="text-sm font-medium">{selectedDraftTitle}</div>
-                        <div className="text-xs text-slate-500">מספר טיוטה: {details.id}</div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button type="button" variant="outline" size="sm" onClick={() => void handleSave()} disabled={saving}>
-                          {saving ? "שומר…" : "שמור"}
-                        </Button>
-                        <Button type="button" size="sm" onClick={() => void handleApprove()} disabled={approvePending}>
-                          {approvePending ? "מאשר…" : "אישור"}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          onClick={handleDiscard}
-                          disabled={discardPending || saving || approvePending}
-                          className="hidden sm:inline-flex"
-                        >
-                          {discardPending ? "שולך לאשפה…" : "השלך"}
-                        </Button>
-                      </div>
+                    <div className="hidden md:block">
+                      <div className="text-sm font-medium">{selectedDraftTitle}</div>
+                      <div className="text-xs text-slate-500">מספר טיוטה: {details.id}</div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -434,6 +403,26 @@ export function WhatsappInboxClient({ initialDrafts }: { initialDrafts: Question
                           </div>
                         )}
                       </ScrollArea>
+                    </div>
+
+                    <div className="mt-6 border-t border-slate-200 pt-4">
+                      <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:justify-end sm:gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={() => void handleSave()} disabled={saving}>
+                          {saving ? "שומר…" : "שמור"}
+                        </Button>
+                        <Button type="button" size="sm" onClick={() => void handleApprove()} disabled={approvePending}>
+                          {approvePending ? "מאשר…" : "אישור"}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={handleDiscard}
+                          disabled={discardPending || saving || approvePending}
+                        >
+                          {discardPending ? "שולך לאשפה…" : "השלך"}
+                        </Button>
+                      </div>
                     </div>
                   </>
                 )}

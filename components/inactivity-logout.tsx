@@ -4,14 +4,16 @@ import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
 
-const INACTIVITY_MS = 60 * 60 * 1000; // שעה
-const CHECK_INTERVAL_MS = 60 * 1000; // בדיקה כל דקה
+/** חודש ללא פעילות — מחושב כ־30 ימים */
+const INACTIVITY_MS = 30 * 24 * 60 * 60 * 1000;
+/** בדיקה תקופתית; מספיק לסף של חודש */
+const CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 const ACTIVITY_EVENTS = ["mousedown", "mousemove", "keydown", "scroll", "touchstart", "click"] as const;
 
 /**
- * מתנתק אוטומטית אחרי שעה של חוסר פעילות.
- * יש להציב במסכים שדורשים התחברות (לוח בקרה, משיב, הגהה).
+ * מתנתק אוטומטית רק אחרי כ־חודש (30 ימים) ללא פעילות בממשק.
+ * יש להציב במסכים שדורשים התחברות (לוח בקרה, משיב, מגיה וכו').
  */
 export function InactivityLogout() {
   const router = useRouter();

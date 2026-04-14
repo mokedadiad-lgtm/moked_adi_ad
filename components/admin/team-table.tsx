@@ -97,7 +97,7 @@ export function TeamTable({ profiles, categories, proofreaderTypes, topics }: Te
             </TableHeader>
             <TableBody>
               {profiles.length === 0 ? (
-                <TableRow>
+                <TableRow className="border-0 !bg-transparent odd:!bg-transparent even:!bg-transparent hover:!bg-transparent">
                   <TableCell colSpan={6} className="py-8 text-center text-secondary">
                     אין אנשי צוות במערכת
                   </TableCell>
@@ -106,7 +106,7 @@ export function TeamTable({ profiles, categories, proofreaderTypes, topics }: Te
                 profiles.map((p) => (
                   <TableRow
                     key={p.id}
-                    className="cursor-pointer hover:bg-primary-muted/50"
+                    className="cursor-pointer hover:!bg-primary-muted/50"
                     onClick={() => openEdit(p)}
                   >
                     <TableCell className="font-medium text-primary">

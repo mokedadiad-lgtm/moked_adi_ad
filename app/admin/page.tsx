@@ -21,8 +21,13 @@ export default async function AdminDashboardPage({
   const emailCounts = uniqueEmails.length > 0 ? await getEmailCounts(uniqueEmails) : {};
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="לוח בקרה" subtitle="סקירה וניהול משימות פעילות" />
+    <div className="space-y-4 sm:space-y-6">
+      <PageHeader
+        title="לוח בקרה"
+        subtitle="סקירה וניהול משימות פעילות"
+        compact
+        className="static z-auto rounded-2xl border border-slate-200/70 bg-gradient-to-b from-slate-50/90 to-background shadow-sm shadow-slate-200/30 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80"
+      />
       <AdminDashboard
         questions={questions}
         topics={topics}

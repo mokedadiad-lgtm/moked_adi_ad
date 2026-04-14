@@ -130,7 +130,7 @@ export default async function AdminTrashPage() {
               </TableHeader>
               <TableBody>
                 {cancelledDrafts.length === 0 ? (
-                  <TableRow>
+                  <TableRow className="border-0 !bg-transparent odd:!bg-transparent even:!bg-transparent hover:!bg-transparent">
                     <TableCell colSpan={4} className="py-8 text-center text-secondary">
                       אין טיוטות שבוטלו
                     </TableCell>

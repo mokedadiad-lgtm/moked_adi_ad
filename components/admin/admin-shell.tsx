@@ -184,13 +184,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             tabIndex={-1}
             onClick={closeSidebar}
             className={cn(
-              "fixed inset-0 z-20 bg-black/50 transition-opacity md:hidden",
+              "fixed inset-0 z-[30] bg-black/50 transition-opacity md:hidden",
               sidebarOpen ? "opacity-100" : "pointer-events-none opacity-0"
             )}
           />
           <aside
             className={cn(
-              "fixed right-0 top-0 z-[25] flex h-full min-h-dvh w-64 flex-col border-l pt-0 shadow-xl transition-transform duration-200 ease-out",
+              "fixed right-0 top-0 z-[35] flex h-full min-h-dvh w-64 flex-col border-l pt-0 shadow-xl transition-transform duration-200 ease-out",
               "border-slate-200/90 bg-slate-50 md:border-primary/15 md:bg-[#1a1a35]",
               "md:pt-[5.5rem] md:translate-x-0 md:transition-none",
               sidebarOpen ? "translate-x-0" : "translate-x-full md:translate-x-0"

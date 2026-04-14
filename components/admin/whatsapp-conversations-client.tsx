@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
@@ -43,6 +44,15 @@ type ThreadRenderRow =
   | { kind: "date"; key: string; label: string }
   | { kind: "unread"; key: string; label: string }
   | { kind: "message"; key: string; message: InboxThreadItem };
+
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
 
 function formatDateTime(iso: string | null) {
   if (!iso) return "—";
@@ -156,6 +166,7 @@ export function WhatsappConversationsClient({
   initialConversations: InboxConversationItem[];
 }) {
   const [filter, setFilter] = useState<InboxFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const nonBotInitial = initialConversations.filter((c) => c.inbox_kind !== "bot_intake");
   const [conversations, setConversations] = useState<InboxConversationItem[]>(nonBotInitial);
   const [selectedId, setSelectedId] = useState<string | null>(nonBotInitial[0]?.id ?? null);
@@ -172,6 +183,23 @@ export function WhatsappConversationsClient({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const threadViewportRef = useRef<HTMLDivElement | null>(null);
   const firstUnreadMessageIdRef = useRef<string | null>(null);
+
+  const filteredConversations = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return conversations;
+    return conversations.filter((c) => {
+      const hay = [
+        c.phone,
+        c.display_name ?? "",
+        c.display_title ?? "",
+        ...c.role_labels,
+        KIND_LABEL[c.inbox_kind],
+      ]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [conversations, searchQuery]);
 
   const selectedConversation = useMemo(
     () => conversations.find((c) => c.id === selectedId) ?? null,
@@ -246,6 +274,13 @@ export function WhatsappConversationsClient({
     void refreshConversations(filter).catch((e) => setError((e as Error).message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    if (!filteredConversations.some((c) => c.id === selectedId)) {
+      setSelectedId(filteredConversations[0]?.id ?? null);
+    }
+  }, [filteredConversations, selectedId]);
 
   useEffect(() => {
     setInitialScrollDone(false);
@@ -467,7 +502,10 @@ export function WhatsappConversationsClient({
           <div className="rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-900">{error}</div>
         )}
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div
+          className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3"
+          dir="rtl"
+        >
           <div className="flex flex-wrap gap-2">
             {(["all", "anonymous", "team"] as InboxFilter[]).map((f) => (
               <Button
@@ -480,6 +518,20 @@ export function WhatsappConversationsClient({
                 {FILTER_LABEL[f]}
               </Button>
             ))}
+          </div>
+          <div className="relative w-full min-w-0 sm:max-w-sm sm:flex-1">
+            <span className="pointer-events-none absolute start-2.5 top-1/2 z-[1] -translate-y-1/2 text-slate-400">
+              <SearchIcon className="size-4 shrink-0" />
+            </span>
+            <Input
+              type="search"
+              placeholder="חיפוש לפי שם, טלפון, תפקיד…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-9 w-full min-w-0 border-slate-300 bg-white ps-9 text-sm"
+              dir="rtl"
+              aria-label="חיפוש ברשימת השיחות"
+            />
           </div>
         </div>
 
@@ -495,9 +547,22 @@ export function WhatsappConversationsClient({
           <ScrollArea className="h-[420px] rounded-lg border border-card-border p-2">
             <div className="space-y-2">
               {conversations.length === 0 ? (
-                <p className="text-sm text-slate-600">אין שיחות להצגה.</p>
+                <div
+                  className="flex min-h-[280px] w-full flex-col items-center justify-center px-4 py-8 text-center"
+                  dir="rtl"
+                >
+                  <p className="text-sm text-slate-600">אין שיחות להצגה.</p>
+                </div>
+              ) : filteredConversations.length === 0 ? (
+                <div
+                  className="flex min-h-[280px] w-full flex-col items-center justify-center px-4 py-8 text-center"
+                  dir="rtl"
+                >
+                  <p className="text-sm text-slate-600">אין תוצאות שמתאימות לחיפוש.</p>
+                  <p className="mt-1 text-xs text-slate-500">נסו מילה אחרת או נקו את שדה החיפוש.</p>
+                </div>
               ) : (
-                conversations.map((c) => {
+                filteredConversations.map((c) => {
                   const style = KIND_STYLES[c.inbox_kind];
                   const isSelected = selectedId === c.id;
                   return (
@@ -590,11 +655,12 @@ export function WhatsappConversationsClient({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-8 w-8 p-0"
+                  className="h-8 shrink-0 gap-1 px-2"
                   onClick={() => setMobileView("list")}
                   aria-label="חזרה לרשימה"
                 >
                   <span aria-hidden className="text-lg font-bold leading-none">‹</span>
+                  <span className="text-xs font-medium">חזרה</span>
                 </Button>
                 <details className="relative">
                   <summary className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700">
@@ -663,7 +729,12 @@ export function WhatsappConversationsClient({
                     </div>
                   ) : null}
                   {thread.length === 0 ? (
-                    <p className="text-sm text-slate-600">אין הודעות להצגה.</p>
+                    <div
+                      className="flex min-h-[200px] w-full flex-col items-center justify-center px-4 py-8 text-center"
+                      dir="rtl"
+                    >
+                      <p className="text-sm text-slate-600">אין הודעות להצגה.</p>
+                    </div>
                   ) : (
                     threadRows.map((row) => {
                       if (row.kind === "date") {

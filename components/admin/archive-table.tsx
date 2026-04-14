@@ -117,7 +117,7 @@ export function ArchiveTable({ questions }: ArchiveTableProps) {
           </TableHeader>
           <TableBody>
             {questions.length === 0 ? (
-              <TableRow>
+              <TableRow className="border-0 !bg-transparent odd:!bg-transparent even:!bg-transparent hover:!bg-transparent">
                 <TableCell colSpan={6} className="py-8 text-center text-secondary">
                   אין שאלות בארכיון
                 </TableCell>
@@ -129,7 +129,7 @@ export function ArchiveTable({ questions }: ArchiveTableProps) {
                 return (
                   <TableRow
                     key={q.id}
-                    className="cursor-pointer hover:bg-slate-50/80"
+                    className="cursor-pointer hover:bg-slate-100/70 motion-reduce:transition-none"
                     onClick={() => handleRowClick(q)}
                   >
                     <TableCell className="font-mono text-xs text-secondary" onClick={(e) => e.stopPropagation()}>

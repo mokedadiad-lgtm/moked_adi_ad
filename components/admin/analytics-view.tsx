@@ -517,24 +517,24 @@ export function AnalyticsView({
         <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50/80">
-                <TableHead className="text-xs font-semibold">ID</TableHead>
-                <TableHead className="text-xs font-semibold">כותרת</TableHead>
-                <TableHead className="text-xs font-semibold">נושא</TableHead>
-                <TableHead className="text-xs font-semibold">תת־נושא</TableHead>
-                <TableHead className="text-xs font-semibold">סטטוס</TableHead>
-                <TableHead className="text-xs font-semibold">משיב/ה</TableHead>
-                <TableHead className="text-xs font-semibold">מגיה/ה</TableHead>
-                <TableHead className="text-xs font-semibold">תאריך כניסה</TableHead>
-                <TableHead className="text-xs font-semibold">תאריך שליחה</TableHead>
-                <TableHead className="text-xs font-semibold">אימייל שואל</TableHead>
-                <TableHead className="text-xs font-semibold">סוג תשובה</TableHead>
-                <TableHead className="text-xs font-semibold">פרסום</TableHead>
+              <TableRow className="!bg-slate-50/90 odd:!bg-slate-50/90 even:!bg-slate-50/90 hover:!bg-slate-50/90">
+                <TableHead className="text-xs font-semibold text-slate-800">ID</TableHead>
+                <TableHead className="text-xs font-semibold text-slate-800">כותרת</TableHead>
+                <TableHead className="text-xs font-semibold text-slate-800">נושא</TableHead>
+                <TableHead className="text-xs font-semibold text-slate-800">תת־נושא</TableHead>
+                <TableHead className="text-xs font-semibold text-slate-800">סטטוס</TableHead>
+                <TableHead className="text-xs font-semibold text-slate-800">משיב/ה</TableHead>
+                <TableHead className="text-xs font-semibold text-slate-800">מגיה/ה</TableHead>
+                <TableHead className="text-xs font-semibold text-slate-800">תאריך כניסה</TableHead>
+                <TableHead className="text-xs font-semibold text-slate-800">תאריך שליחה</TableHead>
+                <TableHead className="text-xs font-semibold text-slate-800">אימייל שואל</TableHead>
+                <TableHead className="text-xs font-semibold text-slate-800">סוג תשובה</TableHead>
+                <TableHead className="text-xs font-semibold text-slate-800">פרסום</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredQuestions.length === 0 ? (
-                <TableRow>
+                <TableRow className="border-0 !bg-transparent odd:!bg-transparent even:!bg-transparent hover:!bg-transparent">
                   <TableCell colSpan={12} className="py-8 text-center text-slate-500">
                     אין שאלות התואמות את הסינון
                   </TableCell>
@@ -543,7 +543,7 @@ export function AnalyticsView({
                 filteredQuestions.map((q) => (
                   <TableRow
                     key={q.id}
-                    className="cursor-pointer text-xs transition-colors hover:bg-slate-50"
+                    className="cursor-pointer text-xs transition-colors hover:bg-slate-100/70 motion-reduce:transition-none"
                     onClick={() => {
                       setDetailQuestion(q);
                       setDetailModalOpen(true);

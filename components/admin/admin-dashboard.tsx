@@ -24,9 +24,8 @@ import {
 } from "@/components/ui/table";
 import type { ProofreaderTypeOption, TopicOption } from "@/app/admin/actions";
 import type { QuestionRow, QuestionStage } from "@/lib/types";
-import { afterModalClose } from "@/lib/utils";
+import { afterModalClose, cn } from "@/lib/utils";
 import { ACTIVE_STAGES, STAGE_LABELS } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 function StageIconClock({ className }: { className?: string }) {
   return (
@@ -95,6 +94,24 @@ function AlertTriangleIcon({ className }: { className?: string }) {
       <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
       <path d="M12 9v4" />
       <path d="M12 17h.01" />
+    </svg>
+  );
+}
+
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
+
+function InboxEmptyIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+      <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
     </svg>
   );
 }
@@ -294,8 +311,15 @@ export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpe
   };
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-5 gap-1 sm:grid-cols-3 sm:gap-1.5 md:grid-cols-4 md:gap-3 lg:grid-cols-5">
+    <div className="space-y-6 sm:space-y-7">
+      <section className="space-y-3" aria-labelledby="dashboard-stage-summary-heading">
+        <div className="flex flex-col gap-0.5">
+          <h2 id="dashboard-stage-summary-heading" className="text-sm font-semibold tracking-tight text-slate-800 md:text-base">
+            סיכום לפי שלב
+          </h2>
+          <p className="text-xs text-slate-500 md:text-sm">לחיצה על כרטיס מסננת את המשימות למטה</p>
+        </div>
+        <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-3 sm:gap-2 md:grid-cols-4 md:gap-3 lg:grid-cols-5">
         {ACTIVE_STAGES.map((stage) => {
           const style = CARD_STYLES[stage];
           const isLobby = stage === "in_proofreading_lobby";
@@ -305,12 +329,13 @@ export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpe
               type="button"
               onClick={() => setFilter(stage)}
               className={cn(
-                "flex flex-col overflow-hidden rounded-lg border-2 px-1 py-1 shadow-sm transition-all hover:shadow sm:px-2 sm:py-1.5 md:px-3 md:py-3",
+                "flex flex-col overflow-hidden rounded-lg border-2 px-1 py-1 shadow-sm transition-all duration-200 motion-reduce:transition-none sm:px-2 sm:py-1.5 md:rounded-2xl md:px-3 md:py-3 md:shadow md:hover:shadow-md motion-reduce:hover:shadow-sm",
                 "min-h-0 justify-between gap-0.5 md:gap-1",
                 "aspect-[3/2] sm:aspect-[2/1]",
                 style.bg,
                 style.border,
-                filter === stage && "ring-2 ring-offset-1 ring-primary/50"
+                filter === stage &&
+                  "ring-2 ring-primary/60 ring-offset-2 ring-offset-background shadow-md md:shadow-lg"
               )}
               dir="rtl"
             >
@@ -356,17 +381,25 @@ export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpe
             </button>
           );
         })}
-      </div>
+        </div>
+      </section>
 
-      <Card className="overflow-hidden rounded-xl border border-slate-200/80 shadow-sm">
+      <section className="space-y-3" aria-labelledby="dashboard-task-list-heading">
+        <h2 id="dashboard-task-list-heading" className="text-sm font-semibold tracking-tight text-slate-800 md:text-base">
+          רשימת משימות
+        </h2>
+      <Card className="overflow-hidden rounded-xl border border-slate-200/80 shadow-sm md:rounded-2xl md:shadow-md">
         <CardContent className="p-0">
-          <div className="flex flex-nowrap items-center justify-between gap-2 border-b border-slate-200/80 px-2 py-1.5 md:px-3 md:py-2" dir="rtl">
-            <div className="flex min-w-0 flex-1 flex-nowrap items-center justify-start gap-2">
+          <div
+            className="flex flex-col gap-3 border-b border-slate-200/70 bg-slate-50/50 px-2 py-2 backdrop-blur-sm md:flex-row md:flex-nowrap md:items-center md:justify-between md:gap-3 md:px-4 md:py-3"
+            dir="rtl"
+          >
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               {filter === "all" ? (
-                <span className="shrink-0 text-xs font-medium text-slate-800 md:text-sm">משימות:</span>
+                <span className="shrink-0 text-xs font-medium text-slate-800 md:text-sm">משימות</span>
               ) : (
                 <>
-                  <span className="shrink-0 text-xs text-slate-600 md:text-sm">
+                  <span className="min-w-0 max-w-full text-xs text-slate-600 md:shrink-0 md:text-sm">
                     סינון: <span className="font-medium text-slate-800">{STAGE_LABELS[filter]}</span>
                   </span>
                   <Button
@@ -381,15 +414,21 @@ export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpe
                 </>
               )}
             </div>
-            <div className="flex shrink-0 flex-nowrap items-center gap-1.5">
-              <Input
-                type="search"
-                placeholder="חיפוש..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-8 w-20 border-slate-300 text-xs md:h-9 md:w-36 md:text-sm"
-                dir="rtl"
-              />
+            <div className="flex w-full min-w-0 items-center gap-2 md:w-auto md:max-w-[min(100%,28rem)] md:flex-1 md:justify-end md:gap-3">
+              <div className="relative min-w-0 flex-1">
+                <span className="pointer-events-none absolute start-2.5 top-1/2 z-[1] -translate-y-1/2 text-slate-400">
+                  <SearchIcon className="size-4 shrink-0" />
+                </span>
+                <Input
+                  type="search"
+                  placeholder="חיפוש..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-8 w-full min-w-0 border-slate-300 ps-9 text-xs md:h-9 md:text-sm"
+                  dir="rtl"
+                  aria-label="חיפוש ברשימת המשימות"
+                />
+              </div>
               <Button
                 type="button"
                 variant="default"
@@ -403,22 +442,31 @@ export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpe
               </Button>
             </div>
           </div>
-          <div className="overflow-x-auto">
+          <div className="[&>div]:max-h-[min(70vh,720px)] [&>div]:overflow-auto [&>div]:rounded-none [&>div]:border-0 [&>div]:bg-transparent">
           <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent bg-slate-50/80">
-                <TableHead className="text-xs font-semibold md:text-sm">ID שאלה</TableHead>
-                <TableHead className="text-xs font-semibold md:text-sm">שאלה</TableHead>
-                <TableHead className="text-xs font-semibold md:text-sm">סטטוס</TableHead>
-                <TableHead className="text-xs font-semibold md:text-sm">משיב/ה</TableHead>
-                <TableHead className="text-xs font-semibold md:text-sm">מגיה/ה</TableHead>
+            <TableHeader
+              className={cn(
+                "sticky top-0 z-20 !border-0 !border-b !border-slate-200/90 !bg-slate-50/95 shadow-sm backdrop-blur-sm supports-[backdrop-filter]:bg-slate-50/90",
+                "[&_tr]:!bg-slate-50/95 [&_tr:hover]:!bg-slate-50/95"
+              )}
+            >
+              <TableRow className="border-0 !bg-slate-50/95 odd:!bg-slate-50/95 even:!bg-slate-50/95 hover:!bg-slate-50/95 supports-[backdrop-filter]:!bg-slate-50/90">
+                <TableHead className="text-xs font-semibold text-slate-800 md:text-sm">ID שאלה</TableHead>
+                <TableHead className="text-xs font-semibold text-slate-800 md:text-sm">שאלה</TableHead>
+                <TableHead className="text-xs font-semibold text-slate-800 md:text-sm">סטטוס</TableHead>
+                <TableHead className="text-xs font-semibold text-slate-800 md:text-sm">משיב/ה</TableHead>
+                <TableHead className="text-xs font-semibold text-slate-800 md:text-sm">מגיה/ה</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="py-12 text-center text-secondary">
-                    אין שאלות להצגה
+                <TableRow className="border-0 !bg-transparent odd:!bg-transparent even:!bg-transparent hover:!bg-transparent">
+                  <TableCell colSpan={5} className="py-14 text-center align-middle">
+                    <div className="flex flex-col items-center gap-3 text-center">
+                      <InboxEmptyIcon className="size-12 text-slate-300" />
+                      <p className="text-sm font-medium text-slate-600">אין שאלות להצגה</p>
+                      <p className="max-w-sm text-xs text-slate-500">נסו לשנות את הסינון או את מילות החיפוש</p>
+                    </div>
                   </TableCell>
                 </TableRow>
               ) : (
@@ -426,8 +474,9 @@ export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpe
                   <TableRow
                     key={q.answer_id ?? q.id}
                     className={cn(
-                      "cursor-pointer transition-colors hover:bg-primary/5",
-                      q.stage === "pending_manager" && "border-2 border-red-400 bg-red-50/50"
+                      "cursor-pointer transition-colors hover:bg-primary/[0.07] motion-reduce:transition-none",
+                      q.stage === "pending_manager" &&
+                        "border-2 border-red-400 !bg-red-50/60 odd:!bg-red-50/60 even:!bg-red-50/60 hover:!bg-red-100/55"
                     )}
                     onClick={() => openStageModal(q)}
                   >
@@ -490,6 +539,7 @@ export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpe
           </div>
         </CardContent>
       </Card>
+      </section>
 
       <AdminQuestionStageModal
         question={stageModalQuestion}

@@ -14,6 +14,7 @@ export type BotTextStateKey =
   | "body_collect"
   | "body_invalid_or_empty"
   | "title_collect"
+  | "title_collect_followup"
   | "response_type"
   | "publication_consent"
   | "delivery_preference"
@@ -33,7 +34,7 @@ export type BotTextStateKey =
   | "extra_inbox_message_while_waiting"
   | "start_new_process_while_waiting";
 
-type RenderVars = {
+export type RenderVars = {
   asker_gender: string;
   asker_age: string;
   title: string;
