@@ -4,6 +4,7 @@ import {
   sendMetaWhatsAppTextWithLog,
 } from "@/lib/whatsapp/outbound";
 import { normalizeMetaPhone } from "@/lib/whatsapp/meta";
+import { getWhatsAppTemplateName } from "@/lib/whatsapp/templateConfig";
 
 export type InboxKind = "bot_intake" | "anonymous" | "team";
 export type InboxFilter = "all" | InboxKind;
@@ -20,6 +21,9 @@ export interface InboxConversationItem {
   display_title: string;
   unread_count: number;
   unread_anchor_at: string | null;
+  is_outside_24h_window: boolean;
+  seconds_since_last_inbound: number | null;
+  is_opening_template_configured: boolean;
   last_inbound_at: string | null;
   last_outbound_at: string | null;
 }
@@ -58,13 +62,26 @@ function buildTeamRoleLabels(profile: {
   is_proofreader?: boolean | null;
   is_linguistic_editor?: boolean | null;
 }): string[] {
+  if (profile.is_admin === true) return ["מנהל מערכת"];
   const labels: string[] = [];
-  if (profile.is_admin === true) labels.push("מנהל");
   if (profile.is_technical_lead === true) labels.push("אחראי טכני");
   if (profile.is_respondent === true) labels.push("משיב");
   if (profile.is_proofreader === true) labels.push("מגיה");
   if (profile.is_linguistic_editor === true) labels.push("עורך לשוני");
   return labels;
+}
+
+function getSecondsSince(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const ts = new Date(iso).getTime();
+  if (!Number.isFinite(ts)) return null;
+  return Math.max(0, Math.floor((Date.now() - ts) / 1000));
+}
+
+function isOutside24hWindow(lastInboundAt: string | null | undefined): boolean {
+  const sec = getSecondsSince(lastInboundAt);
+  if (sec == null) return true;
+  return sec > 24 * 60 * 60;
 }
 
 /** Text shown in admin thread for outbound rows — prefers stored preview, never exposes internal channel_event ids. */
@@ -169,6 +186,8 @@ export async function getWhatsappInboxConversations(
         : displayName
       : phone;
 
+    const secondsSinceLastInbound = getSecondsSince(r.last_inbound_at);
+    const outside24h = isOutside24hWindow(r.last_inbound_at);
     return {
       id: r.id,
       phone,
@@ -179,6 +198,9 @@ export async function getWhatsappInboxConversations(
       display_title: displayTitle,
       unread_count: Number(r.unread_count ?? 0),
       unread_anchor_at: Number(r.unread_count ?? 0) > 0 ? (r.last_inbound_at ?? null) : null,
+      is_outside_24h_window: outside24h,
+      seconds_since_last_inbound: secondsSinceLastInbound,
+      is_opening_template_configured: Boolean(getWhatsAppTemplateName("team_opening")),
       last_inbound_at: r.last_inbound_at ?? null,
       last_outbound_at: r.last_outbound_at ?? null,
     };
@@ -291,11 +313,14 @@ export async function sendWhatsappHumanReply(
 
   const { data: conv, error: convErr } = await supabase
     .from("whatsapp_conversations")
-    .select("id, phone")
+    .select("id, phone, last_inbound_at")
     .eq("id", conversationId)
     .maybeSingle();
 
   if (convErr || !conv?.phone) return { ok: false, error: "שיחה לא נמצאה" };
+  if (isOutside24hWindow((conv as { last_inbound_at?: string | null }).last_inbound_at ?? null)) {
+    return { ok: false, error: "עבר חלון 24 שעות. ניתן לשלוח רק הודעת פתיחה יזומה." };
+  }
 
   const convPhoneNorm = normalizeMetaPhone(conv.phone as string);
 
@@ -332,6 +357,44 @@ export async function sendWhatsappHumanReply(
     .update({
       mode: "human",
       inbox_kind: nextInboxKind,
+      last_outbound_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", conversationId);
+
+  return { ok: true };
+}
+
+export async function sendWhatsappOpeningTemplate(
+  conversationId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = getSupabaseAdmin();
+  const { data: conv, error: convErr } = await supabase
+    .from("whatsapp_conversations")
+    .select("id, phone")
+    .eq("id", conversationId)
+    .maybeSingle();
+  if (convErr || !conv?.phone) return { ok: false, error: "שיחה לא נמצאה" };
+
+  if (!getWhatsAppTemplateName("team_opening")) {
+    return { ok: false, error: "Template פתיחה לא מוגדר. יש להגדיר WHATSAPP_TEMPLATE_TEAM_OPENING." };
+  }
+
+  const result = await sendMetaWhatsAppInitiatedWithLog(conv.phone as string, {
+    templateKey: "team_opening",
+    channel_event: "admin_team_opening",
+    conversation_id: conversationId,
+    idempotency_key: `admin_team_opening_from_chat_${conversationId}_${Date.now()}`,
+    bodyParameters: [],
+    legacyText: "שלום, מה נשמע?",
+  });
+  if (!result.ok) return { ok: false, error: result.error };
+
+  await supabase
+    .from("whatsapp_conversations")
+    .update({
+      mode: "human",
+      inbox_kind: "team",
       last_outbound_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
@@ -438,5 +501,109 @@ export async function startWhatsappTeamConversation(
 
   if (!result.ok) return { ok: false, error: result.error };
   return { ok: true, conversationId };
+}
+
+export async function openWhatsappTeamConversation(
+  profileId: string
+): Promise<{ ok: boolean; error?: string; conversationId?: string }> {
+  const supabase = getSupabaseAdmin();
+
+  const { data: profile, error: profileErr } = await supabase
+    .from("profiles")
+    .select("id, phone")
+    .eq("id", profileId)
+    .maybeSingle();
+
+  if (profileErr || !profile?.phone) {
+    return { ok: false, error: "לא נמצא מספר וואטסאפ לאיש הקשר" };
+  }
+
+  const phone = (profile.phone as string).trim();
+  const { data: existing } = await supabase
+    .from("whatsapp_conversations")
+    .select("id")
+    .eq("phone", phone)
+    .maybeSingle();
+
+  let conversationId = (existing?.id as string | undefined) ?? "";
+  if (!conversationId) {
+    const { data: created, error: createErr } = await supabase
+      .from("whatsapp_conversations")
+      .insert({
+        phone,
+        mode: "human",
+        inbox_kind: "team",
+        state: "start",
+        context: {},
+        unread_count: 0,
+      })
+      .select("id")
+      .single();
+    if (createErr || !created?.id) {
+      return { ok: false, error: createErr?.message ?? "שגיאה בפתיחת שיחה" };
+    }
+    conversationId = created.id as string;
+  } else {
+    await supabase
+      .from("whatsapp_conversations")
+      .update({
+        mode: "human",
+        inbox_kind: "team",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", conversationId);
+  }
+
+  return { ok: true, conversationId };
+}
+
+export async function clearWhatsappConversationHistory(
+  conversationId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = getSupabaseAdmin();
+
+  const [{ error: inErr }, { error: outErr }] = await Promise.all([
+    supabase.from("whatsapp_inbound_messages").delete().eq("conversation_id", conversationId),
+    supabase.from("whatsapp_outbound_messages").delete().eq("conversation_id", conversationId),
+  ]);
+
+  if (inErr || outErr) {
+    return { ok: false, error: inErr?.message ?? outErr?.message ?? "שגיאה במחיקת היסטוריה" };
+  }
+
+  const { error: convErr } = await supabase
+    .from("whatsapp_conversations")
+    .update({
+      unread_count: 0,
+      last_inbound_at: null,
+      last_outbound_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", conversationId);
+
+  if (convErr) return { ok: false, error: convErr.message };
+  return { ok: true };
+}
+
+export async function deleteWhatsappConversation(
+  conversationId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = getSupabaseAdmin();
+
+  const [{ error: inErr }, { error: outErr }] = await Promise.all([
+    supabase.from("whatsapp_inbound_messages").delete().eq("conversation_id", conversationId),
+    supabase.from("whatsapp_outbound_messages").delete().eq("conversation_id", conversationId),
+  ]);
+  if (inErr || outErr) {
+    return { ok: false, error: inErr?.message ?? outErr?.message ?? "שגיאה במחיקת הודעות השיחה" };
+  }
+
+  const { error: convErr } = await supabase
+    .from("whatsapp_conversations")
+    .delete()
+    .eq("id", conversationId);
+
+  if (convErr) return { ok: false, error: convErr.message };
+  return { ok: true };
 }
 

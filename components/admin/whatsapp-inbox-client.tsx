@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -74,11 +75,13 @@ export function WhatsappInboxClient({ initialDrafts }: { initialDrafts: Question
   const router = useRouter();
   const [drafts, setDrafts] = useState<QuestionIntakeDraftItem[]>(initialDrafts);
   const [selectedId, setSelectedId] = useState<string | null>(initialDrafts[0]?.id ?? null);
+  const [mobileView, setMobileView] = useState<"list" | "details">("list");
   const [details, setDetails] = useState<QuestionIntakeDraftDetails | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [saving, setSaving] = useState(false);
   const [approvePending, setApprovePending] = useState(false);
   const [discardPending, setDiscardPending] = useState(false);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refreshList = async () => {
@@ -120,6 +123,11 @@ export function WhatsappInboxClient({ initialDrafts }: { initialDrafts: Question
 
   const contentValue = details?.content ?? "";
 
+  const openDraft = (id: string) => {
+    setSelectedId(id);
+    setMobileView("details");
+  };
+
   const handleSave = async () => {
     if (!details) return;
     setSaving(true);
@@ -158,10 +166,8 @@ export function WhatsappInboxClient({ initialDrafts }: { initialDrafts: Question
     }
   };
 
-  const handleDiscard = async () => {
+  const executeDiscard = async () => {
     if (!details) return;
-    const ok = window.confirm("להשליך את הטיוטה לאשפה?");
-    if (!ok) return;
     setDiscardPending(true);
     setError(null);
     try {
@@ -174,6 +180,11 @@ export function WhatsappInboxClient({ initialDrafts }: { initialDrafts: Question
     } finally {
       setDiscardPending(false);
     }
+  };
+
+  const handleDiscard = () => {
+    if (!details || discardPending || saving || approvePending) return;
+    setDiscardConfirmOpen(true);
   };
 
   const updateDetailsField = <K extends keyof QuestionIntakeDraftDetails>(key: K, value: QuestionIntakeDraftDetails[K]) => {
@@ -190,13 +201,13 @@ export function WhatsappInboxClient({ initialDrafts }: { initialDrafts: Question
           {drafts.length === 0 ? (
             <p className="text-sm text-slate-600">אין טיוטות שממתינות כעת.</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4">
-              <div className="space-y-2">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-[320px_1fr]">
+              <div className={`space-y-2 ${mobileView === "details" ? "hidden md:block" : "block"}`}>
                 {drafts.map((d) => (
                   <button
                     key={d.id}
                     type="button"
-                    onClick={() => setSelectedId(d.id)}
+                    onClick={() => openDraft(d.id)}
                     className={`w-full rounded-lg border p-3 text-right transition ${
                       selectedId === d.id ? "border-primary bg-primary/5" : "border-card-border hover:bg-slate-50"
                     }`}
@@ -210,14 +221,47 @@ export function WhatsappInboxClient({ initialDrafts }: { initialDrafts: Question
                 ))}
               </div>
 
-              <div className="space-y-3">
+              <div className={`space-y-3 ${mobileView === "list" ? "hidden md:block" : "block"}`}>
                 {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">{error}</div>}
 
                 {!details ? (
                   <p className="text-sm text-slate-600">בחר/י טיוטה מהרשימה.</p>
                 ) : (
                   <>
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center justify-between gap-2 md:hidden">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        onClick={() => setMobileView("list")}
+                        aria-label="חזרה לרשימת טיוטות"
+                      >
+                        <span aria-hidden className="text-lg font-bold leading-none">‹</span>
+                      </Button>
+                      <div className="min-w-0 flex-1 text-right">
+                        <div className="truncate text-sm font-semibold">{selectedDraftTitle}</div>
+                        <div className="truncate text-[11px] text-slate-500">מספר טיוטה: {details.id}</div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 md:hidden">
+                      <Button type="button" variant="outline" size="sm" onClick={() => void handleSave()} disabled={saving}>
+                        {saving ? "שומר…" : "שמור"}
+                      </Button>
+                      <Button type="button" size="sm" onClick={() => void handleApprove()} disabled={approvePending}>
+                        {approvePending ? "מאשר…" : "אישור"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleDiscard}
+                        disabled={discardPending || saving || approvePending}
+                      >
+                        {discardPending ? "שולך…" : "השלך"}
+                      </Button>
+                    </div>
+                    <div className="hidden items-start justify-between gap-3 md:flex">
                       <div>
                         <div className="text-sm font-medium">{selectedDraftTitle}</div>
                         <div className="text-xs text-slate-500">מספר טיוטה: {details.id}</div>
@@ -233,7 +277,7 @@ export function WhatsappInboxClient({ initialDrafts }: { initialDrafts: Question
                           type="button"
                           variant="destructive"
                           size="sm"
-                          onClick={() => void handleDiscard()}
+                          onClick={handleDiscard}
                           disabled={discardPending || saving || approvePending}
                           className="hidden sm:inline-flex"
                         >
@@ -397,6 +441,32 @@ export function WhatsappInboxClient({ initialDrafts }: { initialDrafts: Question
             </div>
           )}
         </CardContent>
+        <Dialog open={discardConfirmOpen} onOpenChange={setDiscardConfirmOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>להשליך טיוטה לאשפה?</DialogTitle>
+              <DialogDescription>
+                הפעולה תעביר את הטיוטה לאשפה. ניתן לשחזר אחר כך מדף האשפה.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDiscardConfirmOpen(false)} disabled={discardPending}>
+                ביטול
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => {
+                  setDiscardConfirmOpen(false);
+                  void executeDiscard();
+                }}
+                disabled={discardPending}
+              >
+                השלך לאשפה
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </Card>
     </div>
   );

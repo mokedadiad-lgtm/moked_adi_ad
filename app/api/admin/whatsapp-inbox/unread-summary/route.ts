@@ -15,7 +15,7 @@ type UnreadConversationItem = {
 export async function GET() {
   const supabase = getSupabaseAdmin();
 
-  const kinds: InboxKind[] = ["bot_intake", "anonymous", "team"];
+  const inboxKinds: InboxKind[] = ["anonymous", "team"];
 
   const [
     { data: convs, error },
@@ -25,14 +25,16 @@ export async function GET() {
     supabase
       .from("whatsapp_conversations")
       .select("id, inbox_kind, phone, unread_count, last_inbound_at")
+      .in("inbox_kind", inboxKinds)
       .gt("unread_count", 0)
       .order("last_inbound_at", { ascending: false })
       .limit(20),
     supabase
       .from("whatsapp_conversations")
       .select("*", { count: "exact", head: true })
+      .in("inbox_kind", inboxKinds)
       .gt("unread_count", 0),
-    ...kinds.map((k) =>
+    ...inboxKinds.map((k) =>
       supabase
         .from("whatsapp_conversations")
         .select("*", { count: "exact", head: true })
@@ -65,7 +67,7 @@ export async function GET() {
   const totalUnread = unreadConversationCount ?? itemsBase.length;
 
   const byKind: Record<InboxKind, number> = { bot_intake: 0, anonymous: 0, team: 0 };
-  kinds.forEach((k, i) => {
+  inboxKinds.forEach((k, i) => {
     const c = byKindCountResults[i]?.count;
     byKind[k] = typeof c === "number" ? c : 0;
   });

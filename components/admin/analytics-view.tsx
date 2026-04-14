@@ -7,6 +7,7 @@ import type {
   AnalyticsTopicRow,
   RespondentOption,
   TopicOption,
+  WhatsAppAnalyticsData,
 } from "@/app/admin/actions";
 import type { SubTopicOption } from "@/app/admin/actions";
 import { STAGE_LABELS } from "@/lib/types";
@@ -41,6 +42,7 @@ import { useCallback, useState } from "react";
 
 interface AnalyticsViewProps {
   chartData: AnalyticsChartData;
+  whatsappData: WhatsAppAnalyticsData;
   topicData?: AnalyticsTopicRow[];
   filteredQuestions?: AnalyticsQuestionRow[];
   topics: TopicOption[];
@@ -337,6 +339,7 @@ function CombinedInOutChart({
 
 export function AnalyticsView({
   chartData,
+  whatsappData,
   topicData = [],
   filteredQuestions = [],
   topics,
@@ -677,6 +680,78 @@ export function AnalyticsView({
         </CardHeader>
         <CardContent>
           <PieChart data={topicData} />
+        </CardContent>
+      </Card>
+
+      <Card className="overflow-hidden border-slate-200/80 bg-gradient-to-b from-emerald-50/40 to-white shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-bold text-slate-800">נתוני WhatsApp</CardTitle>
+          <p className="text-xs text-slate-500">מדדי הודעות, שיחות וביצועי בוט בתקופה המסוננת</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <div className="text-xs text-slate-500">הודעות נכנסות</div>
+              <div className="mt-1 text-xl font-bold text-slate-800">{whatsappData.kpis.inboundMessages}</div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <div className="text-xs text-slate-500">הודעות יוצאות</div>
+              <div className="mt-1 text-xl font-bold text-slate-800">{whatsappData.kpis.outboundMessages}</div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <div className="text-xs text-slate-500">שיחות (סה״כ)</div>
+              <div className="mt-1 text-xl font-bold text-slate-800">{whatsappData.kpis.totalConversations}</div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <div className="text-xs text-slate-500">שיחות שלא נקראו (Inbox)</div>
+              <div className="mt-1 text-xl font-bold text-slate-800">{whatsappData.kpis.unreadInboxConversations}</div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <div className="text-xs text-slate-500">התחילו בוט</div>
+              <div className="mt-1 text-xl font-bold text-slate-800">{whatsappData.kpis.botStarted}</div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <div className="text-xs text-slate-500">השלימו בוט</div>
+              <div className="mt-1 text-xl font-bold text-slate-800">{whatsappData.kpis.botCompleted}</div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <div className="text-xs text-slate-500">התחילו ולא השלימו</div>
+              <div className="mt-1 text-xl font-bold text-slate-800">{whatsappData.kpis.botNotCompleted}</div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <div className="text-xs text-slate-500">שיחות שמוצגות ב־Inbox</div>
+              <div className="mt-1 text-xl font-bold text-slate-800">{whatsappData.kpis.inboxVisibleConversations}</div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <BarChart
+              data={whatsappData.inboundByDay}
+              title="WhatsApp נכנסות לפי יום"
+              barColor="bg-blue-500"
+              accentColor="text-blue-700"
+            />
+            <BarChart
+              data={whatsappData.outboundByDay}
+              title="WhatsApp יוצאות לפי יום"
+              barColor="bg-emerald-500"
+              accentColor="text-emerald-700"
+            />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <BarChart
+              data={whatsappData.botStartedByDay}
+              title="התחלות תהליך בוט לפי יום"
+              barColor="bg-fuchsia-500"
+              accentColor="text-fuchsia-700"
+            />
+            <BarChart
+              data={whatsappData.botCompletedByDay}
+              title="השלמות תהליך בוט לפי יום"
+              barColor="bg-amber-500"
+              accentColor="text-amber-700"
+            />
+          </div>
         </CardContent>
       </Card>
     </div>

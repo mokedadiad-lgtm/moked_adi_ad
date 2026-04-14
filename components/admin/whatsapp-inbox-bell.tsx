@@ -182,6 +182,7 @@ export function WhatsappInboxBell({
                   {totalUnread > 0 ? (
                     <>
                       יש <span className="font-semibold text-slate-700">{totalUnread}</span> שיחות עם דואר נכנס שלא נקרא
+                      <span className="block text-xs text-slate-500">נספרות רק שיחות שמופיעות ב-Inbox (אנונימי + צוות)</span>
                       {summary?.conversationsWithUnread != null &&
                       summary.conversationsWithUnread > (summary.items?.length ?? 0) ? (
                         <span className="block text-xs text-slate-500">

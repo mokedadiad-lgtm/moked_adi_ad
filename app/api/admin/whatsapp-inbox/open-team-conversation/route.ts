@@ -1,0 +1,16 @@
+import { NextRequest, NextResponse } from "next/server";
+import { openWhatsappTeamConversation } from "@/lib/whatsapp/inboxService";
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = (await req.json()) as { profileId?: string };
+    if (!body.profileId) {
+      return NextResponse.json({ ok: false, error: "profileId is required" }, { status: 400 });
+    }
+    const res = await openWhatsappTeamConversation(body.profileId);
+    return NextResponse.json({ ok: res.ok, error: res.error, conversationId: res.conversationId });
+  } catch (e) {
+    const message = (e as Error)?.message ?? "Unexpected error";
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
+}

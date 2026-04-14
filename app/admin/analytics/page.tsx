@@ -5,6 +5,7 @@ import {
   getProofreadersList,
   getRespondents,
   getTopicsWithSubTopics,
+  getWhatsAppAnalyticsData,
 } from "@/app/admin/actions";
 import { PageHeader } from "@/components/page-header";
 import { AnalyticsView } from "@/components/admin/analytics-view";
@@ -43,6 +44,7 @@ export default async function AdminAnalyticsPage({
     chartData,
     topicData,
     filteredQuestions,
+    whatsappData,
     topics,
     respondents,
     proofreaders,
@@ -50,6 +52,7 @@ export default async function AdminAnalyticsPage({
     getAnalyticsChartData(chartFilters),
     getAnalyticsByTopic(chartFilters),
     getAnalyticsFilteredQuestions(tableFilters),
+    getWhatsAppAnalyticsData(days),
     getTopicsWithSubTopics(),
     getRespondents(),
     getProofreadersList(),
@@ -67,6 +70,7 @@ export default async function AdminAnalyticsPage({
         chartData={chartData}
         topicData={topicData}
         filteredQuestions={filteredQuestions}
+        whatsappData={whatsappData}
         topics={topics}
         subTopics={subTopics}
         respondents={respondents}

@@ -1,0 +1,16 @@
+import { NextRequest, NextResponse } from "next/server";
+import { deleteWhatsappConversation } from "@/lib/whatsapp/inboxService";
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = (await req.json()) as { conversationId?: string };
+    if (!body.conversationId) {
+      return NextResponse.json({ ok: false, error: "conversationId is required" }, { status: 400 });
+    }
+    const res = await deleteWhatsappConversation(body.conversationId);
+    return NextResponse.json({ ok: res.ok, error: res.error });
+  } catch (e) {
+    const message = (e as Error)?.message ?? "Unexpected error";
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
+}

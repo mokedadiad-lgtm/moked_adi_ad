@@ -19,11 +19,16 @@ export function WhatsappInboxShell({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
         <Button
           type="button"
           variant={tab === "conversations" ? "default" : "outline"}
           size="sm"
+          className={
+            tab === "conversations"
+              ? "bg-emerald-600 text-white hover:bg-emerald-700"
+              : "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+          }
           onClick={() => setTab("conversations")}
         >
           שיחות (אנונימי / צוות)
@@ -32,6 +37,11 @@ export function WhatsappInboxShell({
           type="button"
           variant={tab === "drafts" ? "default" : "outline"}
           size="sm"
+          className={
+            tab === "drafts"
+              ? "bg-amber-600 text-white hover:bg-amber-700"
+              : "border-amber-200 bg-white text-amber-800 hover:bg-amber-50"
+          }
           onClick={() => setTab("drafts")}
         >
           טיוטות ממתינות לאישור

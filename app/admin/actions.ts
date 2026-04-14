@@ -1577,6 +1577,25 @@ export interface AnalyticsChartData {
   sentByDay: AnalyticsDayRow[];
 }
 
+export interface WhatsAppAnalyticsKpis {
+  inboundMessages: number;
+  outboundMessages: number;
+  totalConversations: number;
+  inboxVisibleConversations: number;
+  unreadInboxConversations: number;
+  botStarted: number;
+  botCompleted: number;
+  botNotCompleted: number;
+}
+
+export interface WhatsAppAnalyticsData {
+  kpis: WhatsAppAnalyticsKpis;
+  inboundByDay: AnalyticsDayRow[];
+  outboundByDay: AnalyticsDayRow[];
+  botStartedByDay: AnalyticsDayRow[];
+  botCompletedByDay: AnalyticsDayRow[];
+}
+
 /** נתונים לדיאגרמת עוגה: כמות שאלות לפי נושא */
 export interface AnalyticsTopicRow {
   topic_id: string | null;
@@ -1816,6 +1835,125 @@ export async function getAnalyticsChartData(filters: AnalyticsFilters = {}): Pro
     };
   } catch {
     return { createdByDay: [], sentByDay: [] };
+  }
+}
+
+export async function getWhatsAppAnalyticsData(daysInput = 100): Promise<WhatsAppAnalyticsData> {
+  const empty = {
+    kpis: {
+      inboundMessages: 0,
+      outboundMessages: 0,
+      totalConversations: 0,
+      inboxVisibleConversations: 0,
+      unreadInboxConversations: 0,
+      botStarted: 0,
+      botCompleted: 0,
+      botNotCompleted: 0,
+    },
+    inboundByDay: [],
+    outboundByDay: [],
+    botStartedByDay: [],
+    botCompletedByDay: [],
+  } satisfies WhatsAppAnalyticsData;
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const days = Math.min(365, Math.max(7, Number(daysInput) || 100));
+    const from = new Date();
+    from.setDate(from.getDate() - days + 1);
+    from.setHours(0, 0, 0, 0);
+    const fromIso = from.toISOString();
+
+    const [
+      { count: inboundMessages },
+      { count: outboundMessages },
+      { count: totalConversations },
+      { count: inboxVisibleConversations },
+      { count: unreadInboxConversations },
+      { count: botStarted },
+      { count: botCompleted },
+      { data: inboundRows },
+      { data: outboundRows },
+      { data: botStartedRows },
+      { data: botCompletedRows },
+    ] = await Promise.all([
+      supabase.from("whatsapp_inbound_messages").select("*", { count: "exact", head: true }).gte("received_at", fromIso),
+      supabase.from("whatsapp_outbound_messages").select("*", { count: "exact", head: true }).gte("created_at", fromIso),
+      supabase.from("whatsapp_conversations").select("*", { count: "exact", head: true }),
+      supabase.from("whatsapp_conversations").select("*", { count: "exact", head: true }).in("inbox_kind", ["anonymous", "team"]),
+      supabase
+        .from("whatsapp_conversations")
+        .select("*", { count: "exact", head: true })
+        .in("inbox_kind", ["anonymous", "team"])
+        .gt("unread_count", 0),
+      supabase
+        .from("whatsapp_conversations")
+        .select("*", { count: "exact", head: true })
+        .eq("inbox_kind", "bot_intake")
+        .gte("created_at", fromIso),
+      supabase.from("question_intake_drafts").select("*", { count: "exact", head: true }).gte("created_at", fromIso),
+      supabase.from("whatsapp_inbound_messages").select("received_at").gte("received_at", fromIso),
+      supabase.from("whatsapp_outbound_messages").select("created_at").gte("created_at", fromIso),
+      supabase.from("whatsapp_conversations").select("created_at").eq("inbox_kind", "bot_intake").gte("created_at", fromIso),
+      supabase.from("question_intake_drafts").select("created_at").gte("created_at", fromIso),
+    ]);
+
+    const mkDaily = (): Record<string, number> => {
+      const out: Record<string, number> = {};
+      for (let d = 0; d < days; d++) {
+        const date = new Date(from);
+        date.setDate(date.getDate() + d);
+        out[date.toISOString().slice(0, 10)] = 0;
+      }
+      return out;
+    };
+    const inboundByDay = mkDaily();
+    const outboundByDay = mkDaily();
+    const botStartedByDay = mkDaily();
+    const botCompletedByDay = mkDaily();
+
+    for (const r of (inboundRows ?? []) as Array<{ received_at: string }>) {
+      const k = r.received_at.slice(0, 10);
+      if (inboundByDay[k] != null) inboundByDay[k] += 1;
+    }
+    for (const r of (outboundRows ?? []) as Array<{ created_at: string }>) {
+      const k = r.created_at.slice(0, 10);
+      if (outboundByDay[k] != null) outboundByDay[k] += 1;
+    }
+    for (const r of (botStartedRows ?? []) as Array<{ created_at: string }>) {
+      const k = r.created_at.slice(0, 10);
+      if (botStartedByDay[k] != null) botStartedByDay[k] += 1;
+    }
+    for (const r of (botCompletedRows ?? []) as Array<{ created_at: string }>) {
+      const k = r.created_at.slice(0, 10);
+      if (botCompletedByDay[k] != null) botCompletedByDay[k] += 1;
+    }
+
+    const toRows = (obj: Record<string, number>): AnalyticsDayRow[] =>
+      Object.entries(obj)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, count]) => ({ date, count }));
+
+    const started = botStarted ?? 0;
+    const completed = botCompleted ?? 0;
+    return {
+      kpis: {
+        inboundMessages: inboundMessages ?? 0,
+        outboundMessages: outboundMessages ?? 0,
+        totalConversations: totalConversations ?? 0,
+        inboxVisibleConversations: inboxVisibleConversations ?? 0,
+        unreadInboxConversations: unreadInboxConversations ?? 0,
+        botStarted: started,
+        botCompleted: completed,
+        botNotCompleted: Math.max(0, started - completed),
+      },
+      inboundByDay: toRows(inboundByDay),
+      outboundByDay: toRows(outboundByDay),
+      botStartedByDay: toRows(botStartedByDay),
+      botCompletedByDay: toRows(botCompletedByDay),
+    };
+  } catch {
+    return empty;
   }
 }
 

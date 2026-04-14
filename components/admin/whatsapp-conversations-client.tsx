@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 type InboxKind = "bot_intake" | "anonymous" | "team";
@@ -21,6 +22,9 @@ type InboxConversationItem = {
   display_title: string;
   unread_count: number;
   unread_anchor_at: string | null;
+  is_outside_24h_window: boolean;
+  seconds_since_last_inbound: number | null;
+  is_opening_template_configured: boolean;
   last_inbound_at: string | null;
   last_outbound_at: string | null;
 };
@@ -39,12 +43,6 @@ type ThreadRenderRow =
   | { kind: "date"; key: string; label: string }
   | { kind: "unread"; key: string; label: string }
   | { kind: "message"; key: string; message: InboxThreadItem };
-
-type TeamProfileOption = {
-  id: string;
-  full_name_he: string | null;
-  phone: string;
-};
 
 function formatDateTime(iso: string | null) {
   if (!iso) return "—";
@@ -132,7 +130,7 @@ const KIND_STYLES: Record<
 };
 
 const TEAM_ROLE_BADGE_STYLES: Record<string, string> = {
-  מנהל: "bg-rose-100 text-rose-800",
+  "מנהל מערכת": "bg-rose-100 text-rose-800",
   "אחראי טכני": "bg-amber-100 text-amber-800",
   משיב: "bg-blue-100 text-blue-800",
   מגיה: "bg-violet-100 text-violet-800",
@@ -169,8 +167,9 @@ export function WhatsappConversationsClient({
   const [replyText, setReplyText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [teamProfiles, setTeamProfiles] = useState<TeamProfileOption[]>([]);
-  const [teamProfileId, setTeamProfileId] = useState<string>("");
+  const [mobileView, setMobileView] = useState<"list" | "chat">("list");
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const threadViewportRef = useRef<HTMLDivElement | null>(null);
   const firstUnreadMessageIdRef = useRef<string | null>(null);
 
@@ -208,9 +207,8 @@ export function WhatsappConversationsClient({
 
   const canReply =
     selectedConversation?.inbox_kind === "anonymous" || selectedConversation?.inbox_kind === "team";
-
-  /** In anonymous-only view, hide starting a new team conversation (team tab / all still show it). */
-  const showTeamConversationStarter = filter !== "anonymous";
+  const isOutside24h = selectedConversation?.is_outside_24h_window === true;
+  const canSendFreeText = canReply && !isOutside24h;
 
   const refreshConversations = async (nextFilter: InboxFilter = filter) => {
     const payload = await apiJson<{ ok: boolean; conversations: InboxConversationItem[] }>(
@@ -222,6 +220,7 @@ export function WhatsappConversationsClient({
     if (!nonBot.find((r) => r.id === selectedId)) {
       setSelectedId(nonBot[0]?.id ?? null);
     }
+    return nonBot;
   };
 
   const loadThread = async (conversationId: string | null, opts?: { prepend?: boolean; beforeAt?: string | null }) => {
@@ -283,18 +282,6 @@ export function WhatsappConversationsClient({
   }, [filter, selectedId, thread.length]);
 
   useEffect(() => {
-    void (async () => {
-      const payload = await apiJson<{ ok: boolean; profiles: TeamProfileOption[] }>(
-        "/api/admin/whatsapp-inbox/team-profiles"
-      );
-      if (!payload.ok) throw new Error("טעינת אנשי צוות נכשלה");
-      setTeamProfiles(payload.profiles);
-      if (!teamProfileId && payload.profiles[0]) setTeamProfileId(payload.profiles[0]!.id);
-    })().catch((e) => setError((e as Error).message));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
     if (!selectedId) setThread([]);
   }, [selectedId]);
 
@@ -338,7 +325,7 @@ export function WhatsappConversationsClient({
 
   const onSendReply = async () => {
     if (!selectedId) return;
-    if (!canReply) return;
+    if (!canSendFreeText) return;
     setBusy(true);
     setError(null);
     try {
@@ -358,28 +345,21 @@ export function WhatsappConversationsClient({
     }
   };
 
-  const onStartTeamConversation = async () => {
-    if (!teamProfileId) return;
+  const onSendOpeningTemplate = async () => {
+    if (!selectedId) return;
     setBusy(true);
     setError(null);
     try {
-      const payload = await apiJson<{ ok: boolean; error?: string; conversationId?: string }>(
-        `/api/admin/whatsapp-inbox/start-team-conversation`,
-        {
-          method: "POST",
-          body: JSON.stringify({ profileId: teamProfileId }),
-        }
+      const payload = await apiJson<{ ok: boolean; error?: string }>(
+        `/api/admin/whatsapp-inbox/send-opening-template`,
+        { method: "POST", body: JSON.stringify({ conversationId: selectedId }) }
       );
       if (!payload.ok) {
-        setError(payload.error ?? "פתיחת שיחה נכשלה");
+        setError(payload.error ?? "שליחת הודעת פתיחה נכשלה");
         return;
       }
-      await refreshConversations("team");
-      setFilter("team");
-      if (payload.conversationId) {
-        setSelectedId(payload.conversationId);
-        await loadThread(payload.conversationId);
-      }
+      await loadThread(selectedId);
+      await refreshConversations(filter);
     } finally {
       setBusy(false);
     }
@@ -400,6 +380,81 @@ export function WhatsappConversationsClient({
     } finally {
       setThreadLoading(false);
     }
+  };
+
+  const openConversation = async (conversationId: string) => {
+    setMobileView("chat");
+    setInitialScrollDone(false);
+    firstUnreadMessageIdRef.current = null;
+
+    if (selectedId === conversationId) {
+      setThreadLoading(true);
+      try {
+        await loadThread(conversationId);
+      } finally {
+        setThreadLoading(false);
+      }
+      return;
+    }
+
+    setSelectedId(conversationId);
+  };
+
+  const executeClearHistory = async () => {
+    if (!selectedId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const payload = await apiJson<{ ok: boolean; error?: string }>(
+        "/api/admin/whatsapp-inbox/clear-history",
+        { method: "POST", body: JSON.stringify({ conversationId: selectedId }) }
+      );
+      if (!payload.ok) {
+        setError(payload.error ?? "מחיקת היסטוריה נכשלה");
+        return;
+      }
+      setThread([]);
+      await refreshConversations(filter);
+      await loadThread(selectedId);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onClearHistory = () => {
+    if (!selectedId || busy) return;
+    setClearConfirmOpen(true);
+  };
+
+  const executeDeleteConversation = async () => {
+    if (!selectedId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const deletingId = selectedId;
+      const payload = await apiJson<{ ok: boolean; error?: string }>(
+        "/api/admin/whatsapp-inbox/delete-conversation",
+        { method: "POST", body: JSON.stringify({ conversationId: deletingId }) }
+      );
+      if (!payload.ok) {
+        setError(payload.error ?? "מחיקת שיחה נכשלה");
+        return;
+      }
+      const next = await refreshConversations(filter);
+      const nextId = next[0]?.id ?? null;
+      setSelectedId(nextId);
+      if (!nextId) {
+        setThread([]);
+        setMobileView("list");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onDeleteConversation = () => {
+    if (!selectedId || busy) return;
+    setDeleteConfirmOpen(true);
   };
 
   return (
@@ -426,28 +481,17 @@ export function WhatsappConversationsClient({
               </Button>
             ))}
           </div>
-          {showTeamConversationStarter ? (
-            <>
-              <Select value={teamProfileId} onValueChange={setTeamProfileId}>
-                <SelectTrigger className="w-[220px]">
-                  <SelectValue placeholder="בחר איש צוות" />
-                </SelectTrigger>
-                <SelectContent>
-                  {teamProfiles.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {(p.full_name_he ?? "ללא שם")} · {p.phone}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button type="button" onClick={onStartTeamConversation} disabled={busy || !teamProfileId}>
-                פתח שיחה יזומה לצוות
-              </Button>
-            </>
-          ) : null}
         </div>
 
-        <div className="grid gap-4 md:grid-cols-[320px_1fr]">
+        <div className="grid gap-4 overflow-x-hidden md:grid-cols-[320px_1fr]">
+          <motion.div
+            key={`list_${mobileView}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.18 }}
+            className={`min-w-0 ${mobileView === "chat" ? "hidden md:block" : "block"}`}
+          >
+          <div className="relative">
           <ScrollArea className="h-[420px] rounded-lg border border-card-border p-2">
             <div className="space-y-2">
               {conversations.length === 0 ? (
@@ -460,7 +504,7 @@ export function WhatsappConversationsClient({
                     <button
                       key={c.id}
                       type="button"
-                      onClick={() => setSelectedId(c.id)}
+                      onClick={() => void openConversation(c.id)}
                       className={[
                         "w-full rounded-lg border p-3 text-right transition hover:shadow-sm",
                         isSelected ? "" : "hover:bg-slate-50",
@@ -472,39 +516,47 @@ export function WhatsappConversationsClient({
                           <span className={`h-2.5 w-2.5 rounded-full ${style.dot}`} aria-hidden />
                           <span className="text-xs font-semibold text-slate-700">{KIND_LABEL[c.inbox_kind]}</span>
                         </div>
-                        <span className="text-xs text-slate-500">{formatDateTime(c.last_inbound_at)}</span>
                       </div>
 
-                      <div className="mt-1 flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-medium">{c.display_title || c.phone}</div>
+                      <div className="mt-1 flex flex-row-reverse items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1 text-right">
+                          <div dir="ltr" className="flex min-w-0 items-baseline justify-end gap-1">
+                            {c.inbox_kind === "team" ? (
+                              <span dir="ltr" className="shrink-0 text-[11px] font-normal text-slate-500">({c.phone})</span>
+                            ) : null}
+                            <span className="truncate text-right text-base font-bold" dir="rtl">
+                              {c.inbox_kind === "team" ? (c.display_title || c.phone).split(" · ")[0] : c.display_title || c.phone}
+                            </span>
+                          </div>
                           {c.inbox_kind === "team" ? (
-                            <div className="space-y-1">
-                              <div className="truncate text-[11px] text-slate-500">{c.phone}</div>
-                              {c.role_labels.length > 0 ? (
-                                <div className="flex flex-wrap gap-1">
-                                  {c.role_labels.map((role) => (
-                                    <span
-                                      key={`${c.id}_${role}`}
-                                      className={[
-                                        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                                        TEAM_ROLE_BADGE_STYLES[role] ?? "bg-slate-100 text-slate-700",
-                                      ].join(" ")}
-                                    >
-                                      {role}
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : null}
+                            <div className="mt-1 flex items-center gap-2">
+                              <span className="shrink-0 text-xs text-slate-500">{formatDateTime(c.last_inbound_at)}</span>
+                              <div className="ms-auto flex flex-wrap items-center gap-1">
+                                  {c.role_labels.length > 0
+                                    ? c.role_labels.map((role) => (
+                                        <span
+                                          key={`${c.id}_${role}`}
+                                          className={[
+                                            "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                                            TEAM_ROLE_BADGE_STYLES[role] ?? "bg-slate-100 text-slate-700",
+                                          ].join(" ")}
+                                        >
+                                          {role}
+                                        </span>
+                                      ))
+                                    : null}
+                              </div>
                             </div>
-                          ) : null}
+                          ) : (
+                            <div className="text-xs text-slate-500">{formatDateTime(c.last_inbound_at)}</div>
+                          )}
                         </div>
                         {c.unread_count > 0 ? (
-                          <span className={["inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold", style.badgeBg, style.badgeText].join(" ")}>
+                          <span className={["inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-bold", style.badgeBg, style.badgeText].join(" ")}>
                             {c.unread_count}
                           </span>
                         ) : (
-                          <span className="text-[11px] text-slate-400">נקראו</span>
+                          <span className="shrink-0 text-[11px] text-slate-400">נקראו</span>
                         )}
                       </div>
                     </button>
@@ -513,10 +565,18 @@ export function WhatsappConversationsClient({
               )}
             </div>
           </ScrollArea>
+          </div>
+          </motion.div>
 
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-slate-700">
+          <motion.div
+            key={`chat_${selectedId ?? "none"}_${mobileView}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.18 }}
+            className={`min-w-0 space-y-3 ${mobileView === "list" ? "hidden md:block" : "block"}`}
+          >
+            <div className="space-y-2">
+              <div className="w-full text-base font-semibold text-slate-800">
                 {selectedConversation ? (
                   <>
                     שיחה: <span className="font-medium">{selectedConversation.display_title || selectedConversation.phone}</span>
@@ -525,13 +585,75 @@ export function WhatsappConversationsClient({
                   "בחר/י שיחה"
                 )}
               </div>
-              <Button type="button" variant="outline" size="sm" onClick={onMarkRead} disabled={!selectedId || busy}>
-                סמן כנקרא
-              </Button>
+              <div className="flex items-center justify-between md:hidden">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={() => setMobileView("list")}
+                  aria-label="חזרה לרשימה"
+                >
+                  <span aria-hidden className="text-lg font-bold leading-none">‹</span>
+                </Button>
+                <details className="relative">
+                  <summary className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700">
+                    <span className="text-lg leading-none">⋮</span>
+                  </summary>
+                  <div className="absolute left-0 z-20 mt-2 w-44 rounded-md border border-slate-200 bg-white p-2 shadow-md">
+                    <div className="grid grid-cols-1 gap-2">
+                      {isOutside24h ? (
+                        <Button type="button" variant="outline" size="sm" className="justify-start" onClick={onSendOpeningTemplate} disabled={!selectedId || busy}>
+                          שלח הודעת פתיחה יזומה
+                        </Button>
+                      ) : null}
+                      <Button type="button" variant="outline" size="sm" className="justify-start" onClick={onMarkRead} disabled={!selectedId || busy}>
+                        סמן כנקרא
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" className="justify-start" onClick={onClearHistory} disabled={!selectedId || busy}>
+                        נקה היסטוריה
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="justify-start border-red-300 text-red-700 hover:bg-red-50"
+                        onClick={onDeleteConversation}
+                        disabled={!selectedId || busy}
+                      >
+                        מחק איש קשר
+                      </Button>
+                    </div>
+                  </div>
+                </details>
+              </div>
+              <div className="hidden items-center gap-2 md:flex">
+                {isOutside24h ? (
+                  <Button type="button" variant="default" size="sm" className="whitespace-nowrap" onClick={onSendOpeningTemplate} disabled={busy || !selectedId}>
+                    שלח הודעת פתיחה יזומה
+                  </Button>
+                ) : null}
+                <Button type="button" variant="outline" size="sm" className="whitespace-nowrap" onClick={onMarkRead} disabled={!selectedId || busy}>
+                  סמן כנקרא
+                </Button>
+                <Button type="button" variant="outline" size="sm" className="whitespace-nowrap" onClick={onClearHistory} disabled={!selectedId || busy}>
+                  נקה היסטוריה
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="whitespace-nowrap border-red-300 text-red-700 hover:bg-red-50"
+                  onClick={onDeleteConversation}
+                  disabled={!selectedId || busy}
+                >
+                  מחק איש קשר
+                </Button>
+              </div>
             </div>
 
-            <div className="h-[360px] rounded-lg border border-card-border bg-slate-50">
-              <div ref={threadViewportRef} className="h-full overflow-y-auto p-3">
+            <div className="h-[360px] min-w-0 rounded-lg border border-card-border bg-slate-50">
+              <div ref={threadViewportRef} className="h-full overflow-x-hidden overflow-y-auto p-3">
                 <div className="space-y-2">
                   {threadHasMore ? (
                     <div className="flex justify-center">
@@ -562,23 +684,23 @@ export function WhatsappConversationsClient({
                       }
                       const m = row.message;
                       return (
-                        <div
-                          key={row.key}
-                          id={`msg_${m.id}`}
-                          className={[
-                            "rounded-lg border p-2",
-                            m.direction === "inbound"
-                              ? "bg-white border-slate-200"
-                              : selectedKindStyle
-                                ? `${selectedKindStyle.outboundBg} ${selectedKindStyle.outboundBorder}`
-                                : "bg-sky-50 border-sky-200",
-                          ].join(" ")}
-                        >
-                          <div className="mb-1 flex items-center justify-between text-[11px] text-slate-500">
-                            <span>{m.direction === "inbound" ? "נכנס" : "יוצא"}</span>
-                            <span>{formatDateTime(m.at)}</span>
+                        <div key={row.key} id={`msg_${m.id}`} className={`flex ${m.direction === "inbound" ? "justify-end" : "justify-start"}`}>
+                          <div
+                            className={[
+                              "w-fit max-w-[85%] rounded-lg border p-2",
+                              m.direction === "inbound"
+                                ? "bg-white border-slate-200"
+                                : selectedKindStyle
+                                  ? "bg-emerald-50 border-emerald-200"
+                                  : "bg-emerald-50 border-emerald-200",
+                            ].join(" ")}
+                          >
+                            <div className="mb-1 flex items-center justify-between gap-3 text-[11px] text-slate-500">
+                              <span>{m.direction === "inbound" ? "נכנס" : "יוצא"}</span>
+                              <span>{formatDateTime(m.at)}</span>
+                            </div>
+                            <div className="whitespace-pre-wrap break-words text-sm">{m.text}</div>
                           </div>
-                          <div className="whitespace-pre-wrap text-sm">{m.text}</div>
                         </div>
                       );
                     })
@@ -593,20 +715,74 @@ export function WhatsappConversationsClient({
                 onChange={(e) => setReplyText(e.target.value)}
                 className="min-h-[90px]"
                 placeholder="כתוב/כתבי תשובה לפונה..."
-                disabled={!canReply}
+                disabled={!canSendFreeText}
               />
               <div className="flex justify-end">
                 <Button
                   type="button"
                   onClick={onSendReply}
-                  disabled={busy || !selectedId || !replyText.trim() || !canReply}
+                  disabled={busy || !selectedId || !replyText.trim() || !canSendFreeText}
                 >
                   שלח תשובה
                 </Button>
               </div>
             </div>
-          </div>
+          </motion.div>
         </div>
+
+        <Dialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>למחוק היסטוריית שיחה?</DialogTitle>
+              <DialogDescription>
+                הפעולה תמחק את כל ההודעות בשיחה זו ולא ניתן יהיה לשחזר אותן.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setClearConfirmOpen(false)} disabled={busy}>
+                ביטול
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => {
+                  setClearConfirmOpen(false);
+                  void executeClearHistory();
+                }}
+                disabled={busy || !selectedId}
+              >
+                מחק היסטוריה
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>למחוק איש קשר?</DialogTitle>
+              <DialogDescription>
+                הפעולה תמחק את איש הקשר מהרשימה ואת היסטוריית השיחה, ולא ניתן יהיה לשחזר.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDeleteConfirmOpen(false)} disabled={busy}>
+                ביטול
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => {
+                  setDeleteConfirmOpen(false);
+                  void executeDeleteConversation();
+                }}
+                disabled={busy || !selectedId}
+              >
+                מחק איש קשר
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
