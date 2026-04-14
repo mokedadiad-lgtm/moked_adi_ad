@@ -114,7 +114,10 @@ function parseStateSection(stateName: string, section: string): BotTextDef {
   const textBlock = extractBetween(
     lines,
     textMarkerIdx + 1,
-    (l) => /^\*\*כפתורים/.test(l.trim()) || /^\*\*כפתור/.test(l.trim()) || /^---$/.test(l.trim())
+    (l) =>
+      /^\*\*/.test(l.trim()) ||
+      /^---$/.test(l.trim()) ||
+      /^## State:\s*/.test(l.trim())
   );
 
   const blockLines = normalizeLineEndings(textBlock).split("\n");

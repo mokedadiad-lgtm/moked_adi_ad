@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -16,7 +16,11 @@ type InboxConversationItem = {
   phone: string;
   mode: WhatsAppConversationMode;
   inbox_kind: InboxKind;
+  display_name: string | null;
+  role_labels: string[];
+  display_title: string;
   unread_count: number;
+  unread_anchor_at: string | null;
   last_inbound_at: string | null;
   last_outbound_at: string | null;
 };
@@ -30,6 +34,11 @@ type InboxThreadItem = {
   channel_event: string | null;
   status: string | null;
 };
+
+type ThreadRenderRow =
+  | { kind: "date"; key: string; label: string }
+  | { kind: "unread"; key: string; label: string }
+  | { kind: "message"; key: string; message: InboxThreadItem };
 
 type TeamProfileOption = {
   id: string;
@@ -50,6 +59,18 @@ function formatDateTime(iso: string | null) {
   } catch {
     return iso;
   }
+}
+
+function toDateLabel(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const now = new Date();
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const msgDayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const diff = Math.round((dayStart - msgDayStart) / (24 * 60 * 60 * 1000));
+  if (diff === 0) return "היום";
+  if (diff === 1) return "אתמול";
+  return date.toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 const FILTER_LABEL: Record<InboxFilter, string> = {
@@ -110,6 +131,14 @@ const KIND_STYLES: Record<
   },
 };
 
+const TEAM_ROLE_BADGE_STYLES: Record<string, string> = {
+  מנהל: "bg-rose-100 text-rose-800",
+  "אחראי טכני": "bg-amber-100 text-amber-800",
+  משיב: "bg-blue-100 text-blue-800",
+  מגיה: "bg-violet-100 text-violet-800",
+  "עורך לשוני": "bg-emerald-100 text-emerald-800",
+};
+
 async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
@@ -133,11 +162,17 @@ export function WhatsappConversationsClient({
   const [conversations, setConversations] = useState<InboxConversationItem[]>(nonBotInitial);
   const [selectedId, setSelectedId] = useState<string | null>(nonBotInitial[0]?.id ?? null);
   const [thread, setThread] = useState<InboxThreadItem[]>([]);
+  const [threadHasMore, setThreadHasMore] = useState(false);
+  const [threadNextBeforeAt, setThreadNextBeforeAt] = useState<string | null>(null);
+  const [threadLoading, setThreadLoading] = useState(false);
+  const [initialScrollDone, setInitialScrollDone] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [teamProfiles, setTeamProfiles] = useState<TeamProfileOption[]>([]);
   const [teamProfileId, setTeamProfileId] = useState<string>("");
+  const threadViewportRef = useRef<HTMLDivElement | null>(null);
+  const firstUnreadMessageIdRef = useRef<string | null>(null);
 
   const selectedConversation = useMemo(
     () => conversations.find((c) => c.id === selectedId) ?? null,
@@ -146,6 +181,30 @@ export function WhatsappConversationsClient({
 
   const selectedKind: InboxKind | null = selectedConversation?.inbox_kind ?? null;
   const selectedKindStyle = selectedKind ? KIND_STYLES[selectedKind] : null;
+  const unreadAnchorAt = selectedConversation?.unread_anchor_at ?? null;
+
+  const firstUnreadMessageId = useMemo(() => {
+    if (!unreadAnchorAt) return null;
+    const hit = thread.find((m) => m.direction === "inbound" && m.at >= unreadAnchorAt);
+    return hit?.id ?? null;
+  }, [thread, unreadAnchorAt]);
+
+  const threadRows = useMemo<ThreadRenderRow[]>(() => {
+    const rows: ThreadRenderRow[] = [];
+    let lastDateLabel = "";
+    for (const m of thread) {
+      const dateLabel = toDateLabel(m.at);
+      if (dateLabel !== lastDateLabel) {
+        rows.push({ kind: "date", key: `date_${m.id}`, label: dateLabel });
+        lastDateLabel = dateLabel;
+      }
+      if (firstUnreadMessageId && m.id === firstUnreadMessageId) {
+        rows.push({ kind: "unread", key: `unread_${m.id}`, label: "הודעות חדשות" });
+      }
+      rows.push({ kind: "message", key: m.id, message: m });
+    }
+    return rows;
+  }, [thread, firstUnreadMessageId]);
 
   const canReply =
     selectedConversation?.inbox_kind === "anonymous" || selectedConversation?.inbox_kind === "team";
@@ -165,16 +224,23 @@ export function WhatsappConversationsClient({
     }
   };
 
-  const loadThread = async (conversationId: string | null) => {
+  const loadThread = async (conversationId: string | null, opts?: { prepend?: boolean; beforeAt?: string | null }) => {
     if (!conversationId) {
       setThread([]);
+      setThreadHasMore(false);
+      setThreadNextBeforeAt(null);
       return;
     }
-    const payload = await apiJson<{ ok: boolean; thread: InboxThreadItem[] }>(
-      `/api/admin/whatsapp-inbox/thread?conversationId=${encodeURIComponent(conversationId)}`
+    const params = new URLSearchParams({ conversationId });
+    if (opts?.beforeAt) params.set("beforeAt", opts.beforeAt);
+    params.set("limit", "60");
+    const payload = await apiJson<{ ok: boolean; thread: InboxThreadItem[]; hasMore: boolean; nextBeforeAt: string | null }>(
+      `/api/admin/whatsapp-inbox/thread?${params.toString()}`
     );
     if (!payload.ok) throw new Error("טעינת שיחה נכשלה");
-    setThread(payload.thread);
+    setThread((prev) => (opts?.prepend ? [...payload.thread, ...prev] : payload.thread));
+    setThreadHasMore(payload.hasMore);
+    setThreadNextBeforeAt(payload.nextBeforeAt);
   };
 
   useEffect(() => {
@@ -183,18 +249,38 @@ export function WhatsappConversationsClient({
   }, [filter]);
 
   useEffect(() => {
-    void loadThread(selectedId).catch((e) => setError((e as Error).message));
+    setInitialScrollDone(false);
+    firstUnreadMessageIdRef.current = null;
+    setThreadLoading(true);
+    void loadThread(selectedId)
+      .catch((e) => setError((e as Error).message))
+      .finally(() => setThreadLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
   useEffect(() => {
     const t = setInterval(() => {
       void refreshConversations(filter).catch(() => {});
-      if (selectedId) void loadThread(selectedId).catch(() => {});
+      if (selectedId) {
+        const vp = threadViewportRef.current;
+        const nearBottom = !!vp && vp.scrollHeight - (vp.scrollTop + vp.clientHeight) < 72;
+        const prevBottomGap = vp ? vp.scrollHeight - vp.scrollTop : 0;
+        void loadThread(selectedId)
+          .then(() => {
+            const cur = threadViewportRef.current;
+            if (!cur) return;
+            if (nearBottom) {
+              cur.scrollTop = cur.scrollHeight;
+            } else {
+              cur.scrollTop = cur.scrollHeight - prevBottomGap;
+            }
+          })
+          .catch(() => {});
+      }
     }, 7000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, selectedId]);
+  }, [filter, selectedId, thread.length]);
 
   useEffect(() => {
     void (async () => {
@@ -211,6 +297,28 @@ export function WhatsappConversationsClient({
   useEffect(() => {
     if (!selectedId) setThread([]);
   }, [selectedId]);
+
+  useEffect(() => {
+    if (firstUnreadMessageId) firstUnreadMessageIdRef.current = firstUnreadMessageId;
+  }, [firstUnreadMessageId]);
+
+  useEffect(() => {
+    if (initialScrollDone || thread.length === 0) return;
+    const vp = threadViewportRef.current;
+    if (!vp) return;
+    const unreadId = firstUnreadMessageIdRef.current;
+    if (unreadId) {
+      const el = document.getElementById(`msg_${unreadId}`);
+      if (el) {
+        const top = el.offsetTop - 56;
+        vp.scrollTop = Math.max(0, top);
+        setInitialScrollDone(true);
+        return;
+      }
+    }
+    vp.scrollTop = vp.scrollHeight;
+    setInitialScrollDone(true);
+  }, [thread, initialScrollDone]);
 
   const onMarkRead = async () => {
     if (!selectedId) return;
@@ -274,6 +382,23 @@ export function WhatsappConversationsClient({
       }
     } finally {
       setBusy(false);
+    }
+  };
+
+  const onLoadOlder = async () => {
+    if (!selectedId || !threadHasMore || !threadNextBeforeAt) return;
+    const vp = threadViewportRef.current;
+    const prevHeight = vp?.scrollHeight ?? 0;
+    setThreadLoading(true);
+    try {
+      await loadThread(selectedId, { prepend: true, beforeAt: threadNextBeforeAt });
+      const cur = threadViewportRef.current;
+      if (cur) {
+        const newHeight = cur.scrollHeight;
+        cur.scrollTop = newHeight - prevHeight + cur.scrollTop;
+      }
+    } finally {
+      setThreadLoading(false);
     }
   };
 
@@ -351,7 +476,29 @@ export function WhatsappConversationsClient({
                       </div>
 
                       <div className="mt-1 flex items-center justify-between gap-2">
-                        <div className="text-sm font-medium">{c.phone}</div>
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium">{c.display_title || c.phone}</div>
+                          {c.inbox_kind === "team" ? (
+                            <div className="space-y-1">
+                              <div className="truncate text-[11px] text-slate-500">{c.phone}</div>
+                              {c.role_labels.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {c.role_labels.map((role) => (
+                                    <span
+                                      key={`${c.id}_${role}`}
+                                      className={[
+                                        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                                        TEAM_ROLE_BADGE_STYLES[role] ?? "bg-slate-100 text-slate-700",
+                                      ].join(" ")}
+                                    >
+                                      {role}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
                         {c.unread_count > 0 ? (
                           <span className={["inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold", style.badgeBg, style.badgeText].join(" ")}>
                             {c.unread_count}
@@ -372,7 +519,7 @@ export function WhatsappConversationsClient({
               <div className="text-sm text-slate-700">
                 {selectedConversation ? (
                   <>
-                    שיחה: <span className="font-medium">{selectedConversation.phone}</span>
+                    שיחה: <span className="font-medium">{selectedConversation.display_title || selectedConversation.phone}</span>
                   </>
                 ) : (
                   "בחר/י שיחה"
@@ -383,33 +530,62 @@ export function WhatsappConversationsClient({
               </Button>
             </div>
 
-            <ScrollArea className="h-[280px] rounded-lg border border-card-border bg-slate-50 p-3">
-              {thread.length === 0 ? (
-                <p className="text-sm text-slate-600">אין הודעות להצגה.</p>
-              ) : (
+            <div className="h-[360px] rounded-lg border border-card-border bg-slate-50">
+              <div ref={threadViewportRef} className="h-full overflow-y-auto p-3">
                 <div className="space-y-2">
-                  {thread.map((m) => (
-                    <div
-                      key={m.id}
-                      className={[
-                        "rounded-lg border p-2",
-                        m.direction === "inbound"
-                          ? "bg-white border-slate-200"
-                          : selectedKindStyle
-                            ? `${selectedKindStyle.outboundBg} ${selectedKindStyle.outboundBorder}`
-                            : "bg-sky-50 border-sky-200",
-                      ].join(" ")}
-                    >
-                      <div className="mb-1 flex items-center justify-between text-[11px] text-slate-500">
-                        <span>{m.direction === "inbound" ? "נכנס" : "יוצא"}</span>
-                        <span>{formatDateTime(m.at)}</span>
-                      </div>
-                      <div className="whitespace-pre-wrap text-sm">{m.text}</div>
+                  {threadHasMore ? (
+                    <div className="flex justify-center">
+                      <Button type="button" variant="outline" size="sm" onClick={onLoadOlder} disabled={threadLoading}>
+                        טען הודעות קודמות
+                      </Button>
                     </div>
-                  ))}
+                  ) : null}
+                  {thread.length === 0 ? (
+                    <p className="text-sm text-slate-600">אין הודעות להצגה.</p>
+                  ) : (
+                    threadRows.map((row) => {
+                      if (row.kind === "date") {
+                        return (
+                          <div key={row.key} className="flex justify-center py-1">
+                            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] text-slate-700">{row.label}</span>
+                          </div>
+                        );
+                      }
+                      if (row.kind === "unread") {
+                        return (
+                          <div key={row.key} className="flex items-center gap-2 py-1 text-[11px] text-fuchsia-700">
+                            <div className="h-px flex-1 bg-fuchsia-200" />
+                            <span className="rounded-full bg-fuchsia-100 px-2 py-0.5 font-semibold">{row.label}</span>
+                            <div className="h-px flex-1 bg-fuchsia-200" />
+                          </div>
+                        );
+                      }
+                      const m = row.message;
+                      return (
+                        <div
+                          key={row.key}
+                          id={`msg_${m.id}`}
+                          className={[
+                            "rounded-lg border p-2",
+                            m.direction === "inbound"
+                              ? "bg-white border-slate-200"
+                              : selectedKindStyle
+                                ? `${selectedKindStyle.outboundBg} ${selectedKindStyle.outboundBorder}`
+                                : "bg-sky-50 border-sky-200",
+                          ].join(" ")}
+                        >
+                          <div className="mb-1 flex items-center justify-between text-[11px] text-slate-500">
+                            <span>{m.direction === "inbound" ? "נכנס" : "יוצא"}</span>
+                            <span>{formatDateTime(m.at)}</span>
+                          </div>
+                          <div className="whitespace-pre-wrap text-sm">{m.text}</div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
-              )}
-            </ScrollArea>
+              </div>
+            </div>
 
             <div className="space-y-2">
               <Textarea

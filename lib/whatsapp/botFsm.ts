@@ -303,7 +303,6 @@ export async function runBotFsm(params: {
       }
       // Default to bot flow
       ctx.delivery_preference = ctx.delivery_preference ?? "whatsapp";
-      sendText(renderText("age", ctx).trimEnd());
       sendAgeRangeList(outbound, ctx);
       return { ok: true, nextState: "age", nextContext: ctx, outbound };
     }

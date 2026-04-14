@@ -15,7 +15,11 @@ export interface InboxConversationItem {
   phone: string;
   mode: WhatsAppConversationMode;
   inbox_kind: InboxKind;
+  display_name: string | null;
+  role_labels: string[];
+  display_title: string;
   unread_count: number;
+  unread_anchor_at: string | null;
   last_inbound_at: string | null;
   last_outbound_at: string | null;
 }
@@ -30,6 +34,12 @@ export interface InboxThreadItem {
   status: string | null;
 }
 
+export interface InboxThreadPage {
+  items: InboxThreadItem[];
+  hasMore: boolean;
+  nextBeforeAt: string | null;
+}
+
 export interface TeamProfileOption {
   id: string;
   full_name_he: string | null;
@@ -39,6 +49,22 @@ export interface TeamProfileOption {
 function safePreview(v: unknown): string {
   if (typeof v !== "string") return "";
   return v;
+}
+
+function buildTeamRoleLabels(profile: {
+  is_admin?: boolean | null;
+  is_technical_lead?: boolean | null;
+  is_respondent?: boolean | null;
+  is_proofreader?: boolean | null;
+  is_linguistic_editor?: boolean | null;
+}): string[] {
+  const labels: string[] = [];
+  if (profile.is_admin === true) labels.push("מנהל");
+  if (profile.is_technical_lead === true) labels.push("אחראי טכני");
+  if (profile.is_respondent === true) labels.push("משיב");
+  if (profile.is_proofreader === true) labels.push("מגיה");
+  if (profile.is_linguistic_editor === true) labels.push("עורך לשוני");
+  return labels;
 }
 
 /** Text shown in admin thread for outbound rows — prefers stored preview, never exposes internal channel_event ids. */
@@ -78,41 +104,125 @@ export async function getWhatsappInboxConversations(
     return [];
   }
 
-  return (data ?? []).map((r) => ({
-    id: r.id as string,
-    phone: (r.phone as string) ?? "",
-    mode: ((r.mode as WhatsAppConversationMode | null) ?? "bot") as WhatsAppConversationMode,
-    inbox_kind: ((r.inbox_kind as InboxKind | null) ?? "bot_intake") as InboxKind,
-    unread_count: Number(r.unread_count ?? 0),
-    last_inbound_at: (r.last_inbound_at as string | null) ?? null,
-    last_outbound_at: (r.last_outbound_at as string | null) ?? null,
-  }));
+  const rows = (data ?? []) as Array<{
+    id: string;
+    phone: string | null;
+    mode: WhatsAppConversationMode | null;
+    inbox_kind: InboxKind | null;
+    unread_count: number | null;
+    last_inbound_at: string | null;
+    last_outbound_at: string | null;
+  }>;
+
+  const normalizedPhones = Array.from(
+    new Set(
+      rows
+        .map((r) => normalizeMetaPhone(r.phone ?? ""))
+        .filter((p): p is string => Boolean(p))
+    )
+  );
+
+  const teamByPhone = new Map<
+    string,
+    { full_name_he: string | null; role_labels: string[] }
+  >();
+  if (normalizedPhones.length > 0) {
+    const { data: profiles, error: profilesErr } = await supabase
+      .from("profiles")
+      .select(
+        "phone, full_name_he, is_admin, is_technical_lead, is_respondent, is_proofreader, is_linguistic_editor"
+      )
+      .or(
+        "is_admin.eq.true,is_technical_lead.eq.true,is_respondent.eq.true,is_proofreader.eq.true,is_linguistic_editor.eq.true"
+      );
+
+    if (profilesErr) {
+      console.error("getWhatsappInboxConversations profiles:", profilesErr);
+    } else {
+      for (const p of profiles ?? []) {
+        const phoneNorm = normalizeMetaPhone((p as { phone?: string | null }).phone ?? "");
+        if (!phoneNorm) continue;
+        if (!normalizedPhones.includes(phoneNorm)) continue;
+        teamByPhone.set(phoneNorm, {
+          full_name_he: ((p as { full_name_he?: string | null }).full_name_he ?? null),
+          role_labels: buildTeamRoleLabels(p as {
+            is_admin?: boolean | null;
+            is_technical_lead?: boolean | null;
+            is_respondent?: boolean | null;
+            is_proofreader?: boolean | null;
+            is_linguistic_editor?: boolean | null;
+          }),
+        });
+      }
+    }
+  }
+
+  return rows.map((r) => {
+    const phone = r.phone ?? "";
+    const phoneNorm = normalizeMetaPhone(phone);
+    const teamMeta = phoneNorm ? teamByPhone.get(phoneNorm) : undefined;
+    const displayName = teamMeta?.full_name_he?.trim() ? teamMeta.full_name_he.trim() : null;
+    const roleLabels = teamMeta?.role_labels ?? [];
+    const displayTitle = displayName
+      ? roleLabels.length > 0
+        ? `${displayName} · ${roleLabels.join(", ")}`
+        : displayName
+      : phone;
+
+    return {
+      id: r.id,
+      phone,
+      mode: (r.mode ?? "bot") as WhatsAppConversationMode,
+      inbox_kind: (r.inbox_kind ?? "bot_intake") as InboxKind,
+      display_name: displayName,
+      role_labels: roleLabels,
+      display_title: displayTitle,
+      unread_count: Number(r.unread_count ?? 0),
+      unread_anchor_at: Number(r.unread_count ?? 0) > 0 ? (r.last_inbound_at ?? null) : null,
+      last_inbound_at: r.last_inbound_at ?? null,
+      last_outbound_at: r.last_outbound_at ?? null,
+    };
+  });
 }
 
 export async function getWhatsappConversationThread(
-  conversationId: string
-): Promise<InboxThreadItem[]> {
+  conversationId: string,
+  options?: { beforeAt?: string | null; limit?: number }
+): Promise<InboxThreadPage> {
   const supabase = getSupabaseAdmin();
+  const fetchLimit = Math.min(Math.max(options?.limit ?? 60, 20), 120);
+  const beforeAt = options?.beforeAt ?? null;
 
-  const [{ data: inbound, error: inErr }, { data: outbound, error: outErr }] = await Promise.all([
-    supabase
+  let inQuery = supabase
       .from("whatsapp_inbound_messages")
       .select("id, received_at, message_type, text_body")
       .eq("conversation_id", conversationId)
-      .order("received_at", { ascending: true })
-      .limit(500),
-    supabase
+      .order("received_at", { ascending: false })
+      .limit(fetchLimit + 1);
+  let outQuery = supabase
       .from("whatsapp_outbound_messages")
       .select("id, created_at, channel_event, status, payload")
       .eq("conversation_id", conversationId)
-      .order("created_at", { ascending: true })
-      .limit(500),
+      .order("created_at", { ascending: false })
+      .limit(fetchLimit + 1);
+  if (beforeAt) {
+    inQuery = inQuery.lt("received_at", beforeAt);
+    outQuery = outQuery.lt("created_at", beforeAt);
+  }
+
+  const [{ data: inbound, error: inErr }, { data: outbound, error: outErr }] = await Promise.all([
+    inQuery,
+    outQuery,
   ]);
 
   if (inErr) console.error("getWhatsappConversationThread inbound:", inErr);
   if (outErr) console.error("getWhatsappConversationThread outbound:", outErr);
 
-  const inRows: InboxThreadItem[] = (inbound ?? []).map((m) => ({
+  const inSlice = (inbound ?? []).slice(0, fetchLimit);
+  const outSlice = (outbound ?? []).slice(0, fetchLimit);
+  const hasMore = (inbound ?? []).length > fetchLimit || (outbound ?? []).length > fetchLimit;
+
+  const inRows: InboxThreadItem[] = inSlice.map((m) => ({
     id: `in_${m.id as string}`,
     direction: "inbound",
     at: (m.received_at as string) ?? new Date().toISOString(),
@@ -122,7 +232,7 @@ export async function getWhatsappConversationThread(
     status: "received",
   }));
 
-  const outRows: InboxThreadItem[] = (outbound ?? []).map((m) => {
+  const outRows: InboxThreadItem[] = outSlice.map((m) => {
     const payload = (m.payload as Record<string, unknown> | null) ?? {};
     const text = resolveOutboundThreadDisplayText(payload);
 
@@ -137,7 +247,9 @@ export async function getWhatsappConversationThread(
     };
   });
 
-  return [...inRows, ...outRows].sort((a, b) => a.at.localeCompare(b.at));
+  const items = [...inRows, ...outRows].sort((a, b) => a.at.localeCompare(b.at));
+  const nextBeforeAt = items.length > 0 ? items[0]!.at : null;
+  return { items, hasMore, nextBeforeAt };
 }
 
 export async function markWhatsappConversationRead(conversationId: string): Promise<{ ok: boolean }> {
