@@ -343,6 +343,9 @@ export function AdminNav({ delayedQuestions = [], onNavigate }: AdminNavProps = 
     const section = nav.find((i) => i.href === pathname)?.section;
     if (section) {
       setOpenSections((s) => ({ ...s, [section]: true }));
+    } else if (pathname?.startsWith("/admin")) {
+      // כשהנתיב תחת /admin אבל הפריט לא נמצא ברשימה (למשל לפני סינון) — עדיין לפתוח את מקטע "ניהול ונתונים"
+      setOpenSections((s) => ({ ...s, admin: true }));
     }
   }, [pathname, nav]);
 

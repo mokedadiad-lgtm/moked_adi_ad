@@ -446,16 +446,16 @@ export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpe
           <Table>
             <TableHeader
               className={cn(
-                "sticky top-0 z-20 !border-0 !border-b !border-slate-200/90 !bg-slate-50/95 shadow-sm backdrop-blur-sm supports-[backdrop-filter]:bg-slate-50/90",
-                "[&_tr]:!bg-slate-50/95 [&_tr:hover]:!bg-slate-50/95"
+                "sticky top-0 z-20 !border-0 !border-b !border-[#8baae8] !bg-[#A2BFED] shadow-sm backdrop-blur-sm supports-[backdrop-filter]:bg-[#A2BFED]/95",
+                "[&_tr]:!bg-[#A2BFED] [&_tr:hover]:!bg-[#A2BFED]"
               )}
             >
-              <TableRow className="border-0 !bg-slate-50/95 odd:!bg-slate-50/95 even:!bg-slate-50/95 hover:!bg-slate-50/95 supports-[backdrop-filter]:!bg-slate-50/90">
-                <TableHead className="text-xs font-semibold text-slate-800 md:text-sm">ID שאלה</TableHead>
-                <TableHead className="text-xs font-semibold text-slate-800 md:text-sm">שאלה</TableHead>
-                <TableHead className="text-xs font-semibold text-slate-800 md:text-sm">סטטוס</TableHead>
-                <TableHead className="text-xs font-semibold text-slate-800 md:text-sm">משיב/ה</TableHead>
-                <TableHead className="text-xs font-semibold text-slate-800 md:text-sm">מגיה/ה</TableHead>
+              <TableRow className="border-0 !bg-[#A2BFED] odd:!bg-[#A2BFED] even:!bg-[#A2BFED] hover:!bg-[#A2BFED] supports-[backdrop-filter]:!bg-[#A2BFED]/95">
+                <TableHead className="text-xs font-semibold text-white md:text-sm">ID שאלה</TableHead>
+                <TableHead className="text-xs font-semibold text-white md:text-sm">שאלה</TableHead>
+                <TableHead className="text-xs font-semibold text-white md:text-sm">סטטוס</TableHead>
+                <TableHead className="text-xs font-semibold text-white md:text-sm">משיב/ה</TableHead>
+                <TableHead className="text-xs font-semibold text-white md:text-sm">מגיה/ה</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

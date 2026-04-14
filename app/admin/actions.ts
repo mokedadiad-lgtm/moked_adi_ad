@@ -1355,6 +1355,7 @@ export async function updateTeamMember(
         data.topic_ids.map((topic_id) => ({ profile_id: profileId, topic_id }))
       );
     }
+    revalidatePath("/admin/team");
     return { ok: true };
   } catch (e) {
     return { ok: false, error: safeError((e as Error)?.message) };
@@ -1440,22 +1441,26 @@ export async function createTeamMember(data: {
 
     if (profileError) return { ok: false, error: profileError.message };
 
+    await supabase.from("profile_proofreader_types").delete().eq("profile_id", userId);
     if (typeIds.length > 0) {
       await supabase.from("profile_proofreader_types").insert(
         typeIds.map((proofreader_type_id) => ({ profile_id: userId, proofreader_type_id }))
       );
     }
 
+    await supabase.from("profile_categories").delete().eq("profile_id", userId);
     if (data.category_ids.length > 0) {
       await supabase.from("profile_categories").insert(
         data.category_ids.map((category_id) => ({ profile_id: userId, category_id }))
       );
     }
+    await supabase.from("respondent_topics").delete().eq("profile_id", userId);
     if (data.topic_ids?.length) {
       await supabase.from("respondent_topics").insert(
         data.topic_ids.map((topic_id) => ({ profile_id: userId, topic_id }))
       );
     }
+    revalidatePath("/admin/team");
     return { ok: true, userId };
   } catch (e) {
     return { ok: false, error: safeError((e as Error)?.message) };
