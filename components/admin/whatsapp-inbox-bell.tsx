@@ -11,6 +11,9 @@ type UnreadSummaryItem = {
   conversationId: string;
   inbox_kind: InboxKind;
   phone: string;
+  formatted_phone: string;
+  display_title: string;
+  role_labels: string[];
   unread_count: number;
   last_inbound_at: string | null;
   last_text_preview: string;
@@ -59,6 +62,14 @@ const KIND_LABEL: Record<InboxKind, string> = {
   team: "צוות",
 };
 
+const TEAM_ROLE_BADGE_STYLES: Record<string, string> = {
+  "מנהל מערכת": "bg-rose-100 text-rose-800",
+  "אחראי טכני": "bg-amber-100 text-amber-800",
+  משיב: "bg-blue-100 text-blue-800",
+  מגיה: "bg-violet-100 text-violet-800",
+  "עורך לשוני": "bg-emerald-100 text-emerald-800",
+};
+
 export function WhatsappInboxBell({
   className,
 }: {
@@ -95,6 +106,42 @@ export function WhatsappInboxBell({
     } finally {
       setMarkAllBusy(false);
     }
+  };
+
+  const openConversationFromBell = async (item: UnreadSummaryItem) => {
+    try {
+      await fetch("/api/admin/whatsapp-inbox/mark-read", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ conversationId: item.conversationId }),
+      });
+    } catch {
+      // best-effort; גם אם הקריאה נכשלה נמשיך לניווט
+    }
+
+    setSummary((prev) => {
+      if (!prev) return prev;
+      const nextItems = prev.items.filter((x) => x.conversationId !== item.conversationId);
+      const nextByKind = { ...prev.byKind };
+      nextByKind[item.inbox_kind] = Math.max(0, (nextByKind[item.inbox_kind] ?? 0) - 1);
+      return {
+        ...prev,
+        totalUnread: Math.max(0, prev.totalUnread - 1),
+        conversationsWithUnread:
+          typeof prev.conversationsWithUnread === "number"
+            ? Math.max(0, prev.conversationsWithUnread - 1)
+            : prev.conversationsWithUnread,
+        byKind: nextByKind,
+        items: nextItems,
+      };
+    });
+
+    setPopoverOpen(false);
+    const qs = new URLSearchParams({
+      conversationId: item.conversationId,
+    });
+    if (item.last_inbound_at) qs.set("unreadAnchorAt", item.last_inbound_at);
+    router.push(`/admin/whatsapp-inbox?${qs.toString()}`);
   };
 
   useEffect(() => {
@@ -207,15 +254,33 @@ export function WhatsappInboxBell({
                         type="button"
                         className="w-full rounded-lg border border-border/50 bg-background p-2.5 text-right transition hover:bg-slate-50"
                         onClick={() => {
-                          setPopoverOpen(false);
-                          router.push("/admin/whatsapp-inbox");
+                          void openConversationFromBell(it);
                         }}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-semibold text-slate-500">{KIND_LABEL[it.inbox_kind]}</span>
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <span className="text-xs font-semibold text-slate-500">{KIND_LABEL[it.inbox_kind]}</span>
+                            {it.inbox_kind === "team" && it.role_labels.length > 0 ? (
+                              <div className="flex min-w-0 flex-wrap items-center gap-1">
+                                {it.role_labels.map((role) => (
+                                  <span
+                                    key={`${it.conversationId}_${role}`}
+                                    className={[
+                                      "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                                      TEAM_ROLE_BADGE_STYLES[role] ?? "bg-slate-100 text-slate-700",
+                                    ].join(" ")}
+                                  >
+                                    {role}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
                           <span className="text-[11px] text-slate-400">{formatTime(it.last_inbound_at)}</span>
                         </div>
-                        <div className="mt-1 text-sm font-medium text-slate-900">{it.phone || "—"}</div>
+                        <div className="mt-1 text-sm font-medium text-slate-900">
+                          {it.display_title || it.formatted_phone || it.phone || "—"}
+                        </div>
                         <div className="mt-1 line-clamp-3 text-xs leading-snug text-slate-600">{it.last_text_preview}</div>
                       </button>
                     ))

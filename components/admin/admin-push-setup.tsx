@@ -358,9 +358,10 @@ export function AdminPushSetup() {
         ui === "denied" ? "border-amber-300 bg-amber-50/90" : "border-primary/20 bg-card"
       )}
     >
-      <h3 className="text-base font-semibold text-foreground">התראות על דואר נכנס WhatsApp</h3>
+      <h3 className="text-base font-semibold text-foreground">התראות פוש על דואר נכנס WhatsApp</h3>
       <p className="mt-1 text-sm text-secondary">
         קבלו התראה בטלפון כשמגיעה הודעה וואטסאפ למערכת. ההפעלה נעשית דרך הדפדפן (לא דורש אפליקציה נפרדת).
+        ההשתקה כאן חלה על ההתראות השוטפות בלבד.
       </p>
 
       <details className="mt-3 rounded-lg border border-border bg-background/60 p-3 text-sm">
@@ -435,6 +436,7 @@ export function AdminPushSetup() {
             </div>
             <p className="text-xs text-secondary">
               «תמיד» משתיק עד שתלחצו «חזרה להתראות». השתקה לפי שעות נגמרת אוטומטית. המנוי נשאר — אין צורך להפעיל מחדש.
+              סיכום הפוש התקופתי (שני/חמישי) ממשיך להישלח בנפרד.
             </p>
           </>
         ) : (

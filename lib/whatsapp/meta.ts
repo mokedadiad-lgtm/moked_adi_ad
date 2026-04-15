@@ -1,6 +1,7 @@
 const GRAPH_API_VERSION = process.env.META_GRAPH_API_VERSION ?? "v20.0";
 
 export type MetaSendResult = { ok: true; idMessage?: string } | { ok: false; error: string };
+export type MetaMediaKind = "image" | "audio" | "document" | "video";
 
 /** True when outbound WhatsApp via Meta Cloud API can be attempted (env present). */
 export function isMetaWhatsAppConfigured(): boolean {
@@ -57,6 +58,67 @@ async function postJson(path: string, body: unknown): Promise<MetaSendResult> {
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : "Network error";
     return { ok: false, error: errMsg };
+  }
+}
+
+export async function fetchMetaMediaMetadata(mediaId: string): Promise<
+  | { ok: true; url: string; mime_type?: string | null; file_size?: number | null; sha256?: string | null }
+  | { ok: false; error: string }
+> {
+  try {
+    const accessToken = requireEnv("META_ACCESS_TOKEN");
+    const phoneNumberId = requireEnv("META_PHONE_NUMBER_ID");
+    const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${encodeURIComponent(mediaId)}?phone_number_id=${encodeURIComponent(
+      phoneNumberId
+    )}`;
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      url?: string;
+      mime_type?: string;
+      file_size?: number;
+      sha256?: string;
+      error?: { message?: string };
+    };
+    if (!res.ok || !data.url) {
+      return { ok: false, error: data.error?.message ?? res.statusText ?? "media_metadata_failed" };
+    }
+    return {
+      ok: true,
+      url: data.url,
+      mime_type: data.mime_type ?? null,
+      file_size: typeof data.file_size === "number" ? data.file_size : null,
+      sha256: data.sha256 ?? null,
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "media_metadata_failed" };
+  }
+}
+
+export async function downloadMetaMedia(url: string): Promise<
+  | { ok: true; bytes: Buffer; mimeType: string | null; sizeBytes: number | null }
+  | { ok: false; error: string }
+> {
+  try {
+    const accessToken = requireEnv("META_ACCESS_TOKEN");
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return { ok: false, error: text || res.statusText || "media_download_failed" };
+    }
+    const arr = await res.arrayBuffer();
+    const bytes = Buffer.from(arr);
+    const mimeType = res.headers.get("content-type");
+    const len = res.headers.get("content-length");
+    const sizeBytes = len ? Number(len) || bytes.length : bytes.length;
+    return { ok: true, bytes, mimeType, sizeBytes };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "media_download_failed" };
   }
 }
 
@@ -231,6 +293,59 @@ export async function sendMetaWhatsAppList(params: {
           },
         ],
       },
+    },
+  });
+}
+
+export async function sendMetaWhatsAppMediaByLink(params: {
+  toPhoneRaw: string;
+  kind: MetaMediaKind;
+  link: string;
+  caption?: string;
+  filename?: string;
+}): Promise<MetaSendResult> {
+  const to = normalizeMetaPhone(params.toPhoneRaw);
+  if (!to) return { ok: false, error: "Invalid phone number" };
+  const phoneNumberId = requireEnv("META_PHONE_NUMBER_ID");
+
+  if (params.kind === "image") {
+    return postJson(`/${phoneNumberId}/messages`, {
+      messaging_product: "whatsapp",
+      to,
+      type: "image",
+      image: {
+        link: params.link,
+        ...(params.caption?.trim() ? { caption: params.caption.trim() } : {}),
+      },
+    });
+  }
+  if (params.kind === "audio") {
+    return postJson(`/${phoneNumberId}/messages`, {
+      messaging_product: "whatsapp",
+      to,
+      type: "audio",
+      audio: { link: params.link },
+    });
+  }
+  if (params.kind === "video") {
+    return postJson(`/${phoneNumberId}/messages`, {
+      messaging_product: "whatsapp",
+      to,
+      type: "video",
+      video: {
+        link: params.link,
+        ...(params.caption?.trim() ? { caption: params.caption.trim() } : {}),
+      },
+    });
+  }
+  return postJson(`/${phoneNumberId}/messages`, {
+    messaging_product: "whatsapp",
+    to,
+    type: "document",
+    document: {
+      link: params.link,
+      ...(params.filename?.trim() ? { filename: params.filename.trim() } : {}),
+      ...(params.caption?.trim() ? { caption: params.caption.trim() } : {}),
     },
   });
 }

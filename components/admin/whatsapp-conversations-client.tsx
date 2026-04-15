@@ -16,6 +16,7 @@ type WhatsAppConversationMode = "bot" | "human";
 type InboxConversationItem = {
   id: string;
   phone: string;
+  formatted_phone: string;
   mode: WhatsAppConversationMode;
   inbox_kind: InboxKind;
   display_name: string | null;
@@ -36,6 +37,11 @@ type InboxThreadItem = {
   at: string;
   text: string;
   message_type: string | null;
+  media_type: "image" | "audio" | "document" | "video" | null;
+  media_url: string | null;
+  mime_type: string | null;
+  file_name: string | null;
+  caption: string | null;
   channel_event: string | null;
   status: string | null;
 };
@@ -50,6 +56,24 @@ function SearchIcon({ className }: { className?: string }) {
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
       <circle cx="11" cy="11" r="8" />
       <path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
+
+function PaperclipIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="m21.44 11.05-8.49 8.49a5.5 5.5 0 0 1-7.78-7.78l8.49-8.48a3.5 3.5 0 1 1 4.95 4.95l-8.5 8.49a1.5 1.5 0 0 1-2.12-2.12l8.49-8.48" />
     </svg>
   );
 }
@@ -79,6 +103,71 @@ function toDateLabel(iso: string): string {
   if (diff === 0) return "היום";
   if (diff === 1) return "אתמול";
   return date.toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+function ThreadMediaBlock({
+  message,
+  onOpenImage,
+}: {
+  message: InboxThreadItem;
+  onOpenImage: (messageId: string) => void;
+}) {
+  if (!message.media_type) return null;
+  if (!message.media_url) {
+    return (
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        המדיה התקבלה אך לא זמינה כרגע להצגה.
+      </div>
+    );
+  }
+  if (message.media_type === "image") {
+    return (
+      <button
+        type="button"
+        onClick={() => onOpenImage(message.id)}
+        className="block"
+      >
+        <img
+          src={message.media_url}
+          alt={message.caption || "תמונה"}
+          className="max-h-64 max-w-full rounded-md border border-slate-200 object-contain"
+        />
+      </button>
+    );
+  }
+  if (message.media_type === "audio") {
+    return <audio controls src={message.media_url} className="w-full min-w-[220px]" preload="metadata" />;
+  }
+  if (message.media_type === "video") {
+    return (
+      <video controls className="max-h-80 w-full rounded-md border border-slate-200 bg-black">
+        <source src={message.media_url} type={message.mime_type || "video/mp4"} />
+      </video>
+    );
+  }
+  const isPdf =
+    message.mime_type?.toLowerCase() === "application/pdf" ||
+    message.file_name?.toLowerCase().endsWith(".pdf");
+  return (
+    <div className="space-y-2">
+      {isPdf ? (
+        <iframe
+          src={message.media_url}
+          title={message.file_name || "מסמך"}
+          className="h-64 w-full rounded-md border border-slate-200 bg-white"
+        />
+      ) : null}
+      <a
+        href={message.media_url}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+      >
+        <span>מסמך</span>
+        <span className="truncate">{message.file_name || "קובץ"}</span>
+      </a>
+    </div>
+  );
 }
 
 const FILTER_LABEL: Record<InboxFilter, string> = {
@@ -162,34 +251,87 @@ async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function WhatsappConversationsClient({
   initialConversations,
+  initialSelectedConversationId = null,
+  initialUnreadAnchorAt = null,
 }: {
   initialConversations: InboxConversationItem[];
+  initialSelectedConversationId?: string | null;
+  initialUnreadAnchorAt?: string | null;
 }) {
   const [filter, setFilter] = useState<InboxFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const nonBotInitial = initialConversations.filter((c) => c.inbox_kind !== "bot_intake");
   const [conversations, setConversations] = useState<InboxConversationItem[]>(nonBotInitial);
-  const [selectedId, setSelectedId] = useState<string | null>(nonBotInitial[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    if (initialSelectedConversationId && nonBotInitial.some((c) => c.id === initialSelectedConversationId)) {
+      return initialSelectedConversationId;
+    }
+    return nonBotInitial[0]?.id ?? null;
+  });
   const [thread, setThread] = useState<InboxThreadItem[]>([]);
   const [threadHasMore, setThreadHasMore] = useState(false);
   const [threadNextBeforeAt, setThreadNextBeforeAt] = useState<string | null>(null);
   const [threadLoading, setThreadLoading] = useState(false);
   const [initialScrollDone, setInitialScrollDone] = useState(false);
   const [replyText, setReplyText] = useState("");
+  const [mediaKind, setMediaKind] = useState<"image" | "audio" | "document" | "video">("image");
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [mediaCaption, setMediaCaption] = useState("");
+  const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [lightboxZoom, setLightboxZoom] = useState(1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<"list" | "chat">("list");
+  const [entryUnreadAnchorAt, setEntryUnreadAnchorAt] = useState<string | null>(
+    initialUnreadAnchorAt
+  );
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const threadViewportRef = useRef<HTMLDivElement | null>(null);
   const firstUnreadMessageIdRef = useRef<string | null>(null);
+  const initialSelectionAppliedRef = useRef(false);
+  const mediaFileInputRef = useRef<HTMLInputElement | null>(null);
+  const attachmentMenuRef = useRef<HTMLDivElement | null>(null);
+  const pinchStartDistanceRef = useRef<number | null>(null);
+  const pinchStartZoomRef = useRef<number>(1);
+  const swipeStartXRef = useRef<number | null>(null);
+  const swipeStartYRef = useRef<number | null>(null);
+
+  const lightboxImages = useMemo(
+    () =>
+      thread
+        .filter((m) => m.media_type === "image" && !!m.media_url)
+        .map((m) => ({
+          id: m.id,
+          url: m.media_url as string,
+          alt: m.caption || "תמונה",
+        })),
+    [thread]
+  );
+  const lightboxImage =
+    lightboxIndex != null && lightboxIndex >= 0 && lightboxIndex < lightboxImages.length
+      ? lightboxImages[lightboxIndex]
+      : null;
+
+  useEffect(() => {
+    if (
+      !initialSelectionAppliedRef.current &&
+      initialSelectedConversationId &&
+      conversations.some((c) => c.id === initialSelectedConversationId)
+    ) {
+      setSelectedId(initialSelectedConversationId);
+      setMobileView("chat");
+      initialSelectionAppliedRef.current = true;
+    }
+  }, [initialSelectedConversationId, conversations]);
 
   const filteredConversations = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return conversations;
     return conversations.filter((c) => {
       const hay = [
-        c.phone,
+        c.formatted_phone,
         c.display_name ?? "",
         c.display_title ?? "",
         ...c.role_labels,
@@ -208,7 +350,9 @@ export function WhatsappConversationsClient({
 
   const selectedKind: InboxKind | null = selectedConversation?.inbox_kind ?? null;
   const selectedKindStyle = selectedKind ? KIND_STYLES[selectedKind] : null;
-  const unreadAnchorAt = selectedConversation?.unread_anchor_at ?? null;
+  const unreadAnchorAt =
+    selectedConversation?.unread_anchor_at ??
+    (selectedConversation?.id === initialSelectedConversationId ? entryUnreadAnchorAt : null);
 
   const firstUnreadMessageId = useMemo(() => {
     if (!unreadAnchorAt) return null;
@@ -237,6 +381,21 @@ export function WhatsappConversationsClient({
     selectedConversation?.inbox_kind === "anonymous" || selectedConversation?.inbox_kind === "team";
   const isOutside24h = selectedConversation?.is_outside_24h_window === true;
   const canSendFreeText = canReply && !isOutside24h;
+
+  const markConversationReadSilently = async (conversationId: string) => {
+    try {
+      const payload = await apiJson<{ ok: boolean }>(`/api/admin/whatsapp-inbox/mark-read`, {
+        method: "POST",
+        body: JSON.stringify({ conversationId }),
+      });
+      if (!payload.ok) return;
+      setConversations((prev) =>
+        prev.map((c) => (c.id === conversationId ? { ...c, unread_count: 0, unread_anchor_at: null } : c))
+      );
+    } catch {
+      // best-effort
+    }
+  };
 
   const refreshConversations = async (nextFilter: InboxFilter = filter) => {
     const payload = await apiJson<{ ok: boolean; conversations: InboxConversationItem[] }>(
@@ -286,9 +445,13 @@ export function WhatsappConversationsClient({
     setInitialScrollDone(false);
     firstUnreadMessageIdRef.current = null;
     setThreadLoading(true);
-    void loadThread(selectedId)
+    const currentId = selectedId;
+    void loadThread(currentId)
       .catch((e) => setError((e as Error).message))
-      .finally(() => setThreadLoading(false));
+      .finally(() => {
+        setThreadLoading(false);
+        if (currentId) void markConversationReadSilently(currentId);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
@@ -342,6 +505,36 @@ export function WhatsappConversationsClient({
     setInitialScrollDone(true);
   }, [thread, initialScrollDone]);
 
+  useEffect(() => {
+    if (!attachmentMenuOpen) return;
+    const onDocMouseDown = (e: MouseEvent) => {
+      const t = e.target;
+      if (!(t instanceof Node)) return;
+      if (attachmentMenuRef.current?.contains(t)) return;
+      setAttachmentMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [attachmentMenuOpen]);
+
+  useEffect(() => {
+    if (!lightboxImage) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setLightboxIndex(null);
+        return;
+      }
+      if (e.key === "ArrowRight" && lightboxImages.length > 1) {
+        setLightboxIndex((prev) => (prev == null ? 0 : (prev - 1 + lightboxImages.length) % lightboxImages.length));
+      }
+      if (e.key === "ArrowLeft" && lightboxImages.length > 1) {
+        setLightboxIndex((prev) => (prev == null ? 0 : (prev + 1) % lightboxImages.length));
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [lightboxImage, lightboxImages.length]);
+
   const onMarkRead = async () => {
     if (!selectedId) return;
     setBusy(true);
@@ -373,12 +566,68 @@ export function WhatsappConversationsClient({
         return;
       }
       setReplyText("");
+      await markConversationReadSilently(selectedId);
       await loadThread(selectedId);
       await refreshConversations(filter);
     } finally {
       setBusy(false);
     }
   };
+
+  const onSendMedia = async () => {
+    if (!selectedId || !canSendFreeText || !mediaFile) return;
+    const maxSizeByKind: Record<"image" | "audio" | "document" | "video", number> = {
+      image: 10 * 1024 * 1024,
+      audio: 16 * 1024 * 1024,
+      document: 20 * 1024 * 1024,
+      video: 16 * 1024 * 1024,
+    };
+    if (mediaFile.size > maxSizeByKind[mediaKind]) {
+      const maxMb = Math.round(maxSizeByKind[mediaKind] / (1024 * 1024));
+      setError(`הקובץ גדול מדי עבור ${mediaKind}. מקסימום ${maxMb}MB.`);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.set("conversationId", selectedId);
+      form.set("kind", mediaKind);
+      form.set("file", mediaFile);
+      if (mediaCaption.trim()) form.set("caption", mediaCaption.trim());
+      const res = await fetch("/api/admin/whatsapp-inbox/send-media", {
+        method: "POST",
+        body: form,
+      });
+      const payload = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok || !payload.ok) {
+        setError(payload.error ?? "לא הצלחנו לשלוח את הקובץ כרגע. נסו שוב בעוד רגע.");
+        return;
+      }
+      setMediaFile(null);
+      setMediaCaption("");
+      await markConversationReadSilently(selectedId);
+      await loadThread(selectedId);
+      await refreshConversations(filter);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const chooseAttachmentKind = (kind: "image" | "audio" | "document" | "video") => {
+    setMediaKind(kind);
+    setAttachmentMenuOpen(false);
+    setTimeout(() => mediaFileInputRef.current?.click(), 0);
+  };
+
+  const mediaAccept =
+    mediaKind === "image"
+      ? "image/*"
+      : mediaKind === "audio"
+        ? "audio/*"
+        : mediaKind === "video"
+          ? "video/*"
+          : ".pdf,.doc,.docx,.txt";
 
   const onSendOpeningTemplate = async () => {
     if (!selectedId) return;
@@ -418,6 +667,8 @@ export function WhatsappConversationsClient({
   };
 
   const openConversation = async (conversationId: string) => {
+    // מעבר ידני בין שיחות מנקה עוגן "הודעות חדשות" שהגיע מהפעמון.
+    setEntryUnreadAnchorAt(null);
     setMobileView("chat");
     setInitialScrollDone(false);
     firstUnreadMessageIdRef.current = null;
@@ -426,6 +677,7 @@ export function WhatsappConversationsClient({
       setThreadLoading(true);
       try {
         await loadThread(conversationId);
+        await markConversationReadSilently(conversationId);
       } finally {
         setThreadLoading(false);
       }
@@ -587,16 +839,15 @@ export function WhatsappConversationsClient({
                         <div className="min-w-0 flex-1 text-right">
                           <div dir="ltr" className="flex min-w-0 items-baseline justify-end gap-1">
                             {c.inbox_kind === "team" ? (
-                              <span dir="ltr" className="shrink-0 text-[11px] font-normal text-slate-500">({c.phone})</span>
+                              <span dir="ltr" className="shrink-0 text-[11px] font-normal text-slate-500">({c.formatted_phone})</span>
                             ) : null}
                             <span className="truncate text-right text-base font-bold" dir="rtl">
-                              {c.inbox_kind === "team" ? (c.display_title || c.phone).split(" · ")[0] : c.display_title || c.phone}
+                              {c.inbox_kind === "team" ? (c.display_title || c.formatted_phone || c.phone).split(" · ")[0] : c.display_title || c.formatted_phone || c.phone}
                             </span>
                           </div>
                           {c.inbox_kind === "team" ? (
-                            <div className="mt-1 flex items-center gap-2">
-                              <span className="shrink-0 text-xs text-slate-500">{formatDateTime(c.last_inbound_at)}</span>
-                              <div className="ms-auto flex flex-wrap items-center gap-1">
+                            <div className="mt-1 flex items-center justify-between">
+                              <div className="flex flex-wrap items-center gap-1">
                                   {c.role_labels.length > 0
                                     ? c.role_labels.map((role) => (
                                         <span
@@ -611,6 +862,7 @@ export function WhatsappConversationsClient({
                                       ))
                                     : null}
                               </div>
+                              <span className="shrink-0 text-xs text-slate-500">{formatDateTime(c.last_inbound_at)}</span>
                             </div>
                           ) : (
                             <div className="text-xs text-slate-500">{formatDateTime(c.last_inbound_at)}</div>
@@ -620,9 +872,7 @@ export function WhatsappConversationsClient({
                           <span className={["inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-bold", style.badgeBg, style.badgeText].join(" ")}>
                             {c.unread_count}
                           </span>
-                        ) : (
-                          <span className="shrink-0 text-[11px] text-slate-400">נקראו</span>
-                        )}
+                        ) : null}
                       </div>
                     </button>
                   );
@@ -644,7 +894,7 @@ export function WhatsappConversationsClient({
               <div className="w-full text-base font-semibold text-slate-800">
                 {selectedConversation ? (
                   <>
-                    שיחה: <span className="font-medium">{selectedConversation.display_title || selectedConversation.phone}</span>
+                    שיחה: <span className="font-medium">{selectedConversation.display_title || selectedConversation.formatted_phone || selectedConversation.phone}</span>
                   </>
                 ) : (
                   "בחר/י שיחה"
@@ -656,7 +906,11 @@ export function WhatsappConversationsClient({
                   variant="outline"
                   size="sm"
                   className="h-8 shrink-0 gap-1 px-2"
-                  onClick={() => setMobileView("list")}
+                  onClick={() => {
+                    setMobileView("list");
+                    // יציאה מהצ'אט סוגרת את עוגן "הודעות חדשות" שהגיע מהפעמון.
+                    setEntryUnreadAnchorAt(null);
+                  }}
                   aria-label="חזרה לרשימה"
                 >
                   <span aria-hidden className="text-lg font-bold leading-none">‹</span>
@@ -770,7 +1024,19 @@ export function WhatsappConversationsClient({
                               <span>{m.direction === "inbound" ? "נכנס" : "יוצא"}</span>
                               <span>{formatDateTime(m.at)}</span>
                             </div>
-                            <div className="whitespace-pre-wrap break-words text-sm">{m.text}</div>
+                            <div className="space-y-2">
+                              <ThreadMediaBlock
+                                message={m}
+                                onOpenImage={(messageId) => {
+                                  const idx = lightboxImages.findIndex((img) => img.id === messageId);
+                                  if (idx >= 0) {
+                                    setLightboxZoom(1);
+                                    setLightboxIndex(idx);
+                                  }
+                                }}
+                              />
+                              {m.text ? <div className="whitespace-pre-wrap break-words text-sm">{m.text}</div> : null}
+                            </div>
                           </div>
                         </div>
                       );
@@ -781,20 +1047,95 @@ export function WhatsappConversationsClient({
             </div>
 
             <div className="space-y-2">
-              <Textarea
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                className="min-h-[90px]"
-                placeholder="כתוב/כתבי תשובה לפונה..."
-                disabled={!canSendFreeText}
+              <input
+                ref={mediaFileInputRef}
+                type="file"
+                accept={mediaAccept}
+                onChange={(e) => setMediaFile(e.target.files?.[0] ?? null)}
+                disabled={!canSendFreeText || busy}
+                className="hidden"
               />
-              <div className="flex justify-end">
+              {mediaFile ? (
+                <div className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+                  <span className="truncate">
+                    {mediaKind === "image"
+                      ? "תמונה"
+                      : mediaKind === "audio"
+                        ? "אודיו"
+                        : mediaKind === "video"
+                          ? "וידאו"
+                          : "מסמך"}
+                    : {mediaFile.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMediaFile(null);
+                      setMediaCaption("");
+                    }}
+                    className="rounded px-2 py-1 text-slate-500 hover:bg-slate-100"
+                    disabled={busy}
+                  >
+                    הסר
+                  </button>
+                </div>
+              ) : null}
+              {mediaFile ? (
+                <Input
+                  value={mediaCaption}
+                  onChange={(e) => setMediaCaption(e.target.value)}
+                  placeholder="כיתוב לקובץ (אופציונלי)"
+                  disabled={!canSendFreeText || busy}
+                />
+              ) : null}
+              <div ref={attachmentMenuRef} className="relative">
+                <Textarea
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  className="min-h-[70px] pe-14"
+                  placeholder="כתוב/כתבי תשובה לפונה..."
+                  disabled={!canSendFreeText}
+                />
                 <Button
                   type="button"
-                  onClick={onSendReply}
-                  disabled={busy || !selectedId || !replyText.trim() || !canSendFreeText}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setAttachmentMenuOpen((v) => !v)}
+                  disabled={busy || !selectedId || !canSendFreeText}
+                  aria-label="צרף קובץ"
+                  className="absolute end-2 top-2 h-8 w-8 p-0 text-slate-500 hover:text-slate-700"
                 >
-                  שלח תשובה
+                  <PaperclipIcon className="h-4 w-4" />
+                </Button>
+                {attachmentMenuOpen ? (
+                  <div className="absolute bottom-11 end-2 z-20 min-w-[150px] rounded-md border border-slate-200 bg-white p-1 shadow-lg">
+                    <button type="button" onClick={() => chooseAttachmentKind("image")} className="block w-full rounded px-3 py-2 text-right text-sm hover:bg-slate-50">
+                      תמונה
+                    </button>
+                    <button type="button" onClick={() => chooseAttachmentKind("video")} className="block w-full rounded px-3 py-2 text-right text-sm hover:bg-slate-50">
+                      וידאו
+                    </button>
+                    <button type="button" onClick={() => chooseAttachmentKind("audio")} className="block w-full rounded px-3 py-2 text-right text-sm hover:bg-slate-50">
+                      אודיו
+                    </button>
+                    <button type="button" onClick={() => chooseAttachmentKind("document")} className="block w-full rounded px-3 py-2 text-right text-sm hover:bg-slate-50">
+                      מסמך
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              <div className="relative flex items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  onClick={mediaFile ? onSendMedia : onSendReply}
+                  disabled={
+                    busy ||
+                    !selectedId ||
+                    !canSendFreeText ||
+                    (mediaFile ? false : !replyText.trim())
+                  }
+                >
+                  {mediaFile ? "שלח קובץ" : "שלח"}
                 </Button>
               </div>
             </div>
@@ -854,6 +1195,134 @@ export function WhatsappConversationsClient({
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {lightboxImage ? (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4"
+            onClick={() => setLightboxIndex(null)}
+            role="dialog"
+            aria-label="תצוגת תמונה מוגדלת"
+          >
+            <button
+              type="button"
+              onClick={() => setLightboxIndex(null)}
+              className="absolute end-4 top-4 rounded-md bg-white/10 px-3 py-1 text-lg text-white hover:bg-white/20"
+              aria-label="סגור"
+            >
+              ×
+            </button>
+            {lightboxImages.length > 1 ? (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setLightboxZoom(1);
+                    setLightboxIndex((prev) =>
+                      prev == null ? 0 : (prev - 1 + lightboxImages.length) % lightboxImages.length
+                    );
+                  }}
+                  className="absolute start-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 px-3 py-2 text-white hover:bg-white/20"
+                  aria-label="תמונה קודמת"
+                >
+                  ❮
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setLightboxZoom(1);
+                    setLightboxIndex((prev) =>
+                      prev == null ? 0 : (prev + 1) % lightboxImages.length
+                    );
+                  }}
+                  className="absolute end-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 px-3 py-2 text-white hover:bg-white/20"
+                  aria-label="תמונה הבאה"
+                >
+                  ❯
+                </button>
+              </>
+            ) : null}
+            <div
+              className="max-h-[90vh] max-w-[90vw] overflow-auto"
+              onClick={(e) => e.stopPropagation()}
+              onWheel={(e) => {
+                e.preventDefault();
+                const delta = e.deltaY > 0 ? -0.1 : 0.1;
+                setLightboxZoom((z) => Math.min(4, Math.max(1, z + delta)));
+              }}
+              onTouchStart={(e) => {
+                if (e.touches.length === 1) {
+                  swipeStartXRef.current = e.touches[0].clientX;
+                  swipeStartYRef.current = e.touches[0].clientY;
+                  return;
+                }
+                if (e.touches.length !== 2) return;
+                const t0 = e.touches[0];
+                const t1 = e.touches[1];
+                const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+                pinchStartDistanceRef.current = dist;
+                pinchStartZoomRef.current = lightboxZoom;
+              }}
+              onTouchMove={(e) => {
+                if (e.touches.length !== 2 || pinchStartDistanceRef.current == null) return;
+                const t0 = e.touches[0];
+                const t1 = e.touches[1];
+                const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+                const ratio = dist / pinchStartDistanceRef.current;
+                const next = Math.min(4, Math.max(1, pinchStartZoomRef.current * ratio));
+                setLightboxZoom(next);
+              }}
+              onTouchEnd={() => {
+                if (pinchStartDistanceRef.current != null) pinchStartDistanceRef.current = null;
+                swipeStartXRef.current = null;
+                swipeStartYRef.current = null;
+              }}
+              onTouchCancel={() => {
+                if (pinchStartDistanceRef.current != null) pinchStartDistanceRef.current = null;
+                swipeStartXRef.current = null;
+                swipeStartYRef.current = null;
+              }}
+              onTouchMoveCapture={(e) => {
+                if (e.touches.length !== 1 || lightboxImages.length <= 1 || lightboxZoom > 1.05) return;
+                const startX = swipeStartXRef.current;
+                const startY = swipeStartYRef.current;
+                if (startX == null || startY == null) return;
+                const curX = e.touches[0].clientX;
+                const curY = e.touches[0].clientY;
+                const dx = curX - startX;
+                const dy = curY - startY;
+                // Horizontal swipe only if dominant over vertical movement.
+                if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+                  setLightboxZoom(1);
+                  if (dx > 0) {
+                    setLightboxIndex((prev) =>
+                      prev == null ? 0 : (prev - 1 + lightboxImages.length) % lightboxImages.length
+                    );
+                  } else {
+                    setLightboxIndex((prev) =>
+                      prev == null ? 0 : (prev + 1) % lightboxImages.length
+                    );
+                  }
+                  swipeStartXRef.current = curX;
+                  swipeStartYRef.current = curY;
+                }
+              }}
+            >
+              <img
+                src={lightboxImage.url}
+                alt={lightboxImage.alt}
+                className="object-contain"
+                style={{
+                  maxWidth: "90vw",
+                  maxHeight: "90vh",
+                  transform: `scale(${lightboxZoom})`,
+                  transformOrigin: "center center",
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );

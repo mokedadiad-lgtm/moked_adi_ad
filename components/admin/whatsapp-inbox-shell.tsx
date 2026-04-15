@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { WhatsappConversationsClient } from "@/components/admin/whatsapp-conversations-client";
 import { WhatsappInboxClient } from "@/components/admin/whatsapp-inbox-client";
@@ -12,11 +12,21 @@ type DraftsProps = React.ComponentProps<typeof WhatsappInboxClient>;
 export function WhatsappInboxShell({
   initialConversations,
   initialDrafts,
+  initialTab = "conversations",
+  initialConversationId = null,
+  initialUnreadAnchorAt = null,
 }: {
   initialConversations: ConversationsProps["initialConversations"];
   initialDrafts: DraftsProps["initialDrafts"];
+  initialTab?: "conversations" | "drafts";
+  initialConversationId?: string | null;
+  initialUnreadAnchorAt?: string | null;
 }) {
-  const [tab, setTab] = useState<"conversations" | "drafts">("conversations");
+  const [tab, setTab] = useState<"conversations" | "drafts">(initialTab);
+
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
 
   return (
     <div className="space-y-4">
@@ -58,7 +68,11 @@ export function WhatsappInboxShell({
       </div>
 
       {tab === "conversations" ? (
-        <WhatsappConversationsClient initialConversations={initialConversations} />
+        <WhatsappConversationsClient
+          initialConversations={initialConversations}
+          initialSelectedConversationId={initialConversationId}
+          initialUnreadAnchorAt={initialUnreadAnchorAt}
+        />
       ) : (
         <WhatsappInboxClient initialDrafts={initialDrafts} />
       )}

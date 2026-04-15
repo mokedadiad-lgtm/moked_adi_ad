@@ -1,9 +1,16 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import {
   sendMetaWhatsAppInitiatedWithLog,
+  sendMetaWhatsAppMediaWithLog,
   sendMetaWhatsAppTextWithLog,
 } from "@/lib/whatsapp/outbound";
-import { normalizeMetaPhone } from "@/lib/whatsapp/meta";
+import {
+  buildWhatsappMediaPath,
+  createWhatsappMediaSignedUrl,
+  removeWhatsappMediaPaths,
+  uploadWhatsappMedia,
+} from "@/lib/whatsapp/mediaStorage";
+import { downloadMetaMedia, fetchMetaMediaMetadata, normalizeMetaPhone } from "@/lib/whatsapp/meta";
 import { getWhatsAppTemplateName } from "@/lib/whatsapp/templateConfig";
 
 export type InboxKind = "bot_intake" | "anonymous" | "team";
@@ -14,6 +21,7 @@ export type WhatsAppConversationMode = "bot" | "human";
 export interface InboxConversationItem {
   id: string;
   phone: string;
+  formatted_phone: string;
   mode: WhatsAppConversationMode;
   inbox_kind: InboxKind;
   display_name: string | null;
@@ -34,6 +42,11 @@ export interface InboxThreadItem {
   at: string;
   text: string;
   message_type: string | null;
+  media_type: "image" | "audio" | "document" | "video" | null;
+  media_url: string | null;
+  mime_type: string | null;
+  file_name: string | null;
+  caption: string | null;
   channel_event: string | null;
   status: string | null;
 }
@@ -48,6 +61,15 @@ export interface TeamProfileOption {
   id: string;
   full_name_he: string | null;
   phone: string;
+}
+
+function inboundMediaTypeLabel(messageType: string | null | undefined): string {
+  if (messageType === "image") return "תמונה";
+  if (messageType === "audio") return "הודעת אודיו";
+  if (messageType === "video") return "וידאו";
+  if (messageType === "document") return "מסמך";
+  if (messageType === "button") return "לחיצה על כפתור";
+  return "הודעה חדשה";
 }
 
 function safePreview(v: unknown): string {
@@ -83,6 +105,17 @@ function isOutside24hWindow(lastInboundAt: string | null | undefined): boolean {
   const sec = getSecondsSince(lastInboundAt);
   if (sec == null) return true;
   return sec > 24 * 60 * 60;
+}
+
+export function formatPhoneForDisplay(raw: string | null | undefined): string {
+  const normalized = normalizeMetaPhone(raw ?? "");
+  if (!normalized) return (raw ?? "").trim();
+  const digits = normalized.replace(/\D/g, "");
+  if (digits.startsWith("972") && digits.length >= 12) {
+    // +972545124568 -> 0545124568
+    return `0${digits.slice(3)}`;
+  }
+  return digits;
 }
 
 /** Text shown in admin thread for outbound rows — prefers stored preview, never exposes internal channel_event ids. */
@@ -177,6 +210,7 @@ export async function getWhatsappInboxConversations(
 
   return rows.map((r) => {
     const phone = r.phone ?? "";
+    const formattedPhone = formatPhoneForDisplay(phone);
     const phoneNorm = normalizeMetaPhone(phone);
     const teamMeta = phoneNorm ? teamByPhone.get(phoneNorm) : undefined;
     const displayName = teamMeta?.full_name_he?.trim() ? teamMeta.full_name_he.trim() : null;
@@ -185,13 +219,14 @@ export async function getWhatsappInboxConversations(
       ? roleLabels.length > 0
         ? `${displayName} · ${roleLabels.join(", ")}`
         : displayName
-      : phone;
+      : formattedPhone || phone;
 
     const secondsSinceLastInbound = getSecondsSince(r.last_inbound_at);
     const outside24h = isOutside24hWindow(r.last_inbound_at);
     return {
       id: r.id,
       phone,
+      formatted_phone: formattedPhone || phone,
       mode: (r.mode ?? "bot") as WhatsAppConversationMode,
       inbox_kind: (r.inbox_kind ?? "bot_intake") as InboxKind,
       display_name: displayName,
@@ -218,7 +253,9 @@ export async function getWhatsappConversationThread(
 
   let inQuery = supabase
       .from("whatsapp_inbound_messages")
-      .select("id, received_at, message_type, text_body")
+      .select(
+        "id, received_at, message_type, text_body, media_id, media_storage_path, media_mime_type, media_file_name, media_caption, payload"
+      )
       .eq("conversation_id", conversationId)
       .order("received_at", { ascending: false })
       .limit(fetchLimit + 1);
@@ -249,8 +286,22 @@ export async function getWhatsappConversationThread(
     id: `in_${m.id as string}`,
     direction: "inbound",
     at: (m.received_at as string) ?? new Date().toISOString(),
-    text: (m.text_body as string | null) ?? "(הודעה לא טקסטואלית)",
+    text:
+      ((m.text_body as string | null)?.trim() ??
+        "") ||
+      "",
     message_type: (m.message_type as string | null) ?? null,
+    media_type:
+      (m.message_type as string | null) === "image" ||
+      (m.message_type as string | null) === "audio" ||
+      (m.message_type as string | null) === "document" ||
+      (m.message_type as string | null) === "video"
+        ? ((m.message_type as "image" | "audio" | "document" | "video") ?? null)
+        : null,
+    media_url: null,
+    mime_type: (m.media_mime_type as string | null) ?? null,
+    file_name: (m.media_file_name as string | null) ?? null,
+    caption: (m.media_caption as string | null) ?? null,
     channel_event: null,
     status: "received",
   }));
@@ -265,12 +316,106 @@ export async function getWhatsappConversationThread(
       at: (m.created_at as string) ?? new Date().toISOString(),
       text,
       message_type: "text",
+      media_type:
+        payload.kind === "media" &&
+        (payload.media_kind === "image" ||
+          payload.media_kind === "audio" ||
+          payload.media_kind === "document" ||
+          payload.media_kind === "video")
+          ? (payload.media_kind as "image" | "audio" | "document" | "video")
+          : null,
+      media_url: null,
+      mime_type: typeof payload.mime_type === "string" ? payload.mime_type : null,
+      file_name: typeof payload.filename === "string" ? payload.filename : null,
+      caption: typeof payload.caption === "string" ? payload.caption : null,
       channel_event: (m.channel_event as string | null) ?? null,
       status: (m.status as string | null) ?? null,
     };
   });
 
   const items = [...inRows, ...outRows].sort((a, b) => a.at.localeCompare(b.at));
+
+  for (const item of items) {
+    if (!item.media_type) continue;
+    if (item.direction === "inbound") {
+      const src = inSlice.find((m) => `in_${m.id as string}` === item.id);
+      const inboundRowId = (src as { id?: string | null } | undefined)?.id ?? null;
+      const srcPayload = ((src as { payload?: Record<string, unknown> } | undefined)?.payload ??
+        {}) as Record<string, unknown>;
+      const mediaFromPayload =
+        item.media_type &&
+        srcPayload[item.media_type] &&
+        typeof srcPayload[item.media_type] === "object"
+          ? (srcPayload[item.media_type] as Record<string, unknown>)
+          : null;
+      if (!item.mime_type && typeof mediaFromPayload?.mime_type === "string") {
+        item.mime_type = mediaFromPayload.mime_type;
+      }
+      if (!item.file_name && typeof mediaFromPayload?.filename === "string") {
+        item.file_name = mediaFromPayload.filename;
+      }
+      if (!item.caption && typeof mediaFromPayload?.caption === "string") {
+        item.caption = mediaFromPayload.caption;
+      }
+      if (inboundRowId) {
+        item.media_url = `/api/admin/whatsapp-inbox/media/inbound/${encodeURIComponent(inboundRowId)}`;
+      }
+      const storagePath = (src as { media_storage_path?: string | null } | undefined)?.media_storage_path ?? null;
+      if (!item.media_url || !storagePath) {
+        const mediaId =
+          (src as { media_id?: string | null } | undefined)?.media_id ??
+          (typeof mediaFromPayload?.id === "string" ? mediaFromPayload.id : null);
+        if (mediaId) {
+          const meta = await fetchMetaMediaMetadata(mediaId);
+          if (meta.ok) {
+            const bin = await downloadMetaMedia(meta.url);
+            if (bin.ok) {
+              const path = buildWhatsappMediaPath({
+                direction: "inbound",
+                conversationId,
+                providerMessageId: `in_${String((src as { id?: string | null })?.id ?? mediaId)}`,
+                mediaType: item.media_type ?? "media",
+                mimeType: item.mime_type ?? meta.mime_type ?? bin.mimeType,
+                fileName: item.file_name,
+              });
+              const uploaded = await uploadWhatsappMedia({
+                path,
+                bytes: bin.bytes,
+                mimeType: item.mime_type ?? meta.mime_type ?? bin.mimeType,
+              });
+              if (uploaded.ok) {
+                const inboundRowId = (src as { id?: string | null })?.id ?? null;
+                if (inboundRowId) {
+                  await supabase
+                    .from("whatsapp_inbound_messages")
+                    .update({
+                      media_storage_path: uploaded.path,
+                      media_mime_type: item.mime_type ?? meta.mime_type ?? bin.mimeType,
+                      media_size_bytes: bin.sizeBytes ?? undefined,
+                    })
+                    .eq("id", inboundRowId);
+                }
+              }
+            }
+          }
+        }
+      }
+    } else {
+      const src = outSlice.find((m) => `out_${m.id as string}` === item.id);
+      const payload = ((src as { payload?: Record<string, unknown> })?.payload ?? {}) as Record<string, unknown>;
+      const storagePath = typeof payload.storage_path === "string" ? payload.storage_path : null;
+      if (storagePath) {
+        item.media_url = await createWhatsappMediaSignedUrl(storagePath, 60 * 60);
+      } else if (typeof payload.link_preview === "string") {
+        item.media_url = payload.link_preview;
+      }
+    }
+  }
+  for (const item of items) {
+    if (item.direction !== "inbound") continue;
+    if (item.text.trim()) continue;
+    item.text = item.media_type ? "" : inboundMediaTypeLabel(item.message_type);
+  }
   const nextBeforeAt = items.length > 0 ? items[0]!.at : null;
   return { items, hasMore, nextBeforeAt };
 }
@@ -358,10 +503,59 @@ export async function sendWhatsappHumanReply(
     .update({
       mode: "human",
       inbox_kind: nextInboxKind,
+      unread_count: 0,
       last_outbound_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
     .eq("id", conversationId);
+
+  return { ok: true };
+}
+
+export async function sendWhatsappMediaReply(params: {
+  conversationId: string;
+  mediaKind: "image" | "audio" | "document" | "video";
+  storagePath: string;
+  mimeType?: string | null;
+  fileName?: string | null;
+  caption?: string | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  const supabase = getSupabaseAdmin();
+  const { data: conv, error: convErr } = await supabase
+    .from("whatsapp_conversations")
+    .select("id, phone, last_inbound_at")
+    .eq("id", params.conversationId)
+    .maybeSingle();
+  if (convErr || !conv?.phone) return { ok: false, error: "שיחה לא נמצאה" };
+  if (isOutside24hWindow((conv as { last_inbound_at?: string | null }).last_inbound_at ?? null)) {
+    return { ok: false, error: "עבר חלון 24 שעות. ניתן לשלוח רק הודעת פתיחה יזומה." };
+  }
+
+  const signedUrl = await createWhatsappMediaSignedUrl(params.storagePath, 60 * 60);
+  if (!signedUrl) return { ok: false, error: "יצירת קישור למדיה נכשלה" };
+
+  const result = await sendMetaWhatsAppMediaWithLog(conv.phone as string, {
+    channel_event: "admin_inbox_reply_media",
+    conversation_id: params.conversationId,
+    idempotency_key: `admin_reply_media_${params.conversationId}_${Date.now()}`,
+    kind: params.mediaKind,
+    link: signedUrl,
+    caption: params.caption ?? undefined,
+    filename: params.fileName ?? undefined,
+    storagePath: params.storagePath,
+    mimeType: params.mimeType ?? undefined,
+  });
+  if (!result.ok) return { ok: false, error: result.error };
+
+  await supabase
+    .from("whatsapp_conversations")
+    .update({
+      mode: "human",
+      unread_count: 0,
+      last_outbound_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.conversationId);
 
   return { ok: true };
 }
@@ -563,6 +757,26 @@ export async function clearWhatsappConversationHistory(
 ): Promise<{ ok: boolean; error?: string }> {
   const supabase = getSupabaseAdmin();
 
+  const [{ data: inRows }, { data: outRows }] = await Promise.all([
+    supabase
+      .from("whatsapp_inbound_messages")
+      .select("media_storage_path")
+      .eq("conversation_id", conversationId),
+    supabase
+      .from("whatsapp_outbound_messages")
+      .select("payload")
+      .eq("conversation_id", conversationId),
+  ]);
+
+  const storagePaths = [
+    ...(inRows ?? []).map((r) => (r as { media_storage_path?: string | null }).media_storage_path ?? null),
+    ...(outRows ?? []).map((r) => {
+      const p = ((r as { payload?: Record<string, unknown> }).payload ?? {}) as Record<string, unknown>;
+      return typeof p.storage_path === "string" ? p.storage_path : null;
+    }),
+  ];
+  await removeWhatsappMediaPaths(storagePaths);
+
   const [{ error: inErr }, { error: outErr }] = await Promise.all([
     supabase.from("whatsapp_inbound_messages").delete().eq("conversation_id", conversationId),
     supabase.from("whatsapp_outbound_messages").delete().eq("conversation_id", conversationId),
@@ -590,6 +804,26 @@ export async function deleteWhatsappConversation(
   conversationId: string
 ): Promise<{ ok: boolean; error?: string }> {
   const supabase = getSupabaseAdmin();
+
+  const [{ data: inRows }, { data: outRows }] = await Promise.all([
+    supabase
+      .from("whatsapp_inbound_messages")
+      .select("media_storage_path")
+      .eq("conversation_id", conversationId),
+    supabase
+      .from("whatsapp_outbound_messages")
+      .select("payload")
+      .eq("conversation_id", conversationId),
+  ]);
+
+  const storagePaths = [
+    ...(inRows ?? []).map((r) => (r as { media_storage_path?: string | null }).media_storage_path ?? null),
+    ...(outRows ?? []).map((r) => {
+      const p = ((r as { payload?: Record<string, unknown> }).payload ?? {}) as Record<string, unknown>;
+      return typeof p.storage_path === "string" ? p.storage_path : null;
+    }),
+  ];
+  await removeWhatsappMediaPaths(storagePaths);
 
   const [{ error: inErr }, { error: outErr }] = await Promise.all([
     supabase.from("whatsapp_inbound_messages").delete().eq("conversation_id", conversationId),

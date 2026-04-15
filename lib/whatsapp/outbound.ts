@@ -1,6 +1,12 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { MetaSendResult } from "./meta";
-import { isMetaWhatsAppConfigured, sendMetaWhatsAppTemplate, sendMetaWhatsAppText } from "./meta";
+import {
+  isMetaWhatsAppConfigured,
+  sendMetaWhatsAppMediaByLink,
+  sendMetaWhatsAppTemplate,
+  sendMetaWhatsAppText,
+  type MetaMediaKind,
+} from "./meta";
 import type { WhatsAppInitiatedTemplateKey } from "./templateConfig";
 import { getWhatsAppTemplateLanguageCode, getWhatsAppTemplateName } from "./templateConfig";
 
@@ -142,6 +148,65 @@ export async function sendMetaWhatsAppTemplateWithLog(
     status: result.ok ? "sent" : "error",
     error: result.ok ? null : result.error,
   });
+  return result;
+}
+
+export async function sendMetaWhatsAppMediaWithLog(
+  toPhoneRaw: string,
+  opts: {
+    channel_event: string;
+    conversation_id?: string | null;
+    idempotency_key?: string | null;
+    kind: MetaMediaKind;
+    link: string;
+    caption?: string;
+    filename?: string;
+    storagePath?: string | null;
+    mimeType?: string | null;
+  }
+): Promise<MetaSendResult> {
+  const payloadForLog = {
+    kind: "media",
+    media_kind: opts.kind,
+    link_preview: opts.link.slice(0, 300),
+    caption: opts.caption?.slice(0, 300) ?? null,
+    filename: opts.filename?.slice(0, 200) ?? null,
+    storage_path: opts.storagePath ?? null,
+    mime_type: opts.mimeType ?? null,
+  };
+
+  if (!isMetaWhatsAppConfigured()) {
+    await logWhatsAppOutbound({
+      to_phone: toPhoneRaw,
+      channel_event: opts.channel_event,
+      conversation_id: opts.conversation_id,
+      idempotency_key: opts.idempotency_key,
+      payload: payloadForLog,
+      status: "error",
+      error: "Meta WhatsApp not configured (META_ACCESS_TOKEN / META_PHONE_NUMBER_ID)",
+    });
+    return { ok: false, error: "Meta WhatsApp not configured" };
+  }
+
+  const result = await sendMetaWhatsAppMediaByLink({
+    toPhoneRaw,
+    kind: opts.kind,
+    link: opts.link,
+    caption: opts.caption,
+    filename: opts.filename,
+  });
+
+  await logWhatsAppOutbound({
+    to_phone: toPhoneRaw,
+    channel_event: opts.channel_event,
+    conversation_id: opts.conversation_id,
+    idempotency_key: opts.idempotency_key,
+    payload: payloadForLog,
+    provider_message_id: result.ok ? result.idMessage : null,
+    status: result.ok ? "sent" : "error",
+    error: result.ok ? null : result.error,
+  });
+
   return result;
 }
 

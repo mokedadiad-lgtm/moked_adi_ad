@@ -1,4 +1,4 @@
-import { getCategories, getProofreaderTypes, getTopicsWithSubTopics } from "@/app/admin/actions";
+import { getProofreaderTypes, getTopicsWithSubTopics } from "@/app/admin/actions";
 import { JoinTeamForm } from "@/components/join-team/join-team-form";
 import Image from "next/image";
 import { notFound } from "next/navigation";
@@ -20,9 +20,8 @@ export default async function JoinTeamPage({
   const kind = raw as "respondent" | "proofreader";
   const { t } = await searchParams;
 
-  const [topics, categories, proofreaderTypes] = await Promise.all([
+  const [topics, proofreaderTypes] = await Promise.all([
     getTopicsWithSubTopics(),
-    getCategories(),
     getProofreaderTypes(),
   ]);
 
@@ -40,7 +39,6 @@ export default async function JoinTeamPage({
           kind={kind}
           initialToken={typeof t === "string" ? t : ""}
           topics={topics}
-          categories={categories}
           proofreaderTypes={proofreaderTypes}
         />
       </div>

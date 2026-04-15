@@ -3,8 +3,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { runBotFsm, type BotConversationState, type BotContext } from "@/lib/whatsapp/botFsm";
 import { classifyConversationKind } from "@/lib/whatsapp/inboxKind";
-import { normalizeMetaPhone, sendMetaWhatsAppButtons, sendMetaWhatsAppList, sendMetaWhatsAppText } from "@/lib/whatsapp/meta";
+import {
+  downloadMetaMedia,
+  fetchMetaMediaMetadata,
+  normalizeMetaPhone,
+  sendMetaWhatsAppButtons,
+  sendMetaWhatsAppList,
+  sendMetaWhatsAppText,
+} from "@/lib/whatsapp/meta";
 import { logWhatsAppOutbound } from "@/lib/whatsapp/outbound";
+import { buildWhatsappMediaPath, uploadWhatsappMedia } from "@/lib/whatsapp/mediaStorage";
 
 function timingSafeEqual(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);
@@ -114,6 +122,12 @@ export async function POST(request: Request) {
     buttonId: string | null;
     listReplyId: string | null;
     payload: unknown;
+    mediaId: string | null;
+    mediaMimeType: string | null;
+    mediaFileName: string | null;
+    mediaCaption: string | null;
+    mediaSha256: string | null;
+    mediaSizeBytes: number | null;
   }> = [];
 
   for (const entry of payload?.entry ?? []) {
@@ -138,6 +152,28 @@ export async function POST(request: Request) {
           typeof interactive?.list_reply?.id === "string" ? interactive.list_reply.id : null;
         const listTitle =
           typeof interactive?.list_reply?.title === "string" ? interactive.list_reply.title : null;
+        const mediaRaw =
+          type === "image"
+            ? ((m as { image?: unknown }).image as Record<string, unknown> | undefined)
+            : type === "audio"
+              ? ((m as { audio?: unknown }).audio as Record<string, unknown> | undefined)
+              : type === "document"
+                ? ((m as { document?: unknown }).document as Record<string, unknown> | undefined)
+                : type === "video"
+                  ? ((m as { video?: unknown }).video as Record<string, unknown> | undefined)
+                : undefined;
+        const mediaId =
+          mediaRaw && typeof mediaRaw.id === "string" ? mediaRaw.id : null;
+        const mediaMimeType =
+          mediaRaw && typeof mediaRaw.mime_type === "string" ? mediaRaw.mime_type : null;
+        const mediaFileName =
+          mediaRaw && typeof mediaRaw.filename === "string" ? mediaRaw.filename : null;
+        const mediaCaption =
+          mediaRaw && typeof mediaRaw.caption === "string" ? mediaRaw.caption : null;
+        const mediaSha256 =
+          mediaRaw && typeof mediaRaw.sha256 === "string" ? mediaRaw.sha256 : null;
+        const mediaSizeBytes =
+          mediaRaw && typeof mediaRaw.file_size === "number" ? mediaRaw.file_size : null;
         messages.push({
           provider_message_id: id,
           from_phone: from,
@@ -146,6 +182,12 @@ export async function POST(request: Request) {
           buttonId,
           listReplyId,
           payload: m,
+          mediaId,
+          mediaMimeType,
+          mediaFileName,
+          mediaCaption,
+          mediaSha256,
+          mediaSizeBytes,
         });
       }
     }
@@ -344,6 +386,49 @@ export async function POST(request: Request) {
         .eq("id", conversationId);
     }
 
+    // Media ingest (image/audio/document): fetch metadata -> download -> store in Supabase Storage.
+    let mediaStoragePath: string | null = null;
+    let mediaMimeType = msg.mediaMimeType ?? null;
+    let mediaSizeBytes = msg.mediaSizeBytes ?? null;
+    if (
+      (msg.message_type === "image" ||
+        msg.message_type === "audio" ||
+        msg.message_type === "document" ||
+        msg.message_type === "video") &&
+      msg.mediaId &&
+      conversationId
+    ) {
+      const meta = await fetchMetaMediaMetadata(msg.mediaId);
+      if (meta.ok) {
+        if (!mediaMimeType && meta.mime_type) mediaMimeType = meta.mime_type;
+        if (!mediaSizeBytes && typeof meta.file_size === "number") mediaSizeBytes = meta.file_size;
+        const bin = await downloadMetaMedia(meta.url);
+        if (bin.ok) {
+          if (!mediaMimeType && bin.mimeType) mediaMimeType = bin.mimeType;
+          if (!mediaSizeBytes && typeof bin.sizeBytes === "number") mediaSizeBytes = bin.sizeBytes;
+          const storagePath = buildWhatsappMediaPath({
+            direction: "inbound",
+            conversationId,
+            providerMessageId: msg.provider_message_id,
+            mediaType: msg.message_type,
+            mimeType: mediaMimeType,
+            fileName: msg.mediaFileName,
+          });
+          const up = await uploadWhatsappMedia({
+            path: storagePath,
+            bytes: bin.bytes,
+            mimeType: mediaMimeType,
+          });
+          if (up.ok) mediaStoragePath = up.path;
+          else console.error("whatsapp webhook: media upload failed", up.error);
+        } else {
+          console.error("whatsapp webhook: media download failed", bin.error);
+        }
+      } else {
+        console.error("whatsapp webhook: media metadata failed", meta.error);
+      }
+    }
+
     // Insert inbound message (idempotent via unique index)
     const { error: inboundErr } = await supabase.from("whatsapp_inbound_messages").insert({
       provider: "meta",
@@ -351,9 +436,16 @@ export async function POST(request: Request) {
       conversation_id: conversationId,
       from_phone: msg.from_phone,
       message_type: msg.message_type,
-      text_body: msg.text_body,
+      text_body: msg.text_body ?? msg.mediaCaption ?? msg.mediaFileName ?? null,
       // payload includes all interactive details; used later for bot FSM / admin UI
       payload: msg.payload ?? {},
+      media_id: msg.mediaId,
+      media_mime_type: mediaMimeType,
+      media_file_name: msg.mediaFileName,
+      media_storage_path: mediaStoragePath,
+      media_caption: msg.mediaCaption,
+      media_sha256: msg.mediaSha256,
+      media_size_bytes: mediaSizeBytes,
       status: "received",
       received_at: nowIso,
     });

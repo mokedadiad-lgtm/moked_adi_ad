@@ -1,6 +1,6 @@
 "use client";
 
-import type { CategoryOption, ProofreaderTypeOption, TopicOption } from "@/app/admin/actions";
+import type { ProofreaderTypeOption, TopicOption } from "@/app/admin/actions";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -26,13 +26,11 @@ export function JoinTeamForm({
   kind,
   initialToken,
   topics,
-  categories,
   proofreaderTypes,
 }: {
   kind: Kind;
   initialToken: string;
   topics: TopicOption[];
-  categories: CategoryOption[];
   proofreaderTypes: ProofreaderTypeOption[];
 }) {
   const [token, setToken] = useState(initialToken);
@@ -46,7 +44,6 @@ export function JoinTeamForm({
   const [concurrency_limit, setConcurrencyLimit] = useState(1);
   const [cooldown_days, setCooldownDays] = useState(0);
   const [topic_ids, setTopicIds] = useState<string[]>([]);
-  const [category_ids, setCategoryIds] = useState<string[]>([]);
   const [proofreader_type_ids, setProofreaderTypeIds] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +88,7 @@ export function JoinTeamForm({
     const body =
       kind === "respondent"
         ? { ...base, topic_ids }
-        : { ...base, proofreader_type_ids, category_ids };
+        : { ...base, proofreader_type_ids };
 
     setPending(true);
     try {
@@ -254,25 +251,6 @@ export function JoinTeamForm({
               ))}
               {proofreaderTypes.length === 0 && <span className="text-sm text-slate-500">אין סוגים</span>}
             </div>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-right">קטגוריות</Label>
-            <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-3">
-              {categories.map((c) => (
-                <li key={c.id}>
-                  <label className="flex cursor-pointer items-center gap-2">
-                    <Checkbox
-                      checked={category_ids.includes(c.id)}
-                      onCheckedChange={(v) =>
-                        setCategoryIds((prev) => (v ? [...prev, c.id] : prev.filter((id) => id !== c.id)))
-                      }
-                    />
-                    <span className="text-sm">{c.name_he}</span>
-                  </label>
-                </li>
-              ))}
-              {categories.length === 0 && <li className="text-sm text-slate-500">אין קטגוריות</li>}
-            </ul>
           </div>
         </>
       )}

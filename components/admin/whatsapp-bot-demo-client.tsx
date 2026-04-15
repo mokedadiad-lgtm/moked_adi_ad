@@ -3,7 +3,9 @@
 import { WhatsAppBoldText } from "@/components/admin/whatsapp-bold-text";
 import type { DemoBubble } from "@/lib/whatsapp/botFlowDemoScript";
 import { WA_INTERACTIVE_BODY_BUTTONS_ONLY } from "@/lib/whatsapp/waInteractive";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 type Props = {
@@ -21,6 +23,31 @@ export function WhatsappBotDemoClient({ bubblesM, bubblesF }: Props) {
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-slate-100/80 pb-10" dir="rtl">
       <div className="mx-auto max-w-lg px-4 pt-6">
+        <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+          >
+            <Link href="/admin/whatsapp-inbox">שיחות (אנונימי / צוות)</Link>
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="border-amber-200 bg-white text-amber-800 hover:bg-amber-50"
+          >
+            <Link href="/admin/whatsapp-inbox?tab=drafts">טיוטות ממתינות לאישור</Link>
+          </Button>
+          <span
+            className="inline-flex h-8 cursor-default items-center rounded-md border border-blue-200 bg-blue-50 px-3 text-xs font-medium text-blue-900"
+            aria-current="page"
+          >
+            דוגמת בוט (כאן)
+          </span>
+        </div>
+
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-xl font-semibold text-slate-900">דוגמת התכתבות עם הבוט</h1>
