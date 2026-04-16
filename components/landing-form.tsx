@@ -93,7 +93,7 @@ export function LandingForm() {
       >
         <p className="text-base font-semibold text-primary">השאלה נשלחה בהצלחה</p>
         <p className="mt-1.5 text-sm text-slate-600">
-          נשתדל לחזור אליך בהתאם למסלול שבחרת. בעז&quot;ה.
+          נשתדל להחזיר לך תשובה בהתאם למסלול שבחרת, בעז&quot;ה.
         </p>
       </motion.section>
     );

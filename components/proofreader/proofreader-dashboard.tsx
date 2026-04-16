@@ -1,6 +1,6 @@
 "use client";
 
-import { responseToPlainText } from "@/lib/response-text";
+import { ResponseTextView } from "@/components/response-text-view";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -173,6 +173,32 @@ export function ProofreaderDashboard() {
     fetch("/api/revalidate", { method: "POST", body: JSON.stringify({ path: "/admin" }) }).catch(() => {});
   };
 
+  const handleDraftSaved = ({
+    questionId,
+    answerId,
+    responseText,
+  }: {
+    questionId: string;
+    answerId?: string | null;
+    responseText: string | null;
+  }) => {
+    setQuestions((prev) =>
+      prev.map((q) => {
+        const sameAnswer = answerId ? q.answer_id === answerId : false;
+        const sameQuestion = q.id === questionId;
+        if (!sameAnswer && !sameQuestion) return q;
+        return { ...q, response_text: responseText };
+      })
+    );
+    setSelected((prev) => {
+      if (!prev) return prev;
+      const sameAnswer = answerId ? prev.answer_id === answerId : false;
+      const sameQuestion = prev.id === questionId;
+      if (!sameAnswer && !sameQuestion) return prev;
+      return { ...prev, response_text: responseText };
+    });
+  };
+
   // אחרי רענון: אם השאלה כבר לא בתור — לסגור מודאל; אם עדיין בתור — לעדכן את השאלה (למשל אחרי "תפוס משימה") כדי להציג עריכה
   useEffect(() => {
     if (!selected) return;
@@ -241,9 +267,12 @@ export function ProofreaderDashboard() {
                             {truncateSummary(q.content)}
                           </p>
                           {q.response_text && (
-                            <p className="mt-2 line-clamp-1 text-start text-xs text-slate-600">
-                              תשובה{"\u200E"}: {truncateSummary(responseToPlainText(q.response_text), 80)}
-                            </p>
+                            <div className="mt-2 rounded-md border border-slate-200/70 bg-white/70 px-2 py-1.5">
+                              <p className="mb-1 text-[11px] text-slate-500">תשובה{"\u200E"}:</p>
+                              <div className="max-h-20 overflow-hidden">
+                                <ResponseTextView value={q.response_text} variant="compact" />
+                              </div>
+                            </div>
                           )}
                         </CardContent>
                       </Card>
@@ -272,9 +301,12 @@ export function ProofreaderDashboard() {
                             {truncateSummary(q.content)}
                           </p>
                           {q.response_text && (
-                            <p className="mt-2 line-clamp-1 text-start text-xs text-slate-600">
-                              תשובה{"\u200E"}: {truncateSummary(responseToPlainText(q.response_text), 80)}
-                            </p>
+                            <div className="mt-2 rounded-md border border-slate-200/70 bg-white/70 px-2 py-1.5">
+                              <p className="mb-1 text-[11px] text-slate-500">תשובה{"\u200E"}:</p>
+                              <div className="max-h-20 overflow-hidden">
+                                <ResponseTextView value={q.response_text} variant="compact" />
+                              </div>
+                            </div>
                           )}
                           {q.assigned_proofreader_id && (
                             <p className="mt-2 text-start text-[11px] text-slate-500">
@@ -312,9 +344,12 @@ export function ProofreaderDashboard() {
                               {truncateSummary(q.content)}
                             </p>
                             {q.response_text && (
-                              <p className="mt-2 line-clamp-1 text-start text-xs text-slate-600">
-                                תשובה{"\u200E"}: {truncateSummary(responseToPlainText(q.response_text), 80)}
-                              </p>
+                              <div className="mt-2 rounded-md border border-slate-200/70 bg-white/70 px-2 py-1.5">
+                                <p className="mb-1 text-[11px] text-slate-500">תשובה{"\u200E"}:</p>
+                                <div className="max-h-20 overflow-hidden">
+                                  <ResponseTextView value={q.response_text} variant="compact" />
+                                </div>
+                              </div>
                             )}
                           </CardContent>
                         </Card>
@@ -334,6 +369,7 @@ export function ProofreaderDashboard() {
         open={modalOpen}
         onOpenChange={(open) => !open && closeModal()}
         onActionDone={handleActionDone}
+        onDraftSaved={handleDraftSaved}
       />
     </>
   );

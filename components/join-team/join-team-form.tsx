@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ASKER_AGE_RANGE_LABELS, type AskerAgeRangeLabel } from "@/lib/asker-age-ranges";
 import { useState } from "react";
 
 const COMM: Record<string, string> = {
@@ -43,6 +44,7 @@ export function JoinTeamForm({
   const [phone, setPhone] = useState("");
   const [concurrency_limit, setConcurrencyLimit] = useState(1);
   const [cooldown_days, setCooldownDays] = useState(0);
+  const [respondent_age_ranges, setRespondentAgeRanges] = useState<AskerAgeRangeLabel[]>([]);
   const [topic_ids, setTopicIds] = useState<string[]>([]);
   const [proofreader_type_ids, setProofreaderTypeIds] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
@@ -71,6 +73,10 @@ export function JoinTeamForm({
       setError("נא לבחור לפחות סוג הגהה אחד.");
       return;
     }
+    if (kind === "respondent" && respondent_age_ranges.length === 0) {
+      setError("נא לבחור לפחות טווח גיל אחד.");
+      return;
+    }
 
     const base = {
       token: token.trim(),
@@ -87,7 +93,7 @@ export function JoinTeamForm({
 
     const body =
       kind === "respondent"
-        ? { ...base, topic_ids }
+        ? { ...base, cooldown_days: 7, topic_ids, respondent_age_ranges }
         : { ...base, proofreader_type_ids };
 
     setPending(true);
@@ -187,7 +193,9 @@ export function JoinTeamForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
-          <Label htmlFor="jt-conc">מכסה במקביל</Label>
+          <Label htmlFor="jt-conc">
+            {kind === "respondent" ? "כמה שאלות תוכל/י לקבל בשבוע?" : "מכסה במקביל"}
+          </Label>
           <Input
             id="jt-conc"
             type="number"
@@ -197,39 +205,67 @@ export function JoinTeamForm({
             className="text-right"
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="jt-cool">ימי צינון</Label>
-          <Input
-            id="jt-cool"
-            type="number"
-            min={0}
-            value={cooldown_days}
-            onChange={(e) => setCooldownDays(parseInt(e.target.value, 10) || 0)}
-            className="text-right"
-          />
-        </div>
+        {kind === "proofreader" ? (
+          <div className="space-y-2">
+            <Label htmlFor="jt-cool">ימי צינון</Label>
+            <Input
+              id="jt-cool"
+              type="number"
+              min={0}
+              value={cooldown_days}
+              onChange={(e) => setCooldownDays(parseInt(e.target.value, 10) || 0)}
+              className="text-right"
+            />
+          </div>
+        ) : null}
       </div>
 
       {kind === "respondent" && (
-        <div className="space-y-2">
-          <Label className="text-right">נושאים שתוכלו לקבל</Label>
-          <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-3">
-            {topics.map((t) => (
-              <li key={t.id}>
-                <label className="flex cursor-pointer items-center gap-2">
-                  <Checkbox
-                    checked={topic_ids.includes(t.id)}
-                    onCheckedChange={(v) =>
-                      setTopicIds((prev) => (v ? [...prev, t.id] : prev.filter((id) => id !== t.id)))
-                    }
-                  />
-                  <span className="text-sm">{t.name_he}</span>
-                </label>
-              </li>
-            ))}
-            {topics.length === 0 && <li className="text-sm text-slate-500">אין נושאים במערכת</li>}
-          </ul>
-        </div>
+        <>
+          <div className="space-y-2">
+            <Label className="text-right">לאיזה גילאים תוכל/י לענות? (אפשר לבחור כמה)</Label>
+            <ul className="flex flex-col gap-1 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              {ASKER_AGE_RANGE_LABELS.map((range) => (
+                <li key={range}>
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <Checkbox
+                      checked={respondent_age_ranges.includes(range)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setRespondentAgeRanges((prev) =>
+                            prev.includes(range) ? prev : [...prev, range]
+                          );
+                        } else {
+                          setRespondentAgeRanges((prev) => prev.filter((r) => r !== range));
+                        }
+                      }}
+                    />
+                    <span className="text-sm">{range}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-right">נושאים שתוכלו לקבל</Label>
+            <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-3">
+              {topics.map((t) => (
+                <li key={t.id}>
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <Checkbox
+                      checked={topic_ids.includes(t.id)}
+                      onCheckedChange={(v) =>
+                        setTopicIds((prev) => (v ? [...prev, t.id] : prev.filter((id) => id !== t.id)))
+                      }
+                    />
+                    <span className="text-sm">{t.name_he}</span>
+                  </label>
+                </li>
+              ))}
+              {topics.length === 0 && <li className="text-sm text-slate-500">אין נושאים במערכת</li>}
+            </ul>
+          </div>
+        </>
       )}
 
       {kind === "proofreader" && (

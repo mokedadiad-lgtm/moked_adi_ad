@@ -152,7 +152,7 @@ export async function sendAssignmentLinkToRespondent(
   const enter = isF ? "היכנסי" : "היכנס";
   const write = isF ? "כתבי" : "כתוב";
   const click = isF ? "לחצי" : "לחץ";
-  const greeting = respondentName ? `שלום ${escapeHtml(respondentName)}` : "שלום";
+  const greeting = respondentName ? `שלום <strong>${escapeHtml(respondentName)}</strong>` : "שלום";
   const noteBlock = adminNote?.trim()
     ? `<p style="margin: 1em 0; padding: 12px; background: #fef3c7; border-radius: 8px; border-right: 4px solid #f59e0b;"><strong>הערת מנהל:</strong><br/>${escapeHtml(adminNote.trim())}</p>`
     : "";
@@ -163,7 +163,8 @@ export async function sendAssignmentLinkToRespondent(
   const topicPart = [topicName?.trim(), subTopicName?.trim()].filter(Boolean).join(" – ") || "כללי";
   const body = `
     <p style="margin: 0 0 1em;">${greeting},</p>
-    <p style="margin: 0 0 1em;">שובצה לך שאלה חדשה לטיפול בנושא ${escapeHtml(topicPart)}. נא ${enter} בהקדם למערכת בכפתור הבא ו${write} את התשובה. ובסיום ${click} על כפתור השליחה להגהה.</p>
+    <p style="margin: 0 0 0.75em;">שובצה לך שאלה חדשה לטיפול בנושא <strong>${escapeHtml(topicPart)}</strong>.</p>
+    <p style="margin: 0 0 1em;">נא ${enter} בהקדם למערכת בכפתור הבא ו${write} את התשובה. ובסיום ${click} על כפתור השליחה להגהה.</p>
     ${noteBlock}
   `;
   const html = emailTemplate("שאלה חדשה", body, {
@@ -331,6 +332,31 @@ export async function sendManualReminderToRespondent(
 }
 
 /** סיכום יומי למגיהים – משימות ממתינות בלובי לפי סוג */
+/** התראה טכנית למנהלים/מובילים טכניים — פרטי השרת לא מוצגים למשתמש קצה */
+export async function sendAdminTechnicalAlert(
+  toEmails: string[],
+  subjectLine: string,
+  plainBody: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!isEmailConfigured() || toEmails.length === 0) {
+    return toEmails.length === 0 ? { ok: true } : { ok: false, error: "RESEND_API_KEY חסר" };
+  }
+  const body = `<pre style="white-space:pre-wrap;font-family:system-ui,sans-serif;font-size:14px;text-align:right;direction:rtl;margin:0;">${escapeHtml(plainBody)}</pre>`;
+  const html = emailTemplate(subjectLine, body);
+  const { error } = await resend.emails.send({
+    from: FROM_EMAIL,
+    replyTo: REPLY_TO_EMAIL,
+    to: toEmails.map((e) => e.trim()).filter(Boolean),
+    subject: `[מערכת – משיב] ${subjectLine}`,
+    html,
+  });
+  if (error) {
+    console.error("sendAdminTechnicalAlert:", error);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
 export async function sendLobbySummaryToProofreaders(
   toEmails: string[],
   count: number,

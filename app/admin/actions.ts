@@ -8,7 +8,11 @@ import { notifyLobbyNewQuestion, notifyLinguisticNewQuestion } from "@/app/actio
 import type { QuestionStage } from "@/lib/types";
 import { ADMIN_TABLE_STAGES } from "@/lib/types";
 import { getActiveQuestions } from "@/lib/admin-active-questions";
-import { normalizeAskerAgeRangeInput } from "@/lib/asker-age-ranges";
+import {
+  ASKER_AGE_RANGE_LABELS,
+  normalizeAskerAgeRangeInput,
+  type AskerAgeRangeLabel,
+} from "@/lib/asker-age-ranges";
 
 function revalidateAdminTopics() {
   revalidatePath("/admin/topics");
@@ -78,49 +82,65 @@ async function sendRespondentAssignmentNotifications(opts: {
     | null;
 
   if (wantsEmail(pref)) {
-    const { data: authUser } = await opts.supabase.auth.admin.getUserById(opts.respondentId);
-    const email = authUser?.user?.email?.trim();
-    if (email) {
-      await sendAssignmentLinkToRespondent(
-        email,
-        opts.profile.full_name_he ?? null,
-        opts.managerMessage?.trim() || null,
-        opts.questionLabel,
-        opts.questionId,
-        opts.topicName,
-        opts.subTopicName,
-        respondentGender
-      );
+    try {
+      const { data: authUser } = await opts.supabase.auth.admin.getUserById(opts.respondentId);
+      const email = authUser?.user?.email?.trim();
+      if (email) {
+        await sendAssignmentLinkToRespondent(
+          email,
+          opts.profile.full_name_he ?? null,
+          opts.managerMessage?.trim() || null,
+          opts.questionLabel,
+          opts.questionId,
+          opts.topicName,
+          opts.subTopicName,
+          respondentGender
+        );
+      }
+    } catch (emailErr) {
+      console.error("[sendRespondentAssignmentNotifications] email send failed", {
+        respondentId: opts.respondentId,
+        questionId: opts.questionId,
+        error: emailErr,
+      });
     }
   }
 
   if (wantsWhatsApp(pref)) {
-    const phone = opts.profile.phone?.trim();
-    if (!phone) {
-      console.warn("[sendRespondentAssignmentNotifications] wants WhatsApp but no phone on profile", opts.respondentId);
-      return;
+    try {
+      const phone = opts.profile.phone?.trim();
+      if (!phone) {
+        console.warn("[sendRespondentAssignmentNotifications] wants WhatsApp but no phone on profile", opts.respondentId);
+        return;
+      }
+      const parts = buildRespondentAssignmentWhatsAppParts({
+        fullNameHe: opts.profile.full_name_he,
+        topicName: opts.topicName,
+        subTopicName: opts.subTopicName,
+        managerMessage: opts.managerMessage,
+        questionId: opts.questionId,
+      });
+      const waBody = `${parts.greetingLegacy},\nשובצה לך שאלה חדשה לטיפול בנושא ${parts.topicPart}.\nכניסה למערכת: ${parts.linkUrl}${parts.managerNote ? `\n${parts.managerNote}` : ""}`;
+      const { sendMetaWhatsAppInitiatedWithLog } = await import("@/lib/whatsapp/outbound");
+      const { waTemplateBodyParam } = await import("@/lib/whatsapp/templateConfig");
+      const { extractWhatsAppUrlSuffix } = await import("@/lib/whatsapp/urlSuffix");
+      const linkSuffix = extractWhatsAppUrlSuffix(parts.linkUrl);
+      await sendMetaWhatsAppInitiatedWithLog(phone, {
+        templateKey: "respondent_assignment",
+        channel_event: "respondent_assignment",
+        idempotency_key: opts.whatsappIdempotencyKey,
+        // Template begins with fixed "שלום וברכה" so param 1 must be name-only (or invisible).
+        bodyParameters: [waTemplateBodyParam(parts.nameOnly), parts.topicPart, waTemplateBodyParam(parts.managerNote)],
+        buttonDynamicParam: linkSuffix,
+        legacyText: waBody,
+      });
+    } catch (whatsAppErr) {
+      console.error("[sendRespondentAssignmentNotifications] WhatsApp send failed", {
+        respondentId: opts.respondentId,
+        questionId: opts.questionId,
+        error: whatsAppErr,
+      });
     }
-    const parts = buildRespondentAssignmentWhatsAppParts({
-      fullNameHe: opts.profile.full_name_he,
-      topicName: opts.topicName,
-      subTopicName: opts.subTopicName,
-      managerMessage: opts.managerMessage,
-      questionId: opts.questionId,
-    });
-    const waBody = `${parts.greetingLegacy},\nשובצה לך שאלה חדשה לטיפול בנושא ${parts.topicPart}.\nכניסה למערכת: ${parts.linkUrl}${parts.managerNote ? `\n${parts.managerNote}` : ""}`;
-    const { sendMetaWhatsAppInitiatedWithLog } = await import("@/lib/whatsapp/outbound");
-    const { waTemplateBodyParam } = await import("@/lib/whatsapp/templateConfig");
-    const { extractWhatsAppUrlSuffix } = await import("@/lib/whatsapp/urlSuffix");
-    const linkSuffix = extractWhatsAppUrlSuffix(parts.linkUrl);
-    await sendMetaWhatsAppInitiatedWithLog(phone, {
-      templateKey: "respondent_assignment",
-      channel_event: "respondent_assignment",
-      idempotency_key: opts.whatsappIdempotencyKey,
-      // Template begins with fixed "שלום וברכה" so param 1 must be name-only (or invisible).
-      bodyParameters: [waTemplateBodyParam(parts.nameOnly), parts.topicPart, waTemplateBodyParam(parts.managerNote)],
-      buttonDynamicParam: linkSuffix,
-      legacyText: waBody,
-    });
   }
 }
 
@@ -1210,6 +1230,8 @@ export interface TeamProfileRow {
   category_ids: string[];
   /** נושאים שמשויכים למשיב/ה (רק למשיבים) */
   topic_ids: string[];
+  /** טווחי גיל שהמשיב/ה יכול/ה לענות להם */
+  respondent_age_ranges: AskerAgeRangeLabel[];
 }
 
 export async function getTeamProfiles(): Promise<TeamProfileRow[]> {
@@ -1262,6 +1284,19 @@ export async function getTeamProfiles(): Promise<TeamProfileRow[]> {
     if (topicsByProfile[row.profile_id]) topicsByProfile[row.profile_id].push(row.topic_id);
   }
 
+  const { data: rar } = await supabase
+    .from("respondent_age_ranges")
+    .select("profile_id, age_range");
+  const ageRangesByProfile: Record<string, AskerAgeRangeLabel[]> = {};
+  for (const id of ids) ageRangesByProfile[id] = [];
+  for (const row of rar ?? []) {
+    if (!ageRangesByProfile[row.profile_id]) continue;
+    const age = String(row.age_range ?? "").trim();
+    if ((ASKER_AGE_RANGE_LABELS as readonly string[]).includes(age)) {
+      ageRangesByProfile[row.profile_id]!.push(age as AskerAgeRangeLabel);
+    }
+  }
+
   return (profiles ?? []).map((p) => {
     const typeIds = typeIdsByProfile[p.id]?.length ? typeIdsByProfile[p.id] : (p.proofreader_type_id ? [p.proofreader_type_id] : []);
     const primaryId = p.proofreader_type_id ?? typeIds[0] ?? null;
@@ -1284,6 +1319,7 @@ export async function getTeamProfiles(): Promise<TeamProfileRow[]> {
       cooldown_days: p.cooldown_days ?? 0,
       category_ids: categoriesByProfile[p.id] ?? [],
       topic_ids: topicsByProfile[p.id] ?? [],
+      respondent_age_ranges: ageRangesByProfile[p.id] ?? [],
     };
   });
   } catch {
@@ -1310,6 +1346,7 @@ export async function updateTeamMember(
     cooldown_days: number;
     category_ids: string[];
     topic_ids: string[];
+    respondent_age_ranges: AskerAgeRangeLabel[];
   }
 ): Promise<UpdateTeamMemberResult> {
   try {
@@ -1355,6 +1392,12 @@ export async function updateTeamMember(
         data.topic_ids.map((topic_id) => ({ profile_id: profileId, topic_id }))
       );
     }
+    await supabase.from("respondent_age_ranges").delete().eq("profile_id", profileId);
+    if (data.is_respondent && data.respondent_age_ranges?.length) {
+      await supabase.from("respondent_age_ranges").insert(
+        data.respondent_age_ranges.map((age_range) => ({ profile_id: profileId, age_range }))
+      );
+    }
     revalidatePath("/admin/team");
     return { ok: true };
   } catch (e) {
@@ -1380,6 +1423,7 @@ export async function createTeamMember(data: {
   cooldown_days: number;
   category_ids: string[];
   topic_ids: string[];
+  respondent_age_ranges: AskerAgeRangeLabel[];
 }): Promise<CreateTeamMemberResult> {
   try {
     const supabase = getSupabaseAdmin();
@@ -1458,6 +1502,12 @@ export async function createTeamMember(data: {
     if (data.topic_ids?.length) {
       await supabase.from("respondent_topics").insert(
         data.topic_ids.map((topic_id) => ({ profile_id: userId, topic_id }))
+      );
+    }
+    await supabase.from("respondent_age_ranges").delete().eq("profile_id", userId);
+    if (data.is_respondent && data.respondent_age_ranges?.length) {
+      await supabase.from("respondent_age_ranges").insert(
+        data.respondent_age_ranges.map((age_range) => ({ profile_id: userId, age_range }))
       );
     }
     revalidatePath("/admin/team");

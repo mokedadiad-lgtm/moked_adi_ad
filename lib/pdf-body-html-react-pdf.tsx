@@ -154,7 +154,13 @@ function parseInline(html: string): Segment[] {
   return out;
 }
 
-type Block = { tag: string; segments: Segment[]; answerHeading?: boolean };
+type Block = {
+  tag: string;
+  segments: Segment[];
+  answerHeading?: boolean;
+  listKind?: "ordered" | "unordered";
+  listIndex?: number;
+};
 
 function parseBlocks(html: string): Block[] {
   const blocks: Block[] = [];
@@ -196,8 +202,15 @@ function parseBlocks(html: string): Block[] {
       const inner = ul[1] ?? "";
       const liRe = /<li(\s[^>]*)?>([\s\S]*?)<\/li>/gi;
       let lm: RegExpExecArray | null;
+      let idx = 0;
       while ((lm = liRe.exec(inner))) {
-        blocks.push({ tag: "li", segments: parseInline(lm[2] ?? "") });
+        idx++;
+        blocks.push({
+          tag: "li",
+          segments: parseInline(lm[2] ?? ""),
+          listKind: "unordered",
+          listIndex: idx,
+        });
       }
       src = src.slice(ul[0]!.length);
       continue;
@@ -208,8 +221,15 @@ function parseBlocks(html: string): Block[] {
       const inner = ol[1] ?? "";
       const liRe = /<li(\s[^>]*)?>([\s\S]*?)<\/li>/gi;
       let lm: RegExpExecArray | null;
+      let idx = 0;
       while ((lm = liRe.exec(inner))) {
-        blocks.push({ tag: "li", segments: parseInline(lm[2] ?? "") });
+        idx++;
+        blocks.push({
+          tag: "li",
+          segments: parseInline(lm[2] ?? ""),
+          listKind: "ordered",
+          listIndex: idx,
+        });
       }
       src = src.slice(ol[0]!.length);
       continue;
@@ -278,6 +298,9 @@ function BlockView({ block }: { block: Block }) {
   return (
     <Text style={style}>
       {RTL}
+      {block.tag === "li" ? (
+        block.listKind === "ordered" ? `${block.listIndex ?? 1}. ` : "• "
+      ) : null}
       {block.segments.map((seg, i) => (
         <SegmentLine key={i} seg={seg} />
       ))}
@@ -299,7 +322,7 @@ export function PdfAnswerBodyFromHtml({
 
   if (blocks.length === 0) {
     const plain =
-      decodeHtmlEntities(stripTags(safe)).trim() || (fallbackPlain ?? "").replace(/\s+/g, " ").trim();
+      decodeHtmlEntities(stripTags(safe)).trim() || (fallbackPlain ?? "").trim();
     if (!plain) return null;
     return (
       <View style={rtl.wrap}>

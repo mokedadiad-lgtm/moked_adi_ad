@@ -124,7 +124,9 @@ export function ArchiveTable({ questions }: ArchiveTableProps) {
               </TableRow>
             ) : (
               questions.map((q) => {
-                const pdfDownloadUrl = `/api/questions/${q.id}/pdf/download?for=archive`;
+                const pdfDownloadUrl = `/api/questions/${q.id}/pdf/download?for=archive&cb=${encodeURIComponent(
+                  q.pdf_generated_at ?? String(Date.now())
+                )}`;
                 const topicSub = [q.topic_name_he, q.sub_topic_name_he].filter(Boolean).join(" | ") || "—";
                 return (
                   <TableRow
@@ -198,6 +200,17 @@ export function ArchiveTable({ questions }: ArchiveTableProps) {
       onOpenChange={(open) => {
         setDetailModalOpen(open);
         if (!open) afterModalClose(() => setDetailQuestion(null));
+      }}
+      onResponseSaved={(payload) => {
+        setDetailQuestion((prev) =>
+          prev && prev.id === payload.questionId
+            ? {
+                ...prev,
+                response_text: payload.responseText,
+                linguistic_signature: payload.linguisticSignature,
+              }
+            : prev
+        );
       }}
       showPdfActions
     />

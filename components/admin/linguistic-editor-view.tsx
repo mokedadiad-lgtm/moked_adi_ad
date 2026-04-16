@@ -237,6 +237,17 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
           if (!open) afterModalClose(() => setSelected(null));
         }}
         onSaveSuccess={handleSaveSuccess}
+        onResponseSaved={(payload) => {
+          setSelected((prev) =>
+            prev && prev.id === payload.questionId
+              ? {
+                  ...prev,
+                  response_text: payload.responseText,
+                  linguistic_signature: payload.linguisticSignature,
+                }
+              : prev
+          );
+        }}
         onSaveResponse={async (questionId, answerId, responseText, linguisticSignature) => {
           const r = await saveLinguisticResponse(questionId, answerId, responseText, linguisticSignature);
           return r.ok ? { ok: true } : { ok: false, error: r.error };

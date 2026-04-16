@@ -262,6 +262,32 @@ export function RespondentDashboard() {
     fetchQuestions();
   };
 
+  const handleDraftSaved = ({
+    questionId,
+    answerId,
+    responseText,
+  }: {
+    questionId: string;
+    answerId?: string | null;
+    responseText: string;
+  }) => {
+    setQuestions((prev) =>
+      prev.map((q) => {
+        const sameAnswer = answerId ? q.answer_id === answerId : false;
+        const sameQuestion = q.id === questionId;
+        if (!sameAnswer && !sameQuestion) return q;
+        return { ...q, response_text: responseText };
+      })
+    );
+    setSelected((prev) => {
+      if (!prev) return prev;
+      const sameAnswer = answerId ? prev.answer_id === answerId : false;
+      const sameQuestion = prev.id === questionId;
+      if (!sameAnswer && !sameQuestion) return prev;
+      return { ...prev, response_text: responseText };
+    });
+  };
+
   return (
     <>
       <PageHeader title="שולחן עבודה - משיבים">
@@ -358,6 +384,7 @@ export function RespondentDashboard() {
         open={modalOpen}
         onOpenChange={(open) => !open && closeModal()}
         onSuccess={handleAnswerSubmitted}
+        onDraftSaved={handleDraftSaved}
       />
     </>
   );

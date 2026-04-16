@@ -44,7 +44,7 @@ export function SignatureRichField({
   }, [disabled, capture]);
 
   return (
-    <div className={className}>
+    <div className={className} dir="ltr">
       <div className="flex flex-wrap items-center gap-2 rounded-t-xl border border-b-0 border-card-border bg-slate-100 px-2 py-1.5">
         <button
           type="button"
@@ -61,6 +61,7 @@ export function SignatureRichField({
         ref={ref}
         contentEditable={!disabled}
         dir="ltr"
+        style={{ direction: "ltr", textAlign: "left", unicodeBidi: "plaintext" }}
         suppressContentEditableWarning
         data-placeholder={placeholder}
         onInput={capture}

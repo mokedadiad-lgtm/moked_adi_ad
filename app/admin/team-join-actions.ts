@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { createTeamMember } from "@/app/admin/actions";
 import { decryptTeamJoinPassword } from "@/lib/team-join-crypto";
 import { generatePlainToken, hashTeamJoinToken } from "@/lib/team-join-token";
+import { ASKER_AGE_RANGE_LABELS, type AskerAgeRangeLabel } from "@/lib/asker-age-ranges";
 
 const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ??
@@ -141,6 +142,11 @@ export async function approveTeamJoinSubmission(
 
     if (kind === "respondent") {
       const topic_ids = Array.isArray(p.topic_ids) ? (p.topic_ids as string[]).filter(Boolean) : [];
+      const respondent_age_ranges = Array.isArray(p.respondent_age_ranges)
+        ? (p.respondent_age_ranges as string[]).filter((v): v is AskerAgeRangeLabel =>
+            (ASKER_AGE_RANGE_LABELS as readonly string[]).includes(v)
+          )
+        : [];
       const result = await createTeamMember({
         email,
         password,
@@ -154,9 +160,10 @@ export async function approveTeamJoinSubmission(
         communication_preference: comm(p.communication_preference),
         phone: p.phone ? String(p.phone).trim() || null : null,
         concurrency_limit: Math.max(0, Number(p.concurrency_limit) || 1),
-        cooldown_days: Math.max(0, Number(p.cooldown_days) || 0),
+        cooldown_days: Math.max(0, Number(p.cooldown_days) || 7),
         category_ids: [],
         topic_ids,
+        respondent_age_ranges,
       });
       if (!result.ok) return { ok: false, error: result.error };
     } else {
@@ -182,6 +189,7 @@ export async function approveTeamJoinSubmission(
         cooldown_days: Math.max(0, Number(p.cooldown_days) || 0),
         category_ids: Array.isArray(p.category_ids) ? (p.category_ids as string[]).filter(Boolean) : [],
         topic_ids: [],
+        respondent_age_ranges: [],
       });
       if (!result.ok) return { ok: false, error: result.error };
     }

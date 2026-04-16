@@ -121,6 +121,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   // הצגת הסרגל גם בזמן טעינה (null) — כך שבמעבר בין דפים הסרגל לא נעלם עד שהפרופיל נטען
   const hasSidebar = showSidebar !== false;
 
+  /** פעמון + הגדרות התראות — רק בלוח הבקרה ובדואר הנכנס (וואטסאפ) */
+  const showWhatsappHeaderTools =
+    pathname === "/admin" ||
+    pathname === "/admin/" ||
+    (pathname?.startsWith("/admin/whatsapp-inbox") ?? false);
+
   return (
     <div className="flex min-h-screen flex-col bg-background" dir="rtl">
       <InactivityLogout />
@@ -158,12 +164,14 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             >
               <HamburgerIcon />
             </button>
-            <div className="absolute end-16 top-1/2 z-10 -translate-y-1/2 md:hidden">
-              <div className="flex items-center gap-2">
-                <WhatsappInboxPushSettingsIcon />
-                <WhatsappInboxBell />
+            {showWhatsappHeaderTools ? (
+              <div className="absolute end-16 top-1/2 z-10 -translate-y-1/2 md:hidden">
+                <div className="flex items-center gap-2">
+                  <WhatsappInboxPushSettingsIcon />
+                  <WhatsappInboxBell />
+                </div>
               </div>
-            </div>
+            ) : null}
             <Link
               href="/"
               className="absolute end-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm"
@@ -235,15 +243,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             : "px-4 pt-4 md:px-8 md:pt-6"
         )}
       >
-        {showSidebar === true && (
-          <>
-            <div className="hidden md:block fixed top-4 left-4 z-[50]">
-              <div className="flex items-center gap-2">
-                <WhatsappInboxPushSettingsIcon />
-                <WhatsappInboxBell />
-              </div>
+        {showSidebar === true && showWhatsappHeaderTools && (
+          <div className="hidden md:block fixed top-4 left-4 z-[30]">
+            <div className="flex items-center gap-2">
+              <WhatsappInboxPushSettingsIcon />
+              <WhatsappInboxBell />
             </div>
-          </>
+          </div>
         )}
         {showSidebar === false && pathname?.startsWith("/admin") && (
           <div className="mx-auto max-w-6xl px-2 sm:px-4 md:px-6">

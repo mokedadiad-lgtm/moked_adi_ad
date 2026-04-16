@@ -1,7 +1,7 @@
 "use client";
 
 import { getProofreaderTypeIdForQuestion } from "@/app/admin/actions";
-import { notifyLobbyNewQuestion } from "@/app/actions/notifications";
+import { notifyLobbyNewQuestion, reportRespondentFlowErrorToAdmins } from "@/app/actions/notifications";
 import type { RespondentQuestion } from "@/components/respondent/respondent-dashboard";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,18 +13,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { RichTextEditor } from "@/components/respondent/rich-text-editor";
-import { useEffect, useState } from "react";
+import { getRichTextEditorInstanceKey } from "@/lib/rich-editor-instance-key";
+import { cn } from "@/lib/utils";
+import { useEffect, useMemo, useState } from "react";
 
 const RESPONSE_LABEL: Record<string, string> = {
   short: "קצר ולעניין",
   detailed: "תשובה מפורטת",
 };
+const GENERIC_RESPONDENT_ERROR = "אירעה תקלה זמנית. צוות המערכת עודכן.";
 
 interface AnswerModalProps {
   question: RespondentQuestion | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  onDraftSaved?: (payload: { questionId: string; answerId?: string | null; responseText: string }) => void;
 }
 
 export function AnswerModal({
@@ -32,37 +36,74 @@ export function AnswerModal({
   open,
   onOpenChange,
   onSuccess,
+  onDraftSaved,
 }: AnswerModalProps) {
   const [responseText, setResponseText] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-   const [draftSaved, setDraftSaved] = useState(false);
+  /** הודעה קצרה מעל הכפתורים (נראית בלי גלילה), נעלמת אחרי 5 שניות */
+  const [draftSavedToast, setDraftSavedToast] = useState(false);
+  /** מקפיץ את ה־useEffect של הסתרה אחרי 5 שניות בכל שמירת טיוטה (גם כשכבר מוצגת הודעה) */
+  const [draftSaveTick, setDraftSaveTick] = useState(0);
+  /** תוכן כפי שנשמר לאחרונה (אחרי שמירה מוצלחת או טעינה מהשרת) */
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState("");
+  /** האם בוצעה שמירת טיוטה מוצלחת במסגרת פתיחת המודל (למצב כפתור "הטיוטה נשמרה") */
+  const [savedAtLeastOnce, setSavedAtLeastOnce] = useState(false);
+
+  /** רק פתיחת מודל / מעבר לשאלה אחרת — לא כש־response_text מתעדכן אחרי שמירת טיוטה (אותו id) */
+  useEffect(() => {
+    if (!open || !question) return;
+    const t = question.response_text ?? "";
+    setResponseText(t);
+    setLastSavedSnapshot(t.trim());
+    setSavedAtLeastOnce(false);
+    setDraftSavedToast(false);
+    setError(null);
+  }, [open, question?.id, question?.answer_id]);
 
   useEffect(() => {
-    if (open && question) setResponseText(question.response_text ?? "");
-  }, [open, question]);
+    if (!draftSavedToast) return;
+    const t = setTimeout(() => setDraftSavedToast(false), 5000);
+    return () => clearTimeout(t);
+  }, [draftSavedToast, draftSaveTick]);
+
+  const isDirty = useMemo(
+    () => responseText.trim() !== lastSavedSnapshot,
+    [responseText, lastSavedSnapshot]
+  );
 
   const reset = () => {
     setResponseText("");
     setError(null);
-    setDraftSaved(false);
+    setDraftSavedToast(false);
+    setLastSavedSnapshot("");
+    setSavedAtLeastOnce(false);
   };
 
   const saveDraft = async () => {
     if (!question || !responseText.trim()) return;
     const supabase = getSupabaseBrowser();
-    if (question.answer_id) {
-      await supabase
-        .from("question_answers")
-        .update({ response_text: responseText.trim(), updated_at: new Date().toISOString() })
-        .eq("id", question.answer_id);
-    } else {
-      await supabase
-        .from("questions")
-        .update({ response_text: responseText.trim(), updated_at: new Date().toISOString() })
-        .eq("id", question.id);
+    const payload = { response_text: responseText.trim(), updated_at: new Date().toISOString() };
+    const { error: saveError } = question.answer_id
+      ? await supabase.from("question_answers").update(payload).eq("id", question.answer_id)
+      : await supabase.from("questions").update(payload).eq("id", question.id);
+    if (saveError) {
+      void reportRespondentFlowErrorToAdmins({
+        context: "שמירת טיוטה (משיב)",
+        questionId: question.id,
+        answerId: question.answer_id ?? null,
+        technicalDetail: saveError.message,
+      });
+      setError(GENERIC_RESPONDENT_ERROR);
+      return;
     }
-    setDraftSaved(true);
+    const snap = responseText.trim();
+    setLastSavedSnapshot(snap);
+    setSavedAtLeastOnce(true);
+    setDraftSavedToast(true);
+    setDraftSaveTick((n) => n + 1);
+    setError(null);
+    onDraftSaved?.({ questionId: question.id, answerId: question.answer_id ?? null, responseText: snap });
   };
 
   const handleOpenChange = async (next: boolean) => {
@@ -94,15 +135,27 @@ export function AnswerModal({
 
     setPending(false);
     if (rpcError) {
-      setError(rpcError.message);
+      void reportRespondentFlowErrorToAdmins({
+        context: "שליחת תשובה להגהה (RPC)",
+        questionId: question.id,
+        answerId: question.answer_id ?? null,
+        technicalDetail: rpcError.message,
+      });
+      setError(GENERIC_RESPONDENT_ERROR);
       return;
     }
     const result = data as { ok: boolean; error?: string } | null;
     if (result && !result.ok) {
-      setError(result.error ?? "שגיאה בשליחה");
+      void reportRespondentFlowErrorToAdmins({
+        context: "שליחת תשובה להגהה (תשובת RPC)",
+        questionId: question.id,
+        answerId: question.answer_id ?? null,
+        technicalDetail: result.error ?? JSON.stringify(result),
+      });
+      setError(GENERIC_RESPONDENT_ERROR);
       return;
     }
-    setDraftSaved(false);
+    setDraftSavedToast(false);
     onOpenChange(false);
     onSuccess();
     reset();
@@ -128,7 +181,10 @@ export function AnswerModal({
             <div className="rounded-xl border border-card-border bg-slate-50/80 p-4 text-start">
               {question.title && <p className="mb-2 text-sm font-semibold text-slate-800">{question.title}</p>}
               <p className="mb-3 text-sm font-semibold text-primary">השאלה</p>
-              <div className="whitespace-pre-wrap text-start text-sm text-secondary" dir="rtl">
+              <div
+                className="min-h-[10rem] max-h-[20rem] overflow-y-auto whitespace-pre-wrap rounded-lg border border-card-border bg-white p-3 text-start text-sm text-secondary"
+                dir="rtl"
+              >
                 {question.content}
               </div>
               <div className="mt-4 flex flex-wrap items-center justify-start gap-6 border-t border-card-border pt-3 text-start text-sm">
@@ -153,7 +209,7 @@ export function AnswerModal({
             <div className="flex flex-col gap-2 text-start">
               <p className="text-sm font-semibold text-primary">תשובתך</p>
               <RichTextEditor
-                key={question.id}
+                key={getRichTextEditorInstanceKey(question.id, question.answer_id)}
                 value={responseText}
                 onChange={setResponseText}
                 placeholder="כתוב/י כאן את התשובה. אפשר להשתמש במודגש, כותרות והערות שוליים."
@@ -170,25 +226,49 @@ export function AnswerModal({
               {error}
             </p>
           )}
-          {draftSaved && !error && (
-            <p className="mt-2 text-sm text-emerald-700">
-              הטיוטה נשמרה.
-            </p>
-          )}
           </div>
         </div>
 
-        <DialogFooter className="shrink-0 px-4 pb-4 pt-2 sm:px-6">
+        <div className="shrink-0 border-t border-slate-100 px-4 pb-4 pt-3 sm:px-6">
+          {draftSavedToast && !error && (
+            <p
+              className="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2.5 text-center text-sm font-semibold text-emerald-900 shadow-sm"
+              role="status"
+              aria-live="polite"
+            >
+              הטיוטה נשמרה.
+            </p>
+          )}
+        <DialogFooter className="w-full flex-row flex-wrap justify-end sm:justify-end gap-2 border-0 p-0 shadow-none">
           <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
             ביטול
           </Button>
-          <Button type="button" variant="outline" onClick={saveDraft} disabled={pending}>
-            {pending ? "שומר…" : "שמור טיוטה"}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={saveDraft}
+            disabled={
+              pending ||
+              !responseText.trim() ||
+              (!isDirty && savedAtLeastOnce)
+            }
+            className={cn(
+              !isDirty &&
+                savedAtLeastOnce &&
+                "border-emerald-500 bg-emerald-50 text-emerald-900 hover:bg-emerald-50 hover:text-emerald-900"
+            )}
+          >
+            {pending
+              ? "שומר…"
+              : !isDirty && savedAtLeastOnce
+                ? "הטיוטה נשמרה"
+                : "שמור טיוטה"}
           </Button>
           <Button type="button" onClick={handleSubmit} disabled={pending}>
             {pending ? "שולח…" : "סיים והעבר להגהה"}
           </Button>
         </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

@@ -156,6 +156,13 @@ export function RichTextEditor({
     [capture]
   );
 
+  const undoLast = useCallback(() => {
+    if (!ref.current || disabled) return;
+    ref.current.focus();
+    document.execCommand("undo", false);
+    capture();
+  }, [capture, disabled]);
+
   const toggleHeading = useCallback(() => {
     const root = ref.current;
     if (!root) return;
@@ -231,6 +238,37 @@ export function RichTextEditor({
 
     const range = sel.getRangeAt(0).cloneRange();
 
+    /** כשמסמנים טקסט חלקי (לא בלוק שלם), נעטוף אותו ישירות ב-h2 במקום להסתמך על execCommand */
+    const wrapSelectionWithHeading = (selectionRange: Range): boolean => {
+      if (selectionRange.collapsed) return false;
+      const selectedText = selectionRange.toString().replace(/\s+/g, " ").trim();
+      if (!selectedText) return false;
+      try {
+        const h = document.createElement("h2");
+        h.appendChild(selectionRange.extractContents());
+        selectionRange.insertNode(h);
+        const after = document.createRange();
+        after.setStartAfter(h);
+        after.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(after);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const hasNonCollapsedSelection = !range.collapsed && range.toString().replace(/\s+/g, " ").trim().length > 0;
+
+    if (hasNonCollapsedSelection) {
+      if (wrapSelectionWithHeading(range)) {
+        root.focus();
+        skipNextValueHydrationRef.current = true;
+        capture();
+      }
+      return;
+    }
+
     let blocks = collectBlocksInRange(range).filter((b) => blockIsSubstantiallySelected(range, b));
 
     if (blocks.length === 0) {
@@ -254,6 +292,12 @@ export function RichTextEditor({
     }
 
     if (blocks.length === 0) {
+      if (wrapSelectionWithHeading(range)) {
+        root.focus();
+        skipNextValueHydrationRef.current = true;
+        capture();
+        return;
+      }
       exec("formatBlock", "h2");
       return;
     }
@@ -324,7 +368,17 @@ export function RichTextEditor({
 
   return (
     <div className={className}>
-      <div className="flex flex-wrap items-center gap-2 rounded-t-xl border border-b-0 border-card-border bg-slate-100 p-2">
+      <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-t-xl border border-b-0 border-card-border bg-slate-100 p-2 shadow-sm backdrop-blur-sm supports-[backdrop-filter]:bg-slate-100/95">
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={undoLast}
+          disabled={disabled}
+          className="rounded px-2 py-1 text-sm hover:bg-slate-200 disabled:opacity-50"
+          title="בטל את הפעולה האחרונה (Ctrl+Z)"
+        >
+          בטל פעולה
+        </button>
         <button
           type="button"
           onMouseDown={(e) => e.preventDefault()}

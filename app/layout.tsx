@@ -6,6 +6,8 @@ const heebo = Heebo({
   subsets: ["latin", "hebrew"],
   variable: "--font-heebo",
   display: "swap",
+  /** ללא זה דפדפן עלול לסנתז מודגש חלש או להציג כמו רגיל */
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {

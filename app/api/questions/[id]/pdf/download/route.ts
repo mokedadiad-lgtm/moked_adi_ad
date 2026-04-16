@@ -105,6 +105,10 @@ export async function GET(
       "Content-Type": "application/pdf",
       "Content-Disposition": disposition,
       "Content-Length": String(buffer.length),
+      // Aggressive anti-cache for regenerated PDFs.
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0",
+      Pragma: "no-cache",
+      Expires: "0",
     },
   });
 }

@@ -66,9 +66,113 @@ export function sanitizeResponseHtml(html: string): string {
   return html
     .replace(/<script\b[\s\S]*?<\/script>/gi, "")
     .replace(/<style\b[\s\S]*?<\/style>/gi, "")
+    // Some editors/paste sources represent bold as <span style="font-weight:...">.
+    // Convert these spans to <strong> so bold survives attribute stripping.
+    .replace(/<span\b([^>]*)>([\s\S]*?)<\/span>/gi, (full, attrs: string, inner: string) => {
+      const styleMatch = attrs.match(/\bstyle\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+      const style = (styleMatch?.[1] ?? styleMatch?.[2] ?? styleMatch?.[3] ?? "").toLowerCase();
+      const classMatch = attrs.match(/\bclass\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+      const klass = (classMatch?.[1] ?? classMatch?.[2] ?? classMatch?.[3] ?? "").toLowerCase();
+      const isBold =
+        /\bfont-weight\s*:\s*bold\b/i.test(style) ||
+        /\bfont-weight\s*:\s*([6-9]00)\b/i.test(style);
+      const isBoldClass = /\b(font-bold|font-semibold|fw-bold|bold)\b/i.test(klass);
+      return isBold || isBoldClass ? `<strong>${inner}</strong>` : full;
+    })
     .replace(/<(\/?)([a-z0-9]+)(\s[^>]*)?>/gi, (_, slash, tag) =>
       ALLOWED_TAGS.has(tag.toLowerCase()) ? `<${slash}${tag.toLowerCase()}>` : ""
     );
+}
+
+/**
+ * תצוגת תור (מצומצמת) ללובי המגיהים: ממיר h1–h3 ל־p/div עם data-rte-q כדי לעצב בלי תגי כותרת "כבדים".
+ * — h = כותרת קצרה (נשארת מודגשת קל); b = גוף שנכתב בטעות בכותרת (נראה כמו פיסקה רגילה).
+ * — מטפל בכמה בלוקים, ובמקרה בלי תג סגירה.
+ */
+export function compactResponseHtmlForQueue(html: string): string {
+  if (!html.trim()) return "";
+
+  const blockInside = (inner: string) =>
+    /<(p|div|ul|ol|li|blockquote|h1|h2|h3)\b/i.test(inner);
+
+  const headingKind = (inner: string): "h" | "b" => {
+    const plain = inner.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    const textLen = plain.length;
+    const wordCount = plain ? plain.split(/\s+/).length : 0;
+    const hasLineBreak = /<br\s*\/?>/i.test(inner);
+    const hasBlockInside = /<(p|div|ul|ol|li|blockquote|h1|h2|h3)\b/i.test(inner);
+    const hasSentencePunctuation = /[.!?,;:]/.test(plain);
+    const looksLikeShortTitle =
+      textLen > 0 &&
+      textLen <= 60 &&
+      wordCount <= 8 &&
+      !hasSentencePunctuation &&
+      !hasLineBreak &&
+      !hasBlockInside;
+    return looksLikeShortTitle ? "h" : "b";
+  };
+
+  const looksLikeShortTitleText = (plain: string): boolean => {
+    const p = plain.replace(/\s+/g, " ").trim();
+    if (!p) return false;
+    const textLen = p.length;
+    const wordCount = p.split(/\s+/).length;
+    const hasSentencePunctuation = /[.!?,;:]/.test(p);
+    return textLen <= 60 && wordCount <= 8 && !hasSentencePunctuation;
+  };
+
+  const openQueueHeadingBlock = (wrapper: "p" | "div", kind: "h" | "b") => {
+    const style =
+      kind === "h"
+        ? 'style="font-weight:600;color:var(--foreground)"'
+        : 'style="font-weight:400;color:inherit"';
+    return `<${wrapper} data-rte-q="${kind}" ${style}>`;
+  };
+
+  const replaceOneHeadingPair = (_full: string, _tag: string, inner: string) => {
+    const wrapper = blockInside(inner) ? "div" : "p";
+    const kind = headingKind(inner);
+    return `${openQueueHeadingBlock(wrapper, kind)}${inner}</${wrapper}>`;
+  };
+
+  let s = html;
+  let prev = "";
+  while (s !== prev) {
+    prev = s;
+    s = s.replace(/<h([1-3])>([\s\S]*?)<\/h\1>/gi, replaceOneHeadingPair);
+  }
+
+  s = s.replace(/<h[1-3]>([\s\S]*)$/i, (full, inner: string) => {
+    if (/<\/h[1-3]>/i.test(inner)) return full;
+    const wrapper = blockInside(inner) ? "div" : "p";
+    const kind = headingKind(inner);
+    return `${openQueueHeadingBlock(wrapper, kind)}${inner}</${wrapper}>`;
+  });
+
+  // מודגש: inline כדי שלא יידרס ע"י שרשרת CSS חיצונית / Tailwind שלא נטען
+  s = s.replace(/<strong>/gi, '<strong style="font-weight:700">');
+  s = s.replace(/<b>/gi, '<b style="font-weight:700">');
+
+  // fallback: אם לא נשארה אף כותרת מזוהה בתצוגה, נסמן את הבלוק הראשון ככותרת
+  // כשנראה כמו כותרת קצרה (מצב נפוץ כשנשמרו רק div/p ללא h2 אמיתי).
+  if (!/data-rte-q="h"/i.test(s) && !/<h[1-3]\b/i.test(s)) {
+    s = s.replace(/<(p|div)\b([^>]*)>([\s\S]*?)<\/\1>/i, (full, tag: string, attrs: string, inner: string) => {
+      if (/data-rte-q=/i.test(attrs || "")) return full;
+      const firstLine = inner
+        .replace(/<\/(p|div|li|blockquote|h1|h2|h3)>/gi, "\n")
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<[^>]*>/g, " ")
+        .split("\n")
+        .map((x) => x.replace(/\s+/g, " ").trim())
+        .find((x) => x.length > 0);
+      if (!firstLine || !looksLikeShortTitleText(firstLine)) return full;
+      const cleanAttrs = (attrs ?? "").trim();
+      const prefix = cleanAttrs ? ` ${cleanAttrs}` : "";
+      return `<${tag}${prefix} data-rte-q="h" style="font-weight:600;color:var(--foreground)">${inner}</${tag}>`;
+    });
+  }
+
+  return s;
 }
 
 const SIGNATURE_TAGS = new Set(["b", "strong", "br", "div"]);
@@ -228,9 +332,94 @@ export function responseToStructuredForPdf(value: string | null | undefined): {
   footnotes: string[];
 } {
   const { bodyHtml, footnotes } = parseResponseRich(value);
-  const body = bodyHtml.replace(SUP_FN_REF, (_, num) => `<sup class="fn-ref">${num}</sup>`);
+  const withFnRefs = bodyHtml.replace(SUP_FN_REF, (_, num) => `<sup class="fn-ref">${num}</sup>`);
+  const body = normalizeSingleAccidentalHeadingForPdf(withFnRefs);
   const noteLines = footnotes
     .map((fn, i) => `${i + 1}. ${decodeHtmlEntities((fn.text ?? "").trim())}`)
     .filter((s) => s.length > 2);
   return { bodyHtmlForPdf: body, footnotes: noteLines };
+}
+
+/**
+ * Targeted PDF fix:
+ * If the entire body is one accidental heading block (common editor slip),
+ * downgrade only that block to paragraph/div so the whole PDF won't look like a title.
+ * Keep all normal headings untouched.
+ */
+function normalizeSingleAccidentalHeadingForPdf(html: string): string {
+  const src = (html ?? "").trim();
+  if (!src) return "";
+
+  // Only run when the whole content is exactly one heading wrapper.
+  const singleHeading = src.match(/^<h([1-3])>([\s\S]*)<\/h\1>$/i);
+  if (!singleHeading) return src;
+
+  const inner = singleHeading[2] ?? "";
+  // Not truly single: multiple sibling headings were captured greedily.
+  if (/<\/h[1-3]>\s*<h[1-3]>/i.test(inner)) {
+    return normalizeHeadingRunForPdf(src);
+  }
+  const plain = inner.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  const wordCount = plain ? plain.split(/\s+/).length : 0;
+  const textLen = plain.length;
+  const hasSentencePunctuation = /[.!?,;:]/.test(plain);
+  const hasLineBreak = /<br\s*\/?>/i.test(inner);
+  const hasBlockInside = /<(p|div|ul|ol|li|blockquote|h1|h2|h3)\b/i.test(inner);
+
+  // Conservative heuristic: long/sentence-like single heading is almost certainly accidental.
+  const looksAccidental =
+    textLen > 120 || wordCount > 14 || hasSentencePunctuation || hasLineBreak || hasBlockInside;
+  if (!looksAccidental) {
+    // Additional case: heading mode remained active, producing many heading blocks.
+    // Keep a short first heading and downgrade subsequent heading blocks that look like body text.
+    return normalizeHeadingRunForPdf(src);
+  }
+
+  return convertHeadingBodyToParagraphs(inner, hasBlockInside);
+}
+
+function normalizeHeadingRunForPdf(html: string): string {
+  const headingBlocks = [...html.matchAll(/<h([1-3])>([\s\S]*?)<\/h\1>/gi)];
+  if (headingBlocks.length < 2) return html;
+
+  const headingStats = headingBlocks.map((m) => {
+    const inner = m[2] ?? "";
+    const plain = inner.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    const words = plain ? plain.split(/\s+/).length : 0;
+    const hasSentencePunctuation = /[.!?,;:]/.test(plain);
+    const hasLineBreak = /<br\s*\/?>/i.test(inner);
+    const hasBlockInside = /<(p|div|ul|ol|li|blockquote|h1|h2|h3)\b/i.test(inner);
+    const looksBody = words > 10 || plain.length > 70 || hasSentencePunctuation || hasLineBreak || hasBlockInside;
+    return { plain, looksBody };
+  });
+
+  const bodyLikeCount = headingStats.filter((s) => s.looksBody).length;
+  if (bodyLikeCount === 0) return html;
+
+  let idx = 0;
+  return html.replace(/<h([1-3])>([\s\S]*?)<\/h\1>/gi, (_full, _level: string, inner: string) => {
+    const stat = headingStats[idx++];
+    const keepAsHeading = idx === 1 && !stat?.looksBody && stat.plain.length <= 60;
+    if (keepAsHeading) {
+      return `<h2>${inner}</h2>`;
+    }
+    const hasBlockInside = /<(p|div|ul|ol|li|blockquote|h1|h2|h3)\b/i.test(inner);
+    return convertHeadingBodyToParagraphs(inner, hasBlockInside);
+  });
+}
+
+function convertHeadingBodyToParagraphs(inner: string, hasBlockInside: boolean): string {
+  if (hasBlockInside) {
+    // Preserve existing block structure without wrapping with an extra div.
+    return inner;
+  }
+  // In accidental heading-mode content, <br> is often used as paragraph separator.
+  const parts = inner
+    .split(/<br\s*\/?>/i)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+  if (parts.length <= 1) {
+    return `<p>${inner}</p>`;
+  }
+  return parts.map((p) => `<p>${p}</p>`).join("");
 }

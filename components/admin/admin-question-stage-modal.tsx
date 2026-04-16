@@ -527,12 +527,12 @@ export function AdminQuestionStageModal({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           className={cn(
-            "max-h-[85vh] w-[95vw] max-w-xl border-2 flex flex-col overflow-hidden px-0 pt-10 pb-0",
+            "max-h-[85vh] w-[95vw] max-w-xl border-2 flex flex-col overflow-hidden px-0 pt-10 pb-0 rtl:pl-0 ltr:pr-0",
             question && (MODAL_FRAME[question.stage].border + " bg-slate-100")
           )}
           dir="rtl"
         >
-          <div className="flex max-h-[85vh] flex-col overflow-y-auto overflow-x-hidden">
+          <div className="scrollbar-modal-subtle flex w-full max-h-[85vh] flex-col overflow-y-auto overflow-x-hidden">
           {/* כותרת: ID בלבד (גוון לפי סטטוס) — רקע מקצה לקצה */}
           <DialogHeader className="shrink-0 border-b border-slate-200/80 px-2 py-2 sm:ps-4 sm:pe-3">
             <DialogTitle className={cn("text-right text-base font-semibold", MODAL_FRAME[question.stage].title)}>

@@ -6,6 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useEffect, useState } from "react";
 
 interface PdfViewModalProps {
   open: boolean;
@@ -24,9 +25,17 @@ export function PdfViewModal({
   questionId,
   forParam = "archive",
 }: PdfViewModalProps) {
+  const [cacheBust, setCacheBust] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    if (open && questionId) {
+      setCacheBust(Date.now());
+    }
+  }, [open, questionId]);
+
   const src =
     questionId &&
-    `/api/questions/${questionId}/pdf/download?for=${forParam}&view=1`;
+    `/api/questions/${questionId}/pdf/download?for=${forParam}&view=1&cb=${cacheBust}`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

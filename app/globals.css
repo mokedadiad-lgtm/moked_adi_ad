@@ -89,3 +89,62 @@ body {
     background: #f8fafc;
   }
 }
+
+/* גלגלת עדינה למודלים גדולים (צמודה לקצה עם מסלול שקוף) */
+.scrollbar-modal-subtle {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.scrollbar-modal-subtle::-webkit-scrollbar {
+  width: 6px;
+}
+.scrollbar-modal-subtle::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-modal-subtle::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+.scrollbar-modal-subtle::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/**
+ * תצוגת תשובה בתור (לובי מגיהים): HTML מוזרק עם dangerouslySetInnerHTML.
+ * לא מסתמכים רק על Tailwind arbitrary variants — כללים ישירים + משקלים מפורשים.
+ */
+.response-text-queue {
+  font-size: 0.875rem;
+  line-height: 1.75rem;
+  color: var(--secondary);
+  text-align: start;
+}
+
+.response-text-queue [data-rte-q="h"] {
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.response-text-queue [data-rte-q="b"] {
+  font-weight: 400;
+  color: inherit;
+}
+
+.response-text-queue :is(strong, b) {
+  font-weight: 700;
+}
+
+.response-text-queue :is(h1, h2, h3) {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--foreground);
+  margin-bottom: 0.5rem;
+}
+
+.response-text-queue :is(em, i) {
+  font-style: italic;
+}
+
+.response-text-queue :is(u) {
+  text-decoration: underline;
+}

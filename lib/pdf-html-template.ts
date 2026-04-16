@@ -175,27 +175,33 @@ export function buildPdfHtml(options: {
       overflow-wrap: break-word;
     }
     .body {
-      text-align: justify;
+      text-align: right;
       padding: 0 0.65cm;
       word-wrap: break-word;
       overflow-wrap: break-word;
+      white-space: normal;
     }
     .body strong, .body b {
-      font-weight: 700;
+      font-weight: 800 !important;
       font-family: 'Heebo', sans-serif;
     }
     .body em, .body i { font-style: italic; }
     .body u { text-decoration: underline; }
-    .body p, .body div { margin: 0 0 10px; text-align: justify; }
+    .body p, .body div {
+      margin: 0 0 12px;
+      text-align: right;
+      line-height: 1.7;
+      white-space: pre-wrap;
+    }
     .body p:last-child, .body div:last-child { margin-bottom: 0; }
-    .body h1 { font-size: 17px; font-weight: 700; color: #2C2C54; margin: 20px 0 10px; text-align: justify; }
-    .body h2 { font-size: 16px; font-weight: 700; color: #2C2C54; margin: 18px 0 8px; text-align: justify; }
-    .body h3 { font-size: 15px; font-weight: 700; color: #3F3D56; margin: 14px 0 6px; text-align: justify; }
+    .body h1 { font-size: 20px; font-weight: 600; color: #2C2C54; margin: 16px 0 10px; text-align: right; line-height: 1.4; }
+    .body h2 { font-size: 18px; font-weight: 600; color: #2C2C54; margin: 14px 0 8px; text-align: right; line-height: 1.45; }
+    .body h3 { font-size: 16px; font-weight: 600; color: #3F3D56; margin: 12px 0 6px; text-align: right; line-height: 1.5; }
     .body ul, .body ol {
       margin: 0 0 10px;
       padding-inline-start: 1.5em;
     }
-    .body li { margin: 0 0 6px; text-align: justify; }
+    .body li { margin: 0 0 6px; text-align: right; line-height: 1.7; }
     .body blockquote {
       margin: 10px 0;
       padding: 8px 12px;
@@ -229,7 +235,7 @@ export function buildPdfHtml(options: {
       position: relative;
       z-index: 2;
     }
-    .footnote-line { margin: 0 0 8px; text-align: justify; padding: 0 0.65cm; }
+    .footnote-line { margin: 0 0 8px; text-align: right; padding: 0 0.65cm; }
     .footnote-sep-wrap { text-align: right; margin: 18px 1cm 12px; }
     .footnote-sep {
       display: inline-block;

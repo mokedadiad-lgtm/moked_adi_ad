@@ -2,7 +2,7 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { wantsEmail, wantsWhatsApp } from "@/lib/communicationPreference";
-import { sendNewQuestionInLobbyToProofreaders, sendToLinguisticEditor } from "@/lib/email";
+import { sendAdminTechnicalAlert, sendNewQuestionInLobbyToProofreaders, sendToLinguisticEditor } from "@/lib/email";
 
 const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ??
@@ -25,9 +25,21 @@ export async function notifyLobbyNewQuestion(questionId: string): Promise<{ ok: 
       .single();
 
     if (qErr || !question) return { ok: false, error: "שאלה לא נמצאה" };
-    if (question.stage !== "in_proofreading_lobby") return { ok: true };
 
-    const proofreaderTypeId = question.proofreader_type_id as string | null;
+    /** לובי יכול להיות רק ב־questions (legacy) או ב־question_answers; אם ה־RPC עדכן רק את question_answers, stage ב־questions נשאר ישן — עדיין צריך להתריע */
+    const inLobbyOnQuestion = question.stage === "in_proofreading_lobby";
+    const { data: qaLobby } = await supabase
+      .from("question_answers")
+      .select("proofreader_type_id")
+      .eq("question_id", questionId)
+      .eq("stage", "in_proofreading_lobby")
+      .limit(1)
+      .maybeSingle();
+
+    if (!inLobbyOnQuestion && !qaLobby) return { ok: true };
+
+    const proofreaderTypeId =
+      (question.proofreader_type_id as string | null) ?? (qaLobby?.proofreader_type_id as string | null) ?? null;
     if (!proofreaderTypeId) return { ok: true };
 
     const { data: allProof } = await supabase
@@ -223,5 +235,45 @@ export async function notifyLinguisticNewQuestion(questionId: string): Promise<{
   } catch (e) {
     console.error("notifyLinguisticNewQuestion", e);
     return { ok: false, error: (e as Error).message };
+  }
+}
+
+/**
+ * שגיאה בזרימת משיב — פרטים למנהלים/מובילים טכניים בלבד (לא למשתמש).
+ */
+export async function reportRespondentFlowErrorToAdmins(payload: {
+  context: string;
+  questionId: string;
+  answerId?: string | null;
+  technicalDetail: string;
+}): Promise<void> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data: rows } = await supabase
+      .from("profiles")
+      .select("id")
+      .or("is_admin.eq.true,is_technical_lead.eq.true");
+    const ids = new Set((rows ?? []).map((r) => r.id as string));
+    if (ids.size === 0) return;
+    const { data: authData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+    const emails = [
+      ...new Set(
+        (authData?.users ?? [])
+          .filter((u) => u.email && u.id && ids.has(u.id))
+          .map((u) => u.email as string)
+      ),
+    ];
+    if (emails.length === 0) return;
+    const plain = [
+      `הקשר: ${payload.context}`,
+      `מזהה שאלה: ${payload.questionId}`,
+      payload.answerId ? `מזהה תשובה (question_answers): ${payload.answerId}` : "",
+      "",
+      "פרטי שגיאה (פנימי):",
+      payload.technicalDetail,
+    ].join("\n");
+    await sendAdminTechnicalAlert(emails, payload.context, plain);
+  } catch (e) {
+    console.error("reportRespondentFlowErrorToAdmins", e);
   }
 }

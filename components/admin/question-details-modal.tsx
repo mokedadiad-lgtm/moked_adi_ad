@@ -95,6 +95,13 @@ interface QuestionDetailsModalProps {
     responseText: string,
     linguisticSignature?: string | null
   ) => Promise<{ ok: boolean; error?: string }>;
+  /** אחרי שמירת תשובה/חתימה — לעדכן את האובייקט בהורה (HTML עשיר) בלי להמתין ל־router.refresh */
+  onResponseSaved?: (payload: {
+    questionId: string;
+    answerId: string | null;
+    responseText: string;
+    linguisticSignature: string | null;
+  }) => void;
 }
 
 interface ResponseVersion {
@@ -117,6 +124,7 @@ export function QuestionDetailsModal({
   onMerge,
   mergePending,
   onSaveResponse,
+  onResponseSaved,
 }: QuestionDetailsModalProps) {
   const [versions, setVersions] = useState<ResponseVersion[]>([]);
   const [showVersions, setShowVersions] = useState(false);
@@ -189,6 +197,12 @@ export function QuestionDetailsModal({
       if (result.ok) {
         setInitialResponse(nextTrimmed);
         setInitialSignature(signatureText);
+        onResponseSaved?.({
+          questionId: question.id,
+          answerId: question.answer_id ?? null,
+          responseText: nextTrimmed,
+          linguisticSignature: nextSigTrim || null,
+        });
         onSaveSuccess?.();
         return true;
       }
@@ -208,6 +222,12 @@ export function QuestionDetailsModal({
     setSavePending(false);
     if (!error) {
       setInitialResponse(nextTrimmed);
+      onResponseSaved?.({
+        questionId: question.id,
+        answerId: question.answer_id ?? null,
+        responseText: nextTrimmed,
+        linguisticSignature: nextSigTrim || null,
+      });
       onSaveSuccess?.();
       return true;
     }
@@ -245,7 +265,7 @@ export function QuestionDetailsModal({
             <div className="space-y-1">
               {question.title && <p className="text-sm font-medium text-slate-800 text-start">{question.title}</p>}
               <p className="text-xs font-medium text-secondary text-start">תוכן השאלה</p>
-              <div className="min-h-[2.5rem] max-h-[200px] overflow-y-auto rounded-xl border border-card-border bg-slate-50 p-3 text-sm text-slate-700">
+              <div className="min-h-[5rem] max-h-[400px] overflow-y-auto rounded-xl border border-card-border bg-slate-50 p-3 text-sm text-slate-700">
                 <div className="whitespace-pre-wrap text-start" dir="rtl">
                   {question.content}
                 </div>
@@ -449,7 +469,12 @@ export function QuestionDetailsModal({
                       צפייה
                     </Button>
                     <Button variant="default" size="sm" className="gap-2 bg-red-600 text-white hover:bg-red-700" asChild>
-                      <a href={`/api/questions/${question.id}/pdf/download?for=archive`} download>
+                      <a
+                        href={`/api/questions/${question.id}/pdf/download?for=archive&cb=${encodeURIComponent(
+                          question.pdf_generated_at ?? String(Date.now())
+                        )}`}
+                        download
+                      >
                         <IconDownload className="h-4 w-4 shrink-0" />
                         הורדה
                       </a>

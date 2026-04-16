@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { ASKER_AGE_RANGE_LABELS, type AskerAgeRangeLabel } from "@/lib/asker-age-ranges";
 import { useEffect, useState } from "react";
 
 const COMM_LABELS: Record<string, string> = {
@@ -61,6 +62,7 @@ export function TeamMemberEditModal({
   const [cooldown_days, setCooldownDays] = useState(0);
   const [category_ids, setCategoryIds] = useState<string[]>([]);
   const [topic_ids, setTopicIds] = useState<string[]>([]);
+  const [respondent_age_ranges, setRespondentAgeRanges] = useState<AskerAgeRangeLabel[]>([]);
   const [pending, setPending] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +83,7 @@ export function TeamMemberEditModal({
       setCooldownDays(profile.cooldown_days ?? 0);
       setCategoryIds(profile.category_ids ?? []);
       setTopicIds(profile.topic_ids ?? []);
+      setRespondentAgeRanges(profile.respondent_age_ranges ?? []);
       setError(null);
       setDeleteConfirm(false);
     }
@@ -90,6 +93,10 @@ export function TeamMemberEditModal({
     if (!profile) return;
     if (is_proofreader && proofreader_type_ids.length === 0) {
       setError("מגיה/ה חייב/ת שיהיה לפחות סוג הגהה אחד.");
+      return;
+    }
+    if (is_respondent && respondent_age_ranges.length === 0) {
+      setError("למשיב/ה יש לבחור לפחות טווח גיל אחד.");
       return;
     }
     setPending(true);
@@ -109,6 +116,7 @@ export function TeamMemberEditModal({
       cooldown_days,
       category_ids,
       topic_ids: is_respondent ? topic_ids : [],
+      respondent_age_ranges: is_respondent ? respondent_age_ranges : [],
     });
     setPending(false);
     if (result.ok) {
@@ -268,6 +276,30 @@ export function TeamMemberEditModal({
                         className="text-right"
                       />
                     </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-right">לאיזה גילאים המשיב/ה יכול/ה לענות? (אפשר לבחור כמה)</Label>
+                    <ul className="flex flex-col gap-1 rounded-xl border border-card-border bg-slate-50 p-3 list-none">
+                      {ASKER_AGE_RANGE_LABELS.map((range) => (
+                        <li key={range}>
+                          <label className="flex cursor-pointer items-center gap-2 justify-start">
+                            <Checkbox
+                              checked={respondent_age_ranges.includes(range)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setRespondentAgeRanges((prev) =>
+                                    prev.includes(range) ? prev : [...prev, range]
+                                  );
+                                } else {
+                                  setRespondentAgeRanges((prev) => prev.filter((r) => r !== range));
+                                }
+                              }}
+                            />
+                            <span className="text-sm text-slate-600">{range}</span>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 </>
               )}

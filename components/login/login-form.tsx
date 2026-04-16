@@ -44,6 +44,38 @@ export function LoginForm() {
   const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
   const [newPasswordError, setNewPasswordError] = useState<string | null>(null);
   const [newPasswordSuccess, setNewPasswordSuccess] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showNewPasswordConfirm, setShowNewPasswordConfirm] = useState(false);
+
+  const toFriendlyResetError = (msg: string | null | undefined): string => {
+    const m = (msg ?? "").toLowerCase();
+    if (!m) return "לא הצלחנו לשלוח כרגע מייל איפוס. נסו שוב בעוד כמה דקות.";
+    if (m.includes("error sending recovery email")) {
+      return "לא הצלחנו לשלוח כרגע מייל איפוס. נא לבדוק את הגדרות המייל במערכת ולנסות שוב.";
+    }
+    if (m.includes("invalid email")) {
+      return "כתובת האימייל אינה תקינה.";
+    }
+    if (m.includes("rate limit") || m.includes("too many")) {
+      return "בוצעו יותר מדי ניסיונות. נא להמתין כמה דקות ולנסות שוב.";
+    }
+    return "לא הצלחנו לשלוח כרגע מייל איפוס. נסו שוב מאוחר יותר.";
+  };
+
+  const toFriendlyNewPasswordError = (msg: string | null | undefined): string => {
+    const m = (msg ?? "").toLowerCase();
+    if (!m) return "לא הצלחנו לעדכן את הסיסמה כרגע. נסו שוב.";
+    if (m.includes("new password should be different from the old password")) {
+      return "הסיסמה החדשה חייבת להיות שונה מהסיסמה הקודמת.";
+    }
+    if (m.includes("password should be at least")) {
+      return "הסיסמה חייבת להכיל לפחות 6 תווים.";
+    }
+    if (m.includes("same password")) {
+      return "הסיסמה החדשה חייבת להיות שונה מהסיסמה הקודמת.";
+    }
+    return "לא הצלחנו לעדכן את הסיסמה כרגע. נסו שוב מאוחר יותר.";
+  };
 
   useEffect(() => {
     const supabase = getSupabaseBrowser();
@@ -63,7 +95,7 @@ export function LoginForm() {
       const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/login` : "";
       const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
       if (err) {
-        setResetError(err.message);
+        setResetError(toFriendlyResetError(err.message));
         setLoading(false);
         return;
       }
@@ -91,7 +123,7 @@ export function LoginForm() {
       const supabase = getSupabaseBrowser();
       const { error: err } = await supabase.auth.updateUser({ password: newPassword });
       if (err) {
-        setNewPasswordError(err.message);
+        setNewPasswordError(toFriendlyNewPasswordError(err.message));
         setLoading(false);
         return;
       }
@@ -212,7 +244,7 @@ export function LoginForm() {
               <Label htmlFor="new-password" className="block text-center">סיסמה חדשה</Label>
               <Input
                 id="new-password"
-                type={showPassword ? "text" : "password"}
+                type={showNewPassword ? "text" : "password"}
                 autoComplete="new-password"
                 placeholder="••••••••"
                 value={newPassword}
@@ -222,20 +254,48 @@ export function LoginForm() {
                 className="pe-10 text-start"
                 disabled={loading}
               />
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={() => setShowNewPassword((v) => !v)}
+                className="absolute end-2 top-1/2 -translate-y-1/2 rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                aria-label={showNewPassword ? "הסתר סיסמה" : "הצג סיסמה"}
+              >
+                {showNewPassword ? (
+                  <EyeOffIcon className="h-4 w-4" />
+                ) : (
+                  <EyeIcon className="h-4 w-4" />
+                )}
+              </button>
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-password-confirm" className="block text-center">אימות סיסמה</Label>
-              <Input
-                id="new-password-confirm"
-                type="password"
-                autoComplete="new-password"
-                placeholder="••••••••"
-                value={newPasswordConfirm}
-                onChange={(e) => setNewPasswordConfirm(e.target.value)}
-                required
-                className="text-start"
-                disabled={loading}
-              />
+              <div className="relative">
+                <Input
+                  id="new-password-confirm"
+                  type={showNewPasswordConfirm ? "text" : "password"}
+                  autoComplete="new-password"
+                  placeholder="••••••••"
+                  value={newPasswordConfirm}
+                  onChange={(e) => setNewPasswordConfirm(e.target.value)}
+                  required
+                  className="pe-10 text-start"
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => setShowNewPasswordConfirm((v) => !v)}
+                  className="absolute end-2 top-1/2 -translate-y-1/2 rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  aria-label={showNewPasswordConfirm ? "הסתר סיסמה" : "הצג סיסמה"}
+                >
+                  {showNewPasswordConfirm ? (
+                    <EyeOffIcon className="h-4 w-4" />
+                  ) : (
+                    <EyeIcon className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
             {newPasswordError && (
               <p className="rounded-lg bg-red-50 px-3 py-2 text-center text-sm text-red-700" role="alert">
@@ -272,7 +332,7 @@ export function LoginForm() {
       <Card className="overflow-hidden rounded-2xl shadow-dialog">
         <CardHeader className="space-y-1 text-center">
           <CardTitle className="text-xl font-bold text-primary">שכחתי סיסמה</CardTitle>
-          <CardDescription className="text-slate-600">
+          <CardDescription className="text-center text-slate-600">
             {resetSent
               ? "נשלח אליך אימייל עם קישור לאיפוס הסיסמה."
               : "הזן/י את האימייל שלך ונשלח אליך קישור לאיפוס הסיסמה."}

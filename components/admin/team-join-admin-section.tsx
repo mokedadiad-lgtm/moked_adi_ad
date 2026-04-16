@@ -55,6 +55,7 @@ export function TeamJoinAdminSection({
   const [rejectNote, setRejectNote] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [actorProfileId, setActorProfileId] = useState<string | null>(null);
+  const [showAllTokens, setShowAllTokens] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -173,55 +174,73 @@ export function TeamJoinAdminSection({
             {tokens.length === 0 ? (
               <p className="text-sm text-slate-600">עדיין לא הופקו קישורים.</p>
             ) : (
-              <div className="overflow-x-auto rounded-lg border border-slate-100">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="hover:bg-transparent">
-                      <TableHead>סוג</TableHead>
-                      <TableHead>סטטוס</TableHead>
-                      <TableHead>תוקף</TableHead>
-                      <TableHead>נוצר</TableHead>
-                      <TableHead className="w-[120px]">פעולה</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {tokens.map((t) => (
-                      <TableRow key={t.id}>
-                        <TableCell>{KIND_LABEL[t.form_kind] ?? t.form_kind}</TableCell>
-                        <TableCell className="text-sm">
-                          {t.is_active ? (
-                            <span className="text-emerald-700">פעיל</span>
-                          ) : (
-                            <span className="text-slate-500">מנוטרל</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-slate-600">
-                          {t.expires_at
-                            ? new Date(t.expires_at).toLocaleString("he-IL")
-                            : "ללא הגבלה"}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-slate-600">
-                          {new Date(t.created_at).toLocaleString("he-IL")}
-                        </TableCell>
-                        <TableCell>
-                          {t.is_active ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={revokeBusyId === t.id}
-                              onClick={() => void onDeactivateToken(t.id)}
-                            >
-                              {revokeBusyId === t.id ? "…" : "נטרל"}
-                            </Button>
-                          ) : (
-                            <span className="text-xs text-slate-400">—</span>
-                          )}
-                        </TableCell>
+              <div className="space-y-2">
+                <div
+                  className={`overflow-x-auto rounded-lg border border-slate-100 transition-[max-height] duration-200 ${
+                    showAllTokens ? "max-h-[70vh]" : "max-h-[230px] overflow-y-hidden"
+                  }`}
+                >
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead>סוג</TableHead>
+                        <TableHead>סטטוס</TableHead>
+                        <TableHead>תוקף</TableHead>
+                        <TableHead>נוצר</TableHead>
+                        <TableHead className="w-[120px]">פעולה</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {tokens.map((t) => (
+                        <TableRow key={t.id}>
+                          <TableCell>{KIND_LABEL[t.form_kind] ?? t.form_kind}</TableCell>
+                          <TableCell className="text-sm">
+                            {t.is_active ? (
+                              <span className="text-emerald-700">פעיל</span>
+                            ) : (
+                              <span className="text-slate-500">מנוטרל</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-xs text-slate-600">
+                            {t.expires_at
+                              ? new Date(t.expires_at).toLocaleString("he-IL")
+                              : "ללא הגבלה"}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-xs text-slate-600">
+                            {new Date(t.created_at).toLocaleString("he-IL")}
+                          </TableCell>
+                          <TableCell>
+                            {t.is_active ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={revokeBusyId === t.id}
+                                onClick={() => void onDeactivateToken(t.id)}
+                              >
+                                {revokeBusyId === t.id ? "…" : "נטרל"}
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-slate-400">—</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                {tokens.length > 3 && (
+                  <div className="-mt-1 flex justify-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAllTokens((prev) => !prev)}
+                    >
+                      {showAllTokens ? "הצג פחות" : "הצג הכל"}
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </div>
