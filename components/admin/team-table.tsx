@@ -1,10 +1,8 @@
 "use client";
 
-import type { CategoryOption, ProofreaderTypeOption, TeamProfileRow, TopicOption } from "@/app/admin/actions";
-import { seedDefaultCategories } from "@/app/admin/actions";
+import type { ProofreaderTypeOption, TeamProfileRow, TopicOption } from "@/app/admin/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PageLoadingSpinner } from "@/components/ui/page-loading";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -24,17 +22,15 @@ const GENDER_LABEL: Record<string, string> = { M: "זכר", F: "נקבה" };
 
 interface TeamTableProps {
   profiles: TeamProfileRow[];
-  categories: CategoryOption[];
   proofreaderTypes: ProofreaderTypeOption[];
   topics: TopicOption[];
 }
 
-export function TeamTable({ profiles, categories, proofreaderTypes, topics }: TeamTableProps) {
+export function TeamTable({ profiles, proofreaderTypes, topics }: TeamTableProps) {
   const router = useRouter();
   const [editProfile, setEditProfile] = useState<TeamProfileRow | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
-  const [seeding, setSeeding] = useState(false);
 
   const openEdit = (p: TeamProfileRow) => {
     setEditProfile(p);
@@ -46,39 +42,8 @@ export function TeamTable({ profiles, categories, proofreaderTypes, topics }: Te
     setTimeout(() => setEditProfile(null), 0);
   };
 
-  const handleSeedCategories = async () => {
-    setSeeding(true);
-    const result = await seedDefaultCategories();
-    setSeeding(false);
-    if (result.ok && result.count > 0) router.refresh();
-  };
-
   return (
     <>
-      {categories.length === 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-start">
-          <p className="text-sm text-amber-800">
-            אין קטגוריות במערכת. לחץ כדי לטעון קטגוריות ברירת מחדל (הלכה, ייעוץ, משפחה, כללי).
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="mt-2 border-amber-300 text-amber-800 hover:bg-amber-100"
-            onClick={handleSeedCategories}
-            disabled={seeding}
-          >
-            {seeding ? (
-              <span className="inline-flex items-center gap-2" role="status" aria-live="polite">
-                <PageLoadingSpinner size="sm" />
-                <span>טוען…</span>
-              </span>
-            ) : (
-              "טען קטגוריות ברירת מחדל"
-            )}
-          </Button>
-        </div>
-      )}
       <div className="flex justify-start">
         <Button onClick={() => setAddModalOpen(true)}>הוסף איש צוות</Button>
       </div>
@@ -175,7 +140,6 @@ export function TeamTable({ profiles, categories, proofreaderTypes, topics }: Te
 
       <TeamMemberEditModal
         profile={editProfile}
-        categories={categories}
         proofreaderTypes={proofreaderTypes}
         topics={topics}
         open={modalOpen}
@@ -189,7 +153,6 @@ export function TeamTable({ profiles, categories, proofreaderTypes, topics }: Te
         }}
       />
       <AddTeamMemberModal
-        categories={categories}
         proofreaderTypes={proofreaderTypes}
         topics={topics}
         open={addModalOpen}

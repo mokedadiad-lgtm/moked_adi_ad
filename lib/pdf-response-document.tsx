@@ -1,5 +1,5 @@
 import { PdfAnswerBodyFromHtml } from "@/lib/pdf-body-html-react-pdf";
-import { parseSignatureHtmlSegments } from "@/lib/response-text";
+import { effectiveLinguisticSignature, parseSignatureHtmlSegments } from "@/lib/response-text";
 import {
   Document,
   Image,
@@ -241,7 +241,7 @@ export function ResponsePdfDocument({
   const bodyLines = bodyPlain ? bodyPlain.split("\n") : [];
   const hasBodyLines = bodyLines.length > 0;
 
-  const sigSegments = parseSignatureHtmlSegments(linguisticSignature ?? "");
+  const sigSegments = parseSignatureHtmlSegments(effectiveLinguisticSignature(linguisticSignature));
 
   return (
     <Document>

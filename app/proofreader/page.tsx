@@ -10,7 +10,7 @@ export const metadata = {
 export default function ProofreaderPage() {
   return (
     <div className="min-h-screen bg-background" dir="rtl">
-      <Suspense fallback={<PageLoadingFallback />}>
+      <Suspense fallback={<PageLoadingFallback minHeight="min-h-screen" />}>
         <ProofreaderDashboard />
       </Suspense>
     </div>

@@ -1162,7 +1162,7 @@ export function AdminQuestionStageModal({
         </DialogContent>
       </Dialog>
 
-      {/* חלון הוספת נושא (עם קטגוריה = סוג הגהה) */}
+      {/* חלון הוספת נושא (סוג הגהה רלוונטי) */}
       <Dialog open={addTopicOpen} onOpenChange={setAddTopicOpen}>
         <DialogContent className="max-w-sm rounded-2xl border border-card-border bg-card px-5 py-4 text-center shadow-soft" dir="rtl">
           <DialogHeader>
@@ -1174,7 +1174,7 @@ export function AdminQuestionStageModal({
               <Input value={newTopicName} onChange={(e) => setNewTopicName(e.target.value)} placeholder="שם הנושא" className="text-right" />
             </div>
             <div className="space-y-1">
-              <Label className="text-right">קטגוריה (סוג הגהה רלוונטי)</Label>
+              <Label className="text-right">סוג הגהה רלוונטי</Label>
               <Select value={newTopicTypeId} onValueChange={setNewTopicTypeId}>
                 <SelectTrigger className="w-full text-right">
                   <SelectValue placeholder="בחר/י סוג" />

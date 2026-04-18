@@ -8,6 +8,7 @@ import {
   responseToPlainText,
   responseToStructuredForPdf,
   sanitizeResponseHtml,
+  sanitizeResponseHtmlForPdf,
 } from "./response-text";
 
 describe("parseResponseRich", () => {
@@ -129,50 +130,85 @@ describe("compactResponseHtmlForQueue", () => {
 });
 
 describe("responseToStructuredForPdf", () => {
-  it("משאיר כותרת קצרה אמיתית", () => {
+  it("משאיר מבנה כותרות ופיסקאות כפי שנשמר בעורך (בלי היוריסטיקות הישנות)", () => {
     const out = responseToStructuredForPdf("<h2>כותרת קצרה</h2><p>גוף</p>");
     expect(out.bodyHtmlForPdf).toContain("<h2>כותרת קצרה</h2>");
+    expect(out.bodyHtmlForPdf).toContain("<p>גוף</p>");
   });
 
-  it("שומר גם כותרת ארוכה כפי שנשמרה במקור", () => {
+  it("משאיר כותרת ארוכה כ-h2 כמו במקור", () => {
+    const long =
+      "<h2>זה טקסט ממש ארוך מאוד עם הרבה מאוד מילים, שורות, תיאור מפורט והסבר מורחב שנכתב במצב כותרת.</h2>";
+    const out = responseToStructuredForPdf(long);
+    expect(out.bodyHtmlForPdf).toContain("<h2>");
+    expect(out.bodyHtmlForPdf).not.toMatch(/<p>[^<]*זה טקסט ממש ארוך/);
+  });
+
+  it("משאיר רצף של כמה כותרות h2 כמו במקור", () => {
     const out = responseToStructuredForPdf(
-      "<h2>זה טקסט ממש ארוך מאוד עם הרבה מאוד מילים, שורות, תיאור מפורט והסבר מורחב שנכתב בטעות במצב כותרת ולכן לא צריך להישאר כותרת במסמך PDF.</h2>"
+      "<h2>כותרת א</h2><h2>כותרת ב ארוכה יותר עם טקסט.</h2><p>פסקה.</p>"
     );
-    expect(out.bodyHtmlForPdf).toContain("<p>");
-    expect(out.bodyHtmlForPdf).not.toContain("<h2>");
+    expect(out.bodyHtmlForPdf.match(/<h2>/g)?.length).toBe(2);
+    expect(out.bodyHtmlForPdf).toContain("<p>פסקה.</p>");
   });
 
-  it("משאיר כותרת בינונית עם סימני פיסוק", () => {
-    const out = responseToStructuredForPdf("<h2>ברכה קצרה</h2><p>תוכן רגיל</p>");
-    expect(out.bodyHtmlForPdf).toContain("<h2>ברכה קצרה</h2>");
-  });
-
-  it("מוריד רק כותרת יחידה ארוכה; לא נוגע בכותרות במסמך רגיל", () => {
-    const out = responseToStructuredForPdf("<h2>ברכת הצלחה: תשובה מעודכנת</h2><p>פסקה רגילה.</p>");
-    expect(out.bodyHtmlForPdf).toContain("<h2>ברכת הצלחה: תשובה מעודכנת</h2>");
-  });
-
-  it("שומר פסקאות נפרדות ולא מאחד אותן", () => {
+  it("שומר פסקאות נפרדות", () => {
     const out = responseToStructuredForPdf("<p>פסקה א</p><p>פסקה ב</p>");
     expect(out.bodyHtmlForPdf).toContain("<p>פסקה א</p><p>פסקה ב</p>");
   });
 
-  it("כשכל המסמך נשמר כרצף כותרות — משאיר רק כותרת פתיחה קצרה ומוריד את השאר לפסקאות", () => {
-    const out = responseToStructuredForPdf(
-      "<h2>כותרת פתיחה</h2><h2>זו כבר פסקה ארוכה מאוד עם הרבה מילים ולכן לא באמת כותרת.</h2><h2>עוד פסקה טקסטואלית עם נקודה.</h2>"
+  it("ממיר הערת שוליים לעילית מספרית בלי לשנות את שאר המבנה", () => {
+    const html =
+      '<p>טקסט<sup data-fn-id="a">[1]</sup></p><div data-footnotes-json="[{&quot;id&quot;:&quot;a&quot;,&quot;text&quot;:&quot;הערה&quot;}]" style="display:none"></div>';
+    const out = responseToStructuredForPdf(html);
+    expect(out.bodyHtmlForPdf).toContain('<sup class="fn-ref">1</sup>');
+    expect(out.bodyHtmlForPdf).toContain("<p>טקסט");
+    expect(out.footnotes.some((l) => l.includes("הערה"))).toBe(true);
+  });
+
+  it("כותרת עם br בתוך h2 נשארת כפי שנשמרה", () => {
+    const out = responseToStructuredForPdf("<h2>שורה א<br>שורה ב</h2>");
+    expect(out.bodyHtmlForPdf).toContain("<h2>");
+    expect(out.bodyHtmlForPdf).toContain("<br>");
+  });
+});
+
+describe("sanitizeResponseHtmlForPdf", () => {
+  it("כמו sanitizeResponseHtml ומשחזר class על עילית מספרית", () => {
+    const step = responseToStructuredForPdf(
+      '<p>x<sup data-fn-id="z">[1]</sup></p><div data-footnotes-json="[{&quot;id&quot;:&quot;z&quot;,&quot;text&quot;:&quot;n&quot;}]" style="display:none"></div>'
     );
-    expect(out.bodyHtmlForPdf).toContain("<h2>כותרת פתיחה</h2>");
-    expect(out.bodyHtmlForPdf).toContain("<p>זו כבר פסקה ארוכה מאוד עם הרבה מילים ולכן לא באמת כותרת.</p>");
-    expect(out.bodyHtmlForPdf).toContain("<p>עוד פסקה טקסטואלית עם נקודה.</p>");
+    const safe = sanitizeResponseHtmlForPdf(step.bodyHtmlForPdf);
+    expect(safe).toContain('<sup class="fn-ref">1</sup>');
   });
 
-  it("ממיר כותרת יחידה עם שבירות שורה כפולות לפסקאות", () => {
-    const out = responseToStructuredForPdf("<h2>כותרת שגויה<br><br>פסקה א<br><br>פסקה ב</h2>");
-    expect(out.bodyHtmlForPdf).toContain("<p>כותרת שגויה</p><p>פסקה א</p><p>פסקה ב</p>");
+  it("משאיר strong כמו sanitize רגיל", () => {
+    const s = sanitizeResponseHtmlForPdf("<p><strong>מודגש</strong></p>");
+    expect(s).toContain("<strong>מודגש</strong>");
+  });
+});
+
+/**
+ * תיעוד רגרסיה: איך HTML מהעורך עובר ל-PDF (מבנה זהה; CSS בתבנית נפרד).
+ * ההפרדה הייתה בעיקר מ-normalize* הישן — הוסר.
+ */
+describe("pdf pipeline fidelity (editor → PDF HTML)", () => {
+  it("דוגמה 1: כותרת + שתי פסקאות + מודגש", () => {
+    const editor =
+      "<h2>נושא</h2><p>פסקה ראשונה עם <strong>הדגשה</strong>.</p><p>פסקה שנייה.</p>";
+    const { bodyHtmlForPdf } = responseToStructuredForPdf(editor);
+    const safe = sanitizeResponseHtmlForPdf(bodyHtmlForPdf);
+    expect(safe).toContain("<h2>נושא</h2>");
+    expect(safe).toContain("<strong>הדגשה</strong>");
+    expect(safe.match(/<p>/g)?.length).toBe(2);
   });
 
-  it("ממיר גם שבירות שורה בודדות בתוך כותרת שגויה לפסקאות נפרדות", () => {
-    const out = responseToStructuredForPdf("<h2>פסקה א<br>פסקה ב<br>פסקה ג</h2>");
-    expect(out.bodyHtmlForPdf).toContain("<p>פסקה א</p><p>פסקה ב</p><p>פסקה ג</p>");
+  it("דוגמה 2: רשימה ופיסקה", () => {
+    const editor = "<ul><li>אחת</li><li>שתיים</li></ul><p>אחרי הרשימה</p>";
+    const { bodyHtmlForPdf } = responseToStructuredForPdf(editor);
+    const safe = sanitizeResponseHtmlForPdf(bodyHtmlForPdf);
+    expect(safe).toContain("<ul>");
+    expect(safe).toContain("<li>אחת</li>");
+    expect(safe).toContain("<p>אחרי הרשימה</p>");
   });
 });

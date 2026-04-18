@@ -159,7 +159,7 @@ const CANCEL_REFERRAL_BUTTON_ID = "CANCEL_REFERRAL";
 const WA_REPLY_CANCEL_REFERRAL = "ביטול";
 
 // Category menu displayed on the `confirm` screen (instead of 3 separate button messages).
-// Each WhatsApp quick-reply message is limited to ~3 buttons, so we show 3 categories first.
+// Each WhatsApp quick-reply message is limited to ~3 buttons, so we show 3 options first.
 const EDIT_CAT_PERSONAL_BUTTON_ID = "EDIT_CAT_PERSONAL";
 const EDIT_CAT_CONTENT_BUTTON_ID = "EDIT_CAT_CONTENT";
 const EDIT_CAT_ANSWER_BUTTON_ID = "EDIT_CAT_ANSWER";

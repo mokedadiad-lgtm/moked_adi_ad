@@ -1,4 +1,4 @@
-import { sanitizeResponseHtml, sanitizeSignatureHtml } from "./response-text";
+import { effectiveLinguisticSignature, sanitizeResponseHtmlForPdf } from "./response-text";
 
 /**
  * תבנית HTML ל-PDF: עברית RTL, גופן Heebo, ב"ה, מסגרת ורודה סביב שאלה+תשובה+חתימה,
@@ -32,8 +32,8 @@ export function buildPdfHtml(options: {
     centerLogoDataUri,
     rightLogoDataUri,
   } = options;
-  const safeBody = sanitizeResponseHtml(bodyHtmlForPdf);
-  const sigSan = sanitizeSignatureHtml(linguisticSignature ?? "").trim();
+  const safeBody = sanitizeResponseHtmlForPdf(bodyHtmlForPdf);
+  const sigSan = effectiveLinguisticSignature(linguisticSignature);
   const signatureHtml = sigSan
     ? `<div class="pdf-signature-block" dir="ltr">${sigSan}</div>`
     : "";
@@ -182,7 +182,7 @@ export function buildPdfHtml(options: {
       white-space: normal;
     }
     .body strong, .body b {
-      font-weight: 800 !important;
+      font-weight: 700 !important;
       font-family: 'Heebo', sans-serif;
     }
     .body em, .body i { font-style: italic; }

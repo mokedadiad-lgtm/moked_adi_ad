@@ -1,6 +1,6 @@
 "use client";
 
-import type { CategoryOption, ProofreaderTypeOption, TopicOption } from "@/app/admin/actions";
+import type { ProofreaderTypeOption, TopicOption } from "@/app/admin/actions";
 import { createTeamMember } from "@/app/admin/actions";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -30,7 +30,6 @@ const COMM_LABELS: Record<string, string> = {
   both: "גם וגם",
 };
 interface AddTeamMemberModalProps {
-  categories: CategoryOption[];
   proofreaderTypes: ProofreaderTypeOption[];
   topics: TopicOption[];
   open: boolean;
@@ -39,7 +38,6 @@ interface AddTeamMemberModalProps {
 }
 
 export function AddTeamMemberModal({
-  categories,
   proofreaderTypes,
   topics,
   open,
@@ -59,7 +57,6 @@ export function AddTeamMemberModal({
   const [phone, setPhone] = useState("");
   const [concurrency_limit, setConcurrencyLimit] = useState(1);
   const [cooldown_days, setCooldownDays] = useState(0);
-  const [category_ids, setCategoryIds] = useState<string[]>([]);
   const [topic_ids, setTopicIds] = useState<string[]>([]);
   const [respondent_age_ranges, setRespondentAgeRanges] = useState<AskerAgeRangeLabel[]>([]);
   const [pending, setPending] = useState(false);
@@ -79,7 +76,6 @@ export function AddTeamMemberModal({
     setPhone("");
     setConcurrencyLimit(1);
     setCooldownDays(0);
-    setCategoryIds([]);
     setTopicIds([]);
     setRespondentAgeRanges([]);
     setError(null);
@@ -123,7 +119,6 @@ export function AddTeamMemberModal({
       phone: phone.trim() || null,
       concurrency_limit,
       cooldown_days,
-      category_ids,
       topic_ids: is_respondent ? topic_ids : [],
       respondent_age_ranges: is_respondent ? respondent_age_ranges : [],
     });

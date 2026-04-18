@@ -159,9 +159,8 @@ export async function approveTeamJoinSubmission(
         proofreader_type_ids: [],
         communication_preference: comm(p.communication_preference),
         phone: p.phone ? String(p.phone).trim() || null : null,
-        concurrency_limit: Math.max(0, Number(p.concurrency_limit) || 1),
+        concurrency_limit: Math.min(3, Math.max(1, Number(p.concurrency_limit) || 1)),
         cooldown_days: Math.max(0, Number(p.cooldown_days) || 7),
-        category_ids: [],
         topic_ids,
         respondent_age_ranges,
       });
@@ -187,7 +186,6 @@ export async function approveTeamJoinSubmission(
         phone: p.phone ? String(p.phone).trim() || null : null,
         concurrency_limit: Math.max(0, Number(p.concurrency_limit) || 1),
         cooldown_days: Math.max(0, Number(p.cooldown_days) || 0),
-        category_ids: Array.isArray(p.category_ids) ? (p.category_ids as string[]).filter(Boolean) : [],
         topic_ids: [],
         respondent_age_ranges: [],
       });

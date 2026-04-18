@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SignatureRichField } from "@/components/admin/signature-rich-field";
-import { sanitizeSignatureHtml } from "@/lib/response-text";
+import { effectiveLinguisticSignature, sanitizeSignatureHtml } from "@/lib/response-text";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import type { QuestionRow } from "@/lib/types";
 import { STAGE_LABELS } from "@/lib/types";
@@ -165,7 +165,7 @@ export function QuestionDetailsModal({
       const value = question.response_text ?? "";
       setResponseText(value);
       setInitialResponse(value);
-      const sig = question.linguistic_signature ?? "";
+      const sig = effectiveLinguisticSignature(question.linguistic_signature);
       setSignatureText(sig);
       setInitialSignature(sig);
       setSaveError(null);

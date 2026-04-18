@@ -3,7 +3,7 @@
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { PageLoadingSpinner } from "@/components/ui/page-loading";
+import { PageLoadingFallback } from "@/components/ui/page-loading";
 import { PageHeader } from "@/components/page-header";
 import { RoleSwitcher, useHasSidebar } from "@/components/role-switcher";
 import Link from "next/link";
@@ -321,10 +321,10 @@ export function RespondentDashboard() {
 
       <main className="mx-auto max-w-4xl px-4 py-6">
         {loading ? (
-          <div className="flex min-h-[12rem] items-center justify-start" role="status" aria-live="polite">
-            <span className="sr-only">טוען…</span>
-            <PageLoadingSpinner />
-          </div>
+          <PageLoadingFallback
+            className="w-full"
+            minHeight="min-h-[min(60vh,26rem)]"
+          />
         ) : questions.length === 0 ? (
           <div className="rounded-2xl border border-card-border bg-card p-12 text-start shadow-soft">
             <p className="text-lg font-medium text-primary">

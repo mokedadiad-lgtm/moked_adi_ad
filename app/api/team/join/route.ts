@@ -72,6 +72,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "אימייל לא תקין" }, { status: 400 });
   }
 
+  const rawConc = body.concurrency_limit;
+  let concurrencyLimitNum =
+    typeof rawConc === "number" && Number.isFinite(rawConc)
+      ? Math.trunc(rawConc)
+      : typeof rawConc === "string"
+        ? parseInt(rawConc.trim(), 10)
+        : NaN;
+  if (Number.isNaN(concurrencyLimitNum)) concurrencyLimitNum = 1;
+  if (formKind === "respondent") {
+    if (concurrencyLimitNum < 1 || concurrencyLimitNum > 3) {
+      return NextResponse.json(
+        { ok: false, error: "מספר שאלות בשבוע חייב להיות בין 1 ל־3" },
+        { status: 400 }
+      );
+    }
+  } else {
+    concurrencyLimitNum = Math.max(0, concurrencyLimitNum);
+  }
+
   const { data: pendingRows } = await supabase.from("team_join_submissions").select("id, payload").eq("status", "pending");
   const dup = pendingRows?.some(
     (r) => String((r.payload as { email?: string })?.email ?? "").toLowerCase() === email
@@ -102,6 +121,7 @@ export async function POST(req: Request) {
   delete payload.password;
   delete payload.form_kind;
   payload.email = email;
+  payload.concurrency_limit = concurrencyLimitNum;
 
   let passwordCipher: string;
   try {

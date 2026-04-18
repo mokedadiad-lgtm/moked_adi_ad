@@ -33,9 +33,9 @@ const SECTION_TITLES: Record<NavSectionId, string> = {
 const navItems: NavItem[] = [
   { href: "/admin", label: "לוח בקרה", icon: HomeIcon, section: "main", adminOnly: true },
   { href: "/admin/whatsapp-inbox", label: "דואר נכנס וואטסאפ", icon: ChatIcon, section: "main", adminOnly: true },
-  { href: "/admin/linguistic", label: "עריכה לשונית", icon: EditIcon, section: "roles", needLinguistic: true },
   { href: "/respondent", label: "אזור משיב", icon: RespondentIcon, section: "roles", needRespondent: true },
   { href: "/proofreader", label: "לובי הגהה", icon: LobbyIcon, section: "roles", needProofreader: true },
+  { href: "/admin/linguistic", label: "עריכה לשונית", icon: EditIcon, section: "roles", needLinguistic: true },
   { href: "/admin/team", label: "ניהול צוות", icon: UsersIcon, section: "admin", adminOnly: true },
   { href: "/admin/topics", label: "נושאים והגהות", icon: BookIcon, section: "admin", adminOnly: true },
   { href: "/admin/analytics", label: "נתונים ודיאגרמות", icon: ChartIcon, section: "admin", adminOnly: true },

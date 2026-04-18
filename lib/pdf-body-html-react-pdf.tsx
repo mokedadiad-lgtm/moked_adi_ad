@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, Text, View } from "@react-pdf/renderer";
-import { decodeHtmlEntities, sanitizeResponseHtml } from "@/lib/response-text";
+import { decodeHtmlEntities, sanitizeResponseHtmlForPdf } from "@/lib/response-text";
 
 const rtl = StyleSheet.create({
   wrap: { direction: "rtl" as const, textAlign: "right" as const, width: "100%" },
@@ -317,7 +317,7 @@ export function PdfAnswerBodyFromHtml({
   /** אם אין בלוקים אחרי פירוק — מציג טקסט שטוח (מ־responseToStructured) */
   fallbackPlain?: string;
 }) {
-  const safe = sanitizeResponseHtml(html || "");
+  const safe = sanitizeResponseHtmlForPdf(html || "");
   const blocks = parseBlocks(safe);
 
   if (blocks.length === 0) {
@@ -342,3 +342,6 @@ export function PdfAnswerBodyFromHtml({
     </View>
   );
 }
+
+/** לבדיקות יחידה — פירוק בלוקים כמו ב־react-pdf fallback */
+export { parseBlocks };

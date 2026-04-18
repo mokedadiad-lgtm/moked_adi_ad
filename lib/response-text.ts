@@ -177,6 +177,17 @@ export function compactResponseHtmlForQueue(html: string): string {
 
 const SIGNATURE_TAGS = new Set(["b", "strong", "br", "div"]);
 
+/** טקסט חתימה ברירת מחדל ל-PDF (עריכה לשונית): שורה רגילה + שורה מודגשת, מוצגת לשמאל (LTR). */
+export const DEFAULT_LINGUISTIC_SIGNATURE_HTML =
+  "בברכה,<br><strong>משיבה מאסק מי פלוס</strong>";
+
+/** מחזיר חתימה לתצוגה ו-PDF: אם אין במסד — ברירת המחדל. */
+export function effectiveLinguisticSignature(html: string | null | undefined): string {
+  const s = sanitizeSignatureHtml(html ?? "").trim();
+  if (s) return s;
+  return sanitizeSignatureHtml(DEFAULT_LINGUISTIC_SIGNATURE_HTML).trim();
+}
+
 /** HTML מותר לשדה חתימה ב-PDF: מודגש ושורות (בלי מאפיינים). */
 export function sanitizeSignatureHtml(html: string | null | undefined): string {
   if (html == null || typeof html !== "string") return "";
@@ -324,8 +335,8 @@ export function buildStoredResponse(
 }
 
 /**
- * For PDF: preserves body structure (p, h2, h3, etc.) and converts footnote refs
- * to superscript numbers without brackets. Returns HTML safe to inject and footnote lines.
+ * For PDF: same structure as stored in the editor — only converts footnote refs to
+ * `<sup class="fn-ref">n</sup>`. No heading/paragraph heuristics (those diverged from the UI).
  */
 export function responseToStructuredForPdf(value: string | null | undefined): {
   bodyHtmlForPdf: string;
@@ -333,93 +344,18 @@ export function responseToStructuredForPdf(value: string | null | undefined): {
 } {
   const { bodyHtml, footnotes } = parseResponseRich(value);
   const withFnRefs = bodyHtml.replace(SUP_FN_REF, (_, num) => `<sup class="fn-ref">${num}</sup>`);
-  const body = normalizeSingleAccidentalHeadingForPdf(withFnRefs);
   const noteLines = footnotes
     .map((fn, i) => `${i + 1}. ${decodeHtmlEntities((fn.text ?? "").trim())}`)
     .filter((s) => s.length > 2);
-  return { bodyHtmlForPdf: body, footnotes: noteLines };
+  return { bodyHtmlForPdf: withFnRefs, footnotes: noteLines };
 }
 
 /**
- * Targeted PDF fix:
- * If the entire body is one accidental heading block (common editor slip),
- * downgrade only that block to paragraph/div so the whole PDF won't look like a title.
- * Keep all normal headings untouched.
+ * סינון HTML ל-PDF: כמו sanitizeResponseHtml, ואז משחזר `class="fn-ref"` על עיליות מספריות
+ * (אחרי הסרת מאפיינים) כדי שהעיצוב ב-PDF יתאים להערות שוליים.
  */
-function normalizeSingleAccidentalHeadingForPdf(html: string): string {
-  const src = (html ?? "").trim();
-  if (!src) return "";
-
-  // Only run when the whole content is exactly one heading wrapper.
-  const singleHeading = src.match(/^<h([1-3])>([\s\S]*)<\/h\1>$/i);
-  if (!singleHeading) return src;
-
-  const inner = singleHeading[2] ?? "";
-  // Not truly single: multiple sibling headings were captured greedily.
-  if (/<\/h[1-3]>\s*<h[1-3]>/i.test(inner)) {
-    return normalizeHeadingRunForPdf(src);
-  }
-  const plain = inner.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-  const wordCount = plain ? plain.split(/\s+/).length : 0;
-  const textLen = plain.length;
-  const hasSentencePunctuation = /[.!?,;:]/.test(plain);
-  const hasLineBreak = /<br\s*\/?>/i.test(inner);
-  const hasBlockInside = /<(p|div|ul|ol|li|blockquote|h1|h2|h3)\b/i.test(inner);
-
-  // Conservative heuristic: long/sentence-like single heading is almost certainly accidental.
-  const looksAccidental =
-    textLen > 120 || wordCount > 14 || hasSentencePunctuation || hasLineBreak || hasBlockInside;
-  if (!looksAccidental) {
-    // Additional case: heading mode remained active, producing many heading blocks.
-    // Keep a short first heading and downgrade subsequent heading blocks that look like body text.
-    return normalizeHeadingRunForPdf(src);
-  }
-
-  return convertHeadingBodyToParagraphs(inner, hasBlockInside);
-}
-
-function normalizeHeadingRunForPdf(html: string): string {
-  const headingBlocks = [...html.matchAll(/<h([1-3])>([\s\S]*?)<\/h\1>/gi)];
-  if (headingBlocks.length < 2) return html;
-
-  const headingStats = headingBlocks.map((m) => {
-    const inner = m[2] ?? "";
-    const plain = inner.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-    const words = plain ? plain.split(/\s+/).length : 0;
-    const hasSentencePunctuation = /[.!?,;:]/.test(plain);
-    const hasLineBreak = /<br\s*\/?>/i.test(inner);
-    const hasBlockInside = /<(p|div|ul|ol|li|blockquote|h1|h2|h3)\b/i.test(inner);
-    const looksBody = words > 10 || plain.length > 70 || hasSentencePunctuation || hasLineBreak || hasBlockInside;
-    return { plain, looksBody };
-  });
-
-  const bodyLikeCount = headingStats.filter((s) => s.looksBody).length;
-  if (bodyLikeCount === 0) return html;
-
-  let idx = 0;
-  return html.replace(/<h([1-3])>([\s\S]*?)<\/h\1>/gi, (_full, _level: string, inner: string) => {
-    const stat = headingStats[idx++];
-    const keepAsHeading = idx === 1 && !stat?.looksBody && stat.plain.length <= 60;
-    if (keepAsHeading) {
-      return `<h2>${inner}</h2>`;
-    }
-    const hasBlockInside = /<(p|div|ul|ol|li|blockquote|h1|h2|h3)\b/i.test(inner);
-    return convertHeadingBodyToParagraphs(inner, hasBlockInside);
-  });
-}
-
-function convertHeadingBodyToParagraphs(inner: string, hasBlockInside: boolean): string {
-  if (hasBlockInside) {
-    // Preserve existing block structure without wrapping with an extra div.
-    return inner;
-  }
-  // In accidental heading-mode content, <br> is often used as paragraph separator.
-  const parts = inner
-    .split(/<br\s*\/?>/i)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0);
-  if (parts.length <= 1) {
-    return `<p>${inner}</p>`;
-  }
-  return parts.map((p) => `<p>${p}</p>`).join("");
+export function sanitizeResponseHtmlForPdf(html: string): string {
+  const s = sanitizeResponseHtml(html);
+  if (!s.trim()) return s;
+  return s.replace(/<sup>(\d+)<\/sup>/g, '<sup class="fn-ref">$1</sup>');
 }

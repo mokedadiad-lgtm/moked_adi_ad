@@ -77,6 +77,10 @@ export function JoinTeamForm({
       setError("נא לבחור לפחות טווח גיל אחד.");
       return;
     }
+    if (kind === "respondent" && (concurrency_limit < 1 || concurrency_limit > 3)) {
+      setError("מספר שאלות בשבוע חייב להיות בין 1 ל־3.");
+      return;
+    }
 
     const base = {
       token: token.trim(),
@@ -199,9 +203,21 @@ export function JoinTeamForm({
           <Input
             id="jt-conc"
             type="number"
-            min={0}
+            min={kind === "respondent" ? 1 : 0}
+            max={kind === "respondent" ? 3 : undefined}
             value={concurrency_limit}
-            onChange={(e) => setConcurrencyLimit(parseInt(e.target.value, 10) || 0)}
+            onChange={(e) => {
+              const n = parseInt(e.target.value, 10);
+              if (Number.isNaN(n)) {
+                setConcurrencyLimit(kind === "respondent" ? 1 : 0);
+                return;
+              }
+              if (kind === "respondent") {
+                setConcurrencyLimit(Math.min(3, Math.max(1, n)));
+              } else {
+                setConcurrencyLimit(Math.max(0, n));
+              }
+            }}
             className="text-right"
           />
         </div>

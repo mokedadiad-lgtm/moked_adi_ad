@@ -882,53 +882,6 @@ export async function permanentlyDeleteQuestionAnswer(answerId: string): Promise
   }
 }
 
-export interface CategoryOption {
-  id: string;
-  name_he: string;
-  slug: string;
-}
-
-export async function getCategories(): Promise<CategoryOption[]> {
-  try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("categories")
-      .select("id, name_he, slug")
-      .order("name_he");
-    if (error) return [];
-    return (data ?? []) as CategoryOption[];
-  } catch {
-    return [];
-  }
-}
-
-/** Inserts default categories if missing. Call from admin when "אין קטגוריות במערכת". */
-export async function seedDefaultCategories(): Promise<
-  { ok: true; count: number } | { ok: false; error: string }
-> {
-  try {
-    const supabase = getSupabaseAdmin();
-    const defaults = [
-      { name_he: "הלכה", slug: "halacha" },
-      { name_he: "ייעוץ ורגשות", slug: "counseling" },
-      { name_he: "משפחה וזוגיות", slug: "family" },
-      { name_he: "כללי", slug: "general" },
-    ];
-    const { data: existing } = await supabase
-      .from("categories")
-      .select("slug")
-      .in("slug", defaults.map((d) => d.slug));
-    const existingSlugs = new Set((existing ?? []).map((r) => r.slug));
-    const toInsert = defaults.filter((d) => !existingSlugs.has(d.slug));
-    if (toInsert.length === 0) return { ok: true, count: 0 };
-    const { error } = await supabase.from("categories").insert(toInsert);
-    if (error) return { ok: false, error: error.message };
-    return { ok: true, count: toInsert.length };
-  } catch (e) {
-    return { ok: false, error: safeError((e as Error)?.message) };
-  }
-}
-
 // ---- Proofreader types (סוגי הגהה) ----
 export interface ProofreaderTypeOption {
   id: string;
@@ -1227,7 +1180,6 @@ export interface TeamProfileRow {
   communication_preference: "whatsapp" | "email" | "both";
   concurrency_limit: number;
   cooldown_days: number;
-  category_ids: string[];
   /** נושאים שמשויכים למשיב/ה (רק למשיבים) */
   topic_ids: string[];
   /** טווחי גיל שהמשיב/ה יכול/ה לענות להם */
@@ -1270,13 +1222,6 @@ export async function getTeamProfiles(): Promise<TeamProfileRow[]> {
     for (const t of types ?? []) typeMap[t.id] = t.name_he;
   }
 
-  const { data: pc } = await supabase.from("profile_categories").select("profile_id, category_id");
-  const categoriesByProfile: Record<string, string[]> = {};
-  for (const id of ids) categoriesByProfile[id] = [];
-  for (const row of pc ?? []) {
-    if (categoriesByProfile[row.profile_id]) categoriesByProfile[row.profile_id].push(row.category_id);
-  }
-
   const { data: rt } = await supabase.from("respondent_topics").select("profile_id, topic_id");
   const topicsByProfile: Record<string, string[]> = {};
   for (const id of ids) topicsByProfile[id] = [];
@@ -1317,7 +1262,6 @@ export async function getTeamProfiles(): Promise<TeamProfileRow[]> {
       communication_preference: (p.communication_preference ?? "email") as TeamProfileRow["communication_preference"],
       concurrency_limit: p.concurrency_limit ?? 1,
       cooldown_days: p.cooldown_days ?? 0,
-      category_ids: categoriesByProfile[p.id] ?? [],
       topic_ids: topicsByProfile[p.id] ?? [],
       respondent_age_ranges: ageRangesByProfile[p.id] ?? [],
     };
@@ -1344,7 +1288,6 @@ export async function updateTeamMember(
     phone: string | null;
     concurrency_limit: number;
     cooldown_days: number;
-    category_ids: string[];
     topic_ids: string[];
     respondent_age_ranges: AskerAgeRangeLabel[];
   }
@@ -1380,12 +1323,6 @@ export async function updateTeamMember(
       );
     }
 
-    await supabase.from("profile_categories").delete().eq("profile_id", profileId);
-    if (data.category_ids.length > 0) {
-      await supabase.from("profile_categories").insert(
-        data.category_ids.map((category_id) => ({ profile_id: profileId, category_id }))
-      );
-    }
     await supabase.from("respondent_topics").delete().eq("profile_id", profileId);
     if (data.topic_ids?.length) {
       await supabase.from("respondent_topics").insert(
@@ -1421,7 +1358,6 @@ export async function createTeamMember(data: {
   phone: string | null;
   concurrency_limit: number;
   cooldown_days: number;
-  category_ids: string[];
   topic_ids: string[];
   respondent_age_ranges: AskerAgeRangeLabel[];
 }): Promise<CreateTeamMemberResult> {
@@ -1492,12 +1428,6 @@ export async function createTeamMember(data: {
       );
     }
 
-    await supabase.from("profile_categories").delete().eq("profile_id", userId);
-    if (data.category_ids.length > 0) {
-      await supabase.from("profile_categories").insert(
-        data.category_ids.map((category_id) => ({ profile_id: userId, category_id }))
-      );
-    }
     await supabase.from("respondent_topics").delete().eq("profile_id", userId);
     if (data.topic_ids?.length) {
       await supabase.from("respondent_topics").insert(

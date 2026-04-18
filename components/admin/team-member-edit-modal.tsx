@@ -1,6 +1,6 @@
 "use client";
 
-import type { CategoryOption, ProofreaderTypeOption, TeamProfileRow, TopicOption } from "@/app/admin/actions";
+import type { ProofreaderTypeOption, TeamProfileRow, TopicOption } from "@/app/admin/actions";
 import { deleteTeamMember, updateTeamMember } from "@/app/admin/actions";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -32,7 +32,6 @@ const COMM_LABELS: Record<string, string> = {
 
 interface TeamMemberEditModalProps {
   profile: TeamProfileRow | null;
-  categories: CategoryOption[];
   proofreaderTypes: ProofreaderTypeOption[];
   topics: TopicOption[];
   open: boolean;
@@ -42,7 +41,6 @@ interface TeamMemberEditModalProps {
 
 export function TeamMemberEditModal({
   profile,
-  categories,
   proofreaderTypes,
   topics,
   open,
@@ -60,7 +58,6 @@ export function TeamMemberEditModal({
   const [phone, setPhone] = useState("");
   const [concurrency_limit, setConcurrencyLimit] = useState(1);
   const [cooldown_days, setCooldownDays] = useState(0);
-  const [category_ids, setCategoryIds] = useState<string[]>([]);
   const [topic_ids, setTopicIds] = useState<string[]>([]);
   const [respondent_age_ranges, setRespondentAgeRanges] = useState<AskerAgeRangeLabel[]>([]);
   const [pending, setPending] = useState(false);
@@ -81,7 +78,6 @@ export function TeamMemberEditModal({
       setPhone(profile.phone ?? "");
       setConcurrencyLimit(profile.concurrency_limit ?? 1);
       setCooldownDays(profile.cooldown_days ?? 0);
-      setCategoryIds(profile.category_ids ?? []);
       setTopicIds(profile.topic_ids ?? []);
       setRespondentAgeRanges(profile.respondent_age_ranges ?? []);
       setError(null);
@@ -114,7 +110,6 @@ export function TeamMemberEditModal({
       phone: phone.trim() || null,
       concurrency_limit,
       cooldown_days,
-      category_ids,
       topic_ids: is_respondent ? topic_ids : [],
       respondent_age_ranges: is_respondent ? respondent_age_ranges : [],
     });
