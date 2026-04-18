@@ -145,7 +145,7 @@ const DELIVERY_BOTH_BUTTON_TITLE = "גם וואטסאפ וגם אימייל";
  * Wording in the message body / סיכום אישור נשאר ב-*_BUTTON_TITLE הארוכים למעלה.
  */
 const WA_REPLY_MODE_BOT = "שאלה במוקד";
-const WA_REPLY_MODE_HUMAN = "נציג אנושי";
+const WA_REPLY_MODE_HUMAN = "הודעה כללית";
 const WA_REPLY_RESP_SHORT = "קצר ולעניין";
 const WA_REPLY_RESP_DETAILED = "מורחב";
 const WA_REPLY_PUB_PUBLISH = "אפשר לפרסם";
@@ -294,6 +294,7 @@ export async function runBotFsm(params: {
         text === "נציג" ||
         text === "אדם" ||
         text === "להשאיר הודעה לנציג אנושי" ||
+        text === "להשאיר הודעה כללית" ||
         text === WA_REPLY_MODE_HUMAN
       ) {
         // Collect the user's message for the human agent.

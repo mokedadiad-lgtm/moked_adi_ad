@@ -16,7 +16,7 @@ const BTN = {
   genderM: "זכר",
   genderF: "נקבה",
   modeBot: "שאלה במוקד",
-  modeHuman: "נציג אנושי",
+  modeHuman: "הודעה כללית",
   bodyAdd: "להוסיף עוד",
   bodyDone: "סיימתי",
   titleAdd: "להוסיף עוד",
