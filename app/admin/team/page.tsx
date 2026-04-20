@@ -4,6 +4,8 @@ import { TeamJoinAdminSection } from "@/components/admin/team-join-admin-section
 import { TeamTable } from "@/components/admin/team-table";
 import { PageHeader } from "@/components/page-header";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminTeamPage() {
   const [profiles, proofreaderTypes, topics, pendingJoin, joinTokens] = await Promise.all([
     getTeamProfiles(),

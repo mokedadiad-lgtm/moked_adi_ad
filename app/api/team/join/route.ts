@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { encryptTeamJoinPassword } from "@/lib/team-join-crypto";
 import { hashTeamJoinToken } from "@/lib/team-join-token";
@@ -143,6 +144,9 @@ export async function POST(req: Request) {
     console.error("[team/join] insert", insErr);
     return NextResponse.json({ ok: false, error: "שמירה נכשלה" }, { status: 500 });
   }
+
+  // Submission is created from a public route, so trigger admin view refresh explicitly.
+  revalidatePath("/admin/team");
 
   return NextResponse.json({ ok: true });
 }

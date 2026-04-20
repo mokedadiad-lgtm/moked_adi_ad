@@ -195,46 +195,27 @@ export function JoinTeamForm({
         <Input id="jt-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="text-right" />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      {kind === "respondent" ? (
         <div className="space-y-2">
-          <Label htmlFor="jt-conc">
-            {kind === "respondent" ? "כמה שאלות תוכל/י לקבל בשבוע?" : "מכסה במקביל"}
-          </Label>
+          <Label htmlFor="jt-conc">כמה שאלות תוכל/י לקבל בשבוע?</Label>
           <Input
             id="jt-conc"
             type="number"
-            min={kind === "respondent" ? 1 : 0}
-            max={kind === "respondent" ? 3 : undefined}
+            min={1}
+            max={3}
             value={concurrency_limit}
             onChange={(e) => {
               const n = parseInt(e.target.value, 10);
               if (Number.isNaN(n)) {
-                setConcurrencyLimit(kind === "respondent" ? 1 : 0);
+                setConcurrencyLimit(1);
                 return;
               }
-              if (kind === "respondent") {
-                setConcurrencyLimit(Math.min(3, Math.max(1, n)));
-              } else {
-                setConcurrencyLimit(Math.max(0, n));
-              }
+              setConcurrencyLimit(Math.min(3, Math.max(1, n)));
             }}
             className="text-right"
           />
         </div>
-        {kind === "proofreader" ? (
-          <div className="space-y-2">
-            <Label htmlFor="jt-cool">ימי צינון</Label>
-            <Input
-              id="jt-cool"
-              type="number"
-              min={0}
-              value={cooldown_days}
-              onChange={(e) => setCooldownDays(parseInt(e.target.value, 10) || 0)}
-              className="text-right"
-            />
-          </div>
-        ) : null}
-      </div>
+      ) : null}
 
       {kind === "respondent" && (
         <>
