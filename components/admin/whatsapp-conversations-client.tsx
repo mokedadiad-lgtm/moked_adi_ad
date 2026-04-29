@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import { getSupabaseBrowser } from "@/lib/supabase/client";
 
 type InboxKind = "bot_intake" | "anonymous" | "team";
 type InboxFilter = "all" | InboxKind;
@@ -237,11 +238,14 @@ const TEAM_ROLE_BADGE_STYLES: Record<string, string> = {
 };
 
 async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const { data: { session } } = await getSupabaseBrowser().auth.getSession();
+  const token = session?.access_token;
   const res = await fetch(path, {
     ...init,
     headers: {
       ...(init?.headers ?? {}),
       "content-type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });
   const data = (await res.json()) as T;
@@ -590,6 +594,8 @@ export function WhatsappConversationsClient({
     setBusy(true);
     setError(null);
     try {
+      const { data: { session } } = await getSupabaseBrowser().auth.getSession();
+      const token = session?.access_token;
       const form = new FormData();
       form.set("conversationId", selectedId);
       form.set("kind", mediaKind);
@@ -597,6 +603,7 @@ export function WhatsappConversationsClient({
       if (mediaCaption.trim()) form.set("caption", mediaCaption.trim());
       const res = await fetch("/api/admin/whatsapp-inbox/send-media", {
         method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: form,
       });
       const payload = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };

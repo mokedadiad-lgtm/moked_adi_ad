@@ -80,7 +80,16 @@ export function ProofreaderDashboard() {
 
     // מנהלים: במצב "כל המשימות" נשתמש ב-API עם service role כדי לא להיתקע על RLS
     if (isAdminOrTechLead && showAllForAdmin) {
-      const res = await fetch("/api/admin/proofreader-lobby-tasks");
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token ?? null;
+      if (!token) {
+        setQuestions([]);
+        setLoading(false);
+        return;
+      }
+      const res = await fetch("/api/admin/proofreader-lobby-tasks", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; tasks?: LobbyQuestion[] };
       setQuestions(data.ok && data.tasks ? data.tasks : []);
       setLoading(false);
@@ -147,6 +156,7 @@ export function ProofreaderDashboard() {
   const handleLogout = async () => {
     const supabase = getSupabaseBrowser();
     await supabase.auth.signOut();
+    await fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
     router.replace("/login");
     router.refresh();
   };

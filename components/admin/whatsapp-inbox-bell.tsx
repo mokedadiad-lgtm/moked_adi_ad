@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { getSupabaseBrowser } from "@/lib/supabase/client";
 
 type InboxKind = "bot_intake" | "anonymous" | "team";
 
@@ -83,10 +84,21 @@ export function WhatsappInboxBell({
   const [summary, setSummary] = useState<UnreadSummary | null>(null);
   const [markAllBusy, setMarkAllBusy] = useState(false);
   const totalUnread = summary?.totalUnread ?? 0;
+  const getAuthHeaders = async (headers?: Record<string, string>) => {
+    const { data: { session } } = await getSupabaseBrowser().auth.getSession();
+    const token = session?.access_token;
+    return {
+      ...(headers ?? {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+  };
 
   const fetchSummary = async () => {
     try {
-      const res = await fetch("/api/admin/whatsapp-inbox/unread-summary", { cache: "no-store" });
+      const res = await fetch("/api/admin/whatsapp-inbox/unread-summary", {
+        cache: "no-store",
+        headers: await getAuthHeaders(),
+      });
       const data = (await res.json()) as UnreadSummary;
       if (data?.ok) setSummary(data);
     } catch {
@@ -98,7 +110,10 @@ export function WhatsappInboxBell({
     if (totalUnread === 0) return;
     setMarkAllBusy(true);
     try {
-      const res = await fetch("/api/admin/whatsapp-inbox/mark-all-read", { method: "POST" });
+      const res = await fetch("/api/admin/whatsapp-inbox/mark-all-read", {
+        method: "POST",
+        headers: await getAuthHeaders(),
+      });
       const data = (await res.json()) as { ok?: boolean };
       if (data?.ok) await fetchSummary();
     } catch {
@@ -112,7 +127,7 @@ export function WhatsappInboxBell({
     try {
       await fetch("/api/admin/whatsapp-inbox/mark-read", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: await getAuthHeaders({ "content-type": "application/json" }),
         body: JSON.stringify({ conversationId: item.conversationId }),
       });
     } catch {

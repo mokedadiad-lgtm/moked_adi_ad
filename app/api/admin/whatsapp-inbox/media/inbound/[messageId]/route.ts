@@ -6,15 +6,21 @@ import {
   uploadWhatsappMedia,
 } from "@/lib/whatsapp/mediaStorage";
 import { downloadMetaMedia, fetchMetaMediaMetadata } from "@/lib/whatsapp/meta";
+import { requireAdminFromRequest } from "@/lib/supabase/admin-route-auth";
 
 function isUuid(v: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ messageId: string }> }
 ) {
+  const auth = await requireAdminFromRequest(req);
+  if (!auth.ok) {
+    return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+  }
+
   const { messageId } = await ctx.params;
   if (!isUuid(messageId)) {
     return NextResponse.json({ ok: false, error: "invalid message id" }, { status: 400 });

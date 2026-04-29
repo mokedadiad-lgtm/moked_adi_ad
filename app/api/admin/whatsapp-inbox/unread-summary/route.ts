@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { formatPhoneForDisplay } from "@/lib/whatsapp/inboxService";
 import { normalizeMetaPhone } from "@/lib/whatsapp/meta";
+import { requireAdminFromRequest } from "@/lib/supabase/admin-route-auth";
 
 type InboxKind = "bot_intake" | "anonymous" | "team";
 
@@ -44,7 +45,12 @@ function buildTeamRoleLabels(profile: {
   return labels;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await requireAdminFromRequest(request);
+  if (!auth.ok) {
+    return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+  }
+
   const supabase = getSupabaseAdmin();
 
   const inboxKinds: InboxKind[] = ["anonymous", "team"];

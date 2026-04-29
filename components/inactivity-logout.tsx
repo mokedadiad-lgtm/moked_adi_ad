@@ -23,6 +23,7 @@ export function InactivityLogout() {
     if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
     if (Date.now() - lastActivity.current >= INACTIVITY_MS) {
       getSupabaseBrowser().auth.signOut().then(() => {
+        fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
         router.replace("/login");
       });
     }

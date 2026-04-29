@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildWhatsappMediaPath, uploadWhatsappMedia } from "@/lib/whatsapp/mediaStorage";
 import { sendWhatsappMediaReply } from "@/lib/whatsapp/inboxService";
+import { requireAdminFromRequest } from "@/lib/supabase/admin-route-auth";
 
 const MAX_FILE_SIZE_BY_KIND = {
   image: 10 * 1024 * 1024,
@@ -32,6 +33,11 @@ function mimeAllowed(kind: "image" | "audio" | "document" | "video", mime: strin
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireAdminFromRequest(req);
+    if (!auth.ok) {
+      return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+    }
+
     const form = await req.formData();
     const conversationId = String(form.get("conversationId") ?? "").trim();
     const kind = normalizeKind(String(form.get("kind") ?? "").trim());

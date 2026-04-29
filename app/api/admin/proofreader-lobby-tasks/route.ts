@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { requireAdminFromRequest } from "@/lib/supabase/admin-route-auth";
 
 interface ProofreaderLobbyTask {
   id: string;
@@ -13,8 +14,13 @@ interface ProofreaderLobbyTask {
 }
 
 /** מחזיר למנהל/ת את כל המשימות בתור ההגהה (עוקף RLS בעזרת service role). */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAdminFromRequest(request);
+    if (!auth.ok) {
+      return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+    }
+
     const supabase = getSupabaseAdmin();
 
     const { data: qaData, error: qaError } = await supabase

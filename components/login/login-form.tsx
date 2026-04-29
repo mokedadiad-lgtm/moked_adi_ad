@@ -128,6 +128,7 @@ export function LoginForm() {
         return;
       }
       await supabase.auth.signOut();
+      await fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
       setNewPasswordSuccess(true);
     } catch {
       setNewPasswordError("אירעה שגיאה. נסו שוב.");
@@ -164,6 +165,28 @@ export function LoginForm() {
       const userId = authData.user?.id;
       if (!userId) {
         setError("שגיאה באימות. נסו שוב.");
+        setLoading(false);
+        return;
+      }
+      const accessToken =
+        authData.session?.access_token ??
+        (await supabase.auth.getSession()).data.session?.access_token ??
+        null;
+      if (!accessToken) {
+        setError("התחברות בוצעה חלקית. נסו שוב.");
+        await supabase.auth.signOut();
+        await fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
+        setLoading(false);
+        return;
+      }
+      const syncRes = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }).catch(() => null);
+      if (!syncRes?.ok) {
+        setError("לא הצלחנו להשלים אימות מאובטח. נסו שוב.");
+        await supabase.auth.signOut();
+        await fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
         setLoading(false);
         return;
       }

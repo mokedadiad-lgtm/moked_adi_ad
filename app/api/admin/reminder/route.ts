@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendReminderToRespondent, sendReminderToProofreaders } from "@/app/admin/actions";
+import { requireAdminFromRequest } from "@/lib/supabase/admin-route-auth";
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAdminFromRequest(request);
+    if (!auth.ok) {
+      return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+    }
+
     const body = await request.json().catch(() => ({}));
     const questionId = typeof body.questionId === "string" ? body.questionId : null;
     const answerId = typeof body.answerId === "string" ? body.answerId : null;

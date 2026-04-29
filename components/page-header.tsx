@@ -1,6 +1,8 @@
 "use client";
 
+import { BrandLogo } from "@/components/brand-logo";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 /**
  * כותרת עמוד אחידה בכל המסכים: גובה אחיד, spacer להמבורגר במובייל, אותו עיצוב.
@@ -35,6 +37,13 @@ export function PageHeader({
         )}
       >
         <div className="h-10 w-10 shrink-0 md:hidden" aria-hidden />
+        <Link
+          href="/"
+          className="hidden shrink-0 items-center justify-center rounded-full border border-slate-200/90 bg-white/90 p-1 shadow-sm md:flex"
+          aria-label="אסק מי פלוס"
+        >
+          <BrandLogo imageClassName="max-w-[42px]" />
+        </Link>
         <div className="min-w-0 flex-1">
           <h1
             className={cn(

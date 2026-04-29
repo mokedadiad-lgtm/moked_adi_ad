@@ -352,6 +352,7 @@ export function AdminNav({ delayedQuestions = [], onNavigate }: AdminNavProps = 
   const handleLogout = async () => {
     const supabase = getSupabaseBrowser();
     await supabase.auth.signOut();
+    await fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
     router.replace("/login");
     router.refresh();
   };

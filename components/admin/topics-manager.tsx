@@ -321,7 +321,7 @@ export function TopicsManager({
               key={topic.id}
               className="rounded-xl border border-card-border bg-slate-50/50 p-4"
             >
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span className="font-medium text-primary">{topic.name_he}</span>
                   {topic.proofreader_type_name_he && (
@@ -330,10 +330,11 @@ export function TopicsManager({
                     </span>
                   )}
                 </div>
-                <div className="flex gap-2">
+                <div className="grid w-full grid-cols-3 gap-2">
                   <Button
                     variant="outline"
                     size="sm"
+                    className="w-full"
                     onClick={() => openAssignModal(topic)}
                   >
                     שיוך משיבים
@@ -341,6 +342,7 @@ export function TopicsManager({
                   <Button
                     variant="outline"
                     size="sm"
+                    className="w-full"
                     onClick={() => {
                       setAddSubTopicTopicId(topic.id);
                       setNewSubTopicName("");
@@ -351,7 +353,7 @@ export function TopicsManager({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="text-red-600"
+                    className="w-full text-red-600"
                     onClick={() => {
                       setDeleteConfirm("topic");
                       setDeleteConfirmId(topic.id);

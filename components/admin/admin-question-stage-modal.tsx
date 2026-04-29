@@ -416,9 +416,14 @@ export function AdminQuestionStageModal({
   const handleReminderRespondent = async () => {
     if (!question) return;
     setReminderPending("respondent");
+    const { data: { session } } = await getSupabaseBrowser().auth.getSession();
+    const token = session?.access_token;
     const res = await fetch("/api/admin/reminder", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({ target: "respondent", questionId: question.id, answerId: question.answer_id ?? undefined }),
     }).catch(() => null);
     const data = await res?.json().catch(() => ({} as any));
@@ -443,9 +448,14 @@ export function AdminQuestionStageModal({
   const handleReminderProofreaders = async () => {
     if (!question) return;
     setReminderPending("proofreader");
+    const { data: { session } } = await getSupabaseBrowser().auth.getSession();
+    const token = session?.access_token;
     const res = await fetch("/api/admin/reminder", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({ target: "proofreader", questionId: question.id, answerId: question.answer_id ?? undefined }),
     }).catch(() => null);
     const data = await res?.json().catch(() => ({} as any));

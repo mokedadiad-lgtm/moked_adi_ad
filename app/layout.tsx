@@ -20,6 +20,8 @@ export const metadata: Metadata = {
     title: "אסק מי פלוס",
   },
   icons: {
+    icon: "/icon.png",
+    shortcut: "/icon.png",
     apple: "/icon-192.png",
   },
   other: {

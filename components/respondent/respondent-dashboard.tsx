@@ -78,7 +78,16 @@ export function RespondentDashboard() {
 
     // אם המשתמש הוא מנהל (עם או בלי תפקיד משיב) ובחר "כל המשימות" – נשתמש ב-API עם service role
     if (isAdminOrTechLead && (!isResp || showAllForAdmin)) {
-      const res = await fetch("/api/admin/respondent-tasks");
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token ?? null;
+      if (!token) {
+        setQuestions([]);
+        setLoading(false);
+        return;
+      }
+      const res = await fetch("/api/admin/respondent-tasks", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         error?: string;
@@ -96,7 +105,16 @@ export function RespondentDashboard() {
     // אם המשתמש הוא גם מנהל וגם משיב אבל בחר "רק המשימות שלי" – נשתמש גם ב-API המנהלי,
     // אבל נסנן רק למשימות ששויכו אליו (assigned_respondent_id).
     if (isAdminOrTechLead && isResp && !showAllForAdmin) {
-      const res = await fetch("/api/admin/respondent-tasks");
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token ?? null;
+      if (!token) {
+        setQuestions([]);
+        setLoading(false);
+        return;
+      }
+      const res = await fetch("/api/admin/respondent-tasks", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         error?: string;
@@ -242,6 +260,7 @@ export function RespondentDashboard() {
   const handleLogout = async () => {
     const supabase = getSupabaseBrowser();
     await supabase.auth.signOut();
+    await fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
     router.replace("/login");
     router.refresh();
   };

@@ -62,6 +62,28 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    const supabase = getSupabaseBrowser();
+    const syncServerSessionCookie = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token ?? null;
+      if (!token || cancelled) return;
+      await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {});
+    };
+    void syncServerSessionCookie();
+    const intervalId = window.setInterval(() => {
+      void syncServerSessionCookie();
+    }, 5 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
     (async () => {
       const supabase = getSupabaseBrowser();
       const { data: { user } } = await supabase.auth.getUser();

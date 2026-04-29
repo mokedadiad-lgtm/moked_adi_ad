@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWhatsappConversationThread } from "@/lib/whatsapp/inboxService";
+import { requireAdminFromRequest } from "@/lib/supabase/admin-route-auth";
 
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireAdminFromRequest(req);
+    if (!auth.ok) {
+      return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+    }
+
     const url = new URL(req.url);
     const conversationId = url.searchParams.get("conversationId");
     const beforeAt = url.searchParams.get("beforeAt");
