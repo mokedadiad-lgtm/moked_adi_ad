@@ -47,6 +47,8 @@ export type BotContext = {
   // When a draft is created, we keep its id here so admin approval won't close
   // a conversation that the user has already restarted.
   activeDraftId?: string;
+  /** After "להוסיף עוד" on the title step, the next text line appends instead of replacing */
+  titleAwaitingContinuation?: boolean;
 };
 
 export type InboundBotEvent = {
@@ -375,10 +377,22 @@ export async function runBotFsm(params: {
     }
 
     case "body_collect": {
-      // If user sends text: append
-      if (text) ctx.bodyParts = [...(ctx.bodyParts ?? []), text];
+      const isAddMoreCmd =
+        buttonId === "BODY_ADD_MORE" ||
+        text === "הוסף עוד" ||
+        text === WA_REPLY_ADD_MORE;
+      const isDoneCmd = buttonId === "BODY_DONE" || text === "סיימתי";
 
-      if (buttonId === "BODY_DONE" || text === "סיימתי") {
+      // "להוסיף עוד" — wait for the next free-text message before re-sending interactive buttons.
+      if (isAddMoreCmd) {
+        return { ok: true, nextState: "body_collect", nextContext: ctx, outbound };
+      }
+
+      if (text && !isDoneCmd) {
+        ctx.bodyParts = [...(ctx.bodyParts ?? []), text];
+      }
+
+      if (isDoneCmd) {
         const content = (ctx.bodyParts ?? []).join("\n").trim();
         if (!content) {
           sendButtons(renderText("body_invalid_or_empty", ctx).trimEnd(), [
@@ -388,22 +402,14 @@ export async function runBotFsm(params: {
           return { ok: true, nextState: "body_collect", nextContext: ctx, outbound };
         }
         ctx.bodyParts = [];
+        ctx.titleAwaitingContinuation = false;
         sendText(renderText("title_collect", ctx).trimEnd());
         // Store content temporarily in ctx.title? we'll keep in ctx as `content` later through next step
         (ctx as any).content = content;
         return { ok: true, nextState: "title_collect", nextContext: ctx, outbound };
       }
 
-      // Add more: just keep state (buttons only — intro was already sent)
-      if (buttonId === "BODY_ADD_MORE" || text === "הוסף עוד" || text === WA_REPLY_ADD_MORE) {
-        sendButtons(WA_INTERACTIVE_BODY_BUTTONS_ONLY, [
-          { id: "BODY_ADD_MORE", title: WA_REPLY_ADD_MORE },
-          { id: "BODY_DONE", title: "סיימתי" },
-        ]);
-        return { ok: true, nextState: "body_collect", nextContext: ctx, outbound };
-      }
-
-      // User typed free text: keep collecting; buttons only (WhatsApp does not persist prior buttons).
+      // After free-text content: send interactive buttons (WhatsApp does not persist prior buttons).
       sendButtons(WA_INTERACTIVE_BODY_BUTTONS_ONLY, [
         { id: "BODY_ADD_MORE", title: WA_REPLY_ADD_MORE },
         { id: "BODY_DONE", title: "סיימתי" },
@@ -412,16 +418,14 @@ export async function runBotFsm(params: {
     }
 
     case "title_collect": {
-      if (text) {
-        // Single title field: replace with latest unless user asks to add more
-        const prevTitle = ctx.title ?? "";
-        const addMore =
-          buttonId === "TITLE_ADD_MORE" || text === "הוסף עוד" || text === WA_REPLY_ADD_MORE;
-        if (addMore && prevTitle) ctx.title = `${prevTitle}\n${text}`.trim();
-        else ctx.title = text;
-      }
+      const isTitleAddMoreCmd =
+        buttonId === "TITLE_ADD_MORE" ||
+        text === "הוסף עוד" ||
+        text === WA_REPLY_ADD_MORE;
+      const isTitleDoneCmd = buttonId === "TITLE_DONE" || text === "סיימתי";
 
-      if (buttonId === "TITLE_DONE" || text === "סיימתי") {
+      if (isTitleDoneCmd) {
+        ctx.titleAwaitingContinuation = false;
         const title = (ctx.title ?? "").trim();
         const content = ((ctx as any).content ?? "").trim() as string;
         if (!content) {
@@ -442,7 +446,22 @@ export async function runBotFsm(params: {
         return { ok: true, nextState: "response_type", nextContext: ctx, outbound };
       }
 
-      // User typed title text; one interactive bubble (WhatsApp does not persist prior buttons).
+      // "להוסיף עוד" — wait for the next title line; don't re-send interactive buttons yet.
+      if (isTitleAddMoreCmd) {
+        ctx.titleAwaitingContinuation = true;
+        return { ok: true, nextState: "title_collect", nextContext: ctx, outbound };
+      }
+
+      if (text) {
+        const prevTitle = (ctx.title ?? "").trim();
+        if (ctx.titleAwaitingContinuation && prevTitle) {
+          ctx.title = `${prevTitle}\n${text}`.trim();
+        } else {
+          ctx.title = text.trim();
+        }
+        ctx.titleAwaitingContinuation = false;
+      }
+
       sendButtons(renderText("title_collect_followup", ctx).trimEnd(), [
         { id: "TITLE_DONE", title: "סיימתי" },
         { id: "TITLE_ADD_MORE", title: WA_REPLY_ADD_MORE },
@@ -759,8 +778,21 @@ export async function runBotFsm(params: {
     }
 
     case "edit_body": {
-      if (text) ctx.bodyParts = [...(ctx.bodyParts ?? []), text];
-      if (buttonId === "BODY_DONE" || text === "סיימתי") {
+      const isAddMoreCmd =
+        buttonId === "BODY_ADD_MORE" ||
+        text === "הוסף עוד" ||
+        text === WA_REPLY_ADD_MORE;
+      const isDoneCmd = buttonId === "BODY_DONE" || text === "סיימתי";
+
+      if (isAddMoreCmd) {
+        return { ok: true, nextState: "edit_body", nextContext: ctx, outbound };
+      }
+
+      if (text && !isDoneCmd) {
+        ctx.bodyParts = [...(ctx.bodyParts ?? []), text];
+      }
+
+      if (isDoneCmd) {
         const content = (ctx.bodyParts ?? []).join("\n").trim();
         if (!content) {
           sendButtons(renderText("body_invalid_or_empty", ctx).trimEnd(), [
@@ -774,13 +806,7 @@ export async function runBotFsm(params: {
         ctx.edit_count = (ctx.edit_count ?? 0) + 1;
         return showConfirm(outbound, ctx);
       }
-      if (buttonId === "BODY_ADD_MORE" || text === "הוסף עוד" || text === WA_REPLY_ADD_MORE) {
-        sendButtons(WA_INTERACTIVE_BODY_BUTTONS_ONLY, [
-          { id: "BODY_ADD_MORE", title: WA_REPLY_ADD_MORE },
-          { id: "BODY_DONE", title: "סיימתי" },
-        ]);
-        return { ok: true, nextState: "edit_body", nextContext: ctx, outbound };
-      }
+
       sendButtons(WA_INTERACTIVE_BODY_BUTTONS_ONLY, [
         { id: "BODY_ADD_MORE", title: WA_REPLY_ADD_MORE },
         { id: "BODY_DONE", title: "סיימתי" },

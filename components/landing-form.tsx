@@ -253,7 +253,7 @@ export function LandingForm() {
                 <p className="mt-0.5 text-xs text-slate-600" dir="rtl">
                   <span className="font-bold">תשובה מקיפה, ארוכה ומורחבת</span>
                   <br />
-                  (תוך כ־4 שבועות){"\u200E"}.
+                  (תוך שבוע/שבועיים){"\u200E"}.
                 </p>
               </div>
             </div>
@@ -275,7 +275,7 @@ export function LandingForm() {
                 <p className="mt-0.5 text-xs text-slate-600" dir="rtl">
                   <span className="font-bold">תשובה קצרה, מתומצתת ומעשית</span>
                   <br />
-                  (תוך כ־3 שבועות){"\u200E"}.
+                  (תוך שבוע/שבועיים){"\u200E"}.
                 </p>
               </div>
             </div>

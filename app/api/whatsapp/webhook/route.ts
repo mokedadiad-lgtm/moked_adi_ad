@@ -463,15 +463,19 @@ export async function POST(request: Request) {
       (msg.message_type === "button" ? "לחיצה על כפתור" : "הודעה חדשה");
     const inboxKindLabel =
       inboxKind === "team" ? "צוות" : inboxKind === "anonymous" ? "אנונימי" : "בוט";
-    void import("@/lib/push/send-admin-inbox-push")
-      .then(({ sendAdminInboxPush }) =>
-        sendAdminInboxPush({
-          title: "דואר נכנס WhatsApp",
-          body: `סוג: ${inboxKindLabel}\n${preview}`,
-          url: "/admin/whatsapp-inbox",
-        })
-      )
-      .catch((e) => console.error("whatsapp webhook: push notify failed", e));
+    // Push: non-bot (human handoff / team) — notify on every inbound message.
+    // Bot intake: push only when a question draft is created (waiting_admin_approval); see below after runBotFsm.
+    if (conversationMode !== "bot") {
+      void import("@/lib/push/send-admin-inbox-push")
+        .then(({ sendAdminInboxPush }) =>
+          sendAdminInboxPush({
+            title: "דואר נכנס WhatsApp",
+            body: `סוג: ${inboxKindLabel}\n${preview}`,
+            url: "/admin/whatsapp-inbox",
+          })
+        )
+        .catch((e) => console.error("whatsapp webhook: push notify failed", e));
+    }
 
     // Bot handling: only for conversation.mode=bot
     if (conversationMode !== "bot") continue;
@@ -515,6 +519,21 @@ export async function POST(request: Request) {
     if (!fsmResult.ok) {
       console.error("WhatsApp bot FSM error:", fsmResult.error);
       continue;
+    }
+
+    // Bot intake: notify admins only when a draft row exists (waiting_admin_approval).
+    if (fsmResult.createdDraft) {
+      const draftTitle = (fsmResult.nextContext?.title ?? "").trim().slice(0, 200);
+      const bodyLine = draftTitle || preview;
+      void import("@/lib/push/send-admin-inbox-push")
+        .then(({ sendAdminInboxPush }) =>
+          sendAdminInboxPush({
+            title: "שאלה מוואטסאפ ממתינה לאישור",
+            body: `סוג: בוט — טיוטה חדשה\n${bodyLine}`,
+            url: "/admin/whatsapp-inbox?tab=drafts",
+          })
+        )
+        .catch((e) => console.error("whatsapp webhook: push notify failed", e));
     }
 
     // Update conversation state/context
