@@ -15,12 +15,14 @@ export function WhatsappInboxShell({
   initialTab = "conversations",
   initialConversationId = null,
   initialUnreadAnchorAt = null,
+  initialDraftId = null,
 }: {
   initialConversations: ConversationsProps["initialConversations"];
   initialDrafts: DraftsProps["initialDrafts"];
   initialTab?: "conversations" | "drafts";
   initialConversationId?: string | null;
   initialUnreadAnchorAt?: string | null;
+  initialDraftId?: string | null;
 }) {
   const [tab, setTab] = useState<"conversations" | "drafts">(initialTab);
 
@@ -74,7 +76,7 @@ export function WhatsappInboxShell({
           initialUnreadAnchorAt={initialUnreadAnchorAt}
         />
       ) : (
-        <WhatsappInboxClient initialDrafts={initialDrafts} />
+        <WhatsappInboxClient initialDrafts={initialDrafts} initialSelectedDraftId={initialDraftId} />
       )}
     </div>
   );

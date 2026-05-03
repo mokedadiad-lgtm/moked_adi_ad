@@ -7,6 +7,7 @@ import { requireAdminFromRequest } from "@/lib/supabase/admin-route-auth";
 type InboxKind = "bot_intake" | "anonymous" | "team";
 
 type UnreadConversationItem = {
+  item_kind: "conversation";
   conversationId: string;
   inbox_kind: InboxKind;
   phone: string;
@@ -17,6 +18,20 @@ type UnreadConversationItem = {
   last_inbound_at: string | null;
   last_text_preview: string;
 };
+
+type UnreadDraftBellItem = {
+  item_kind: "draft";
+  draftId: string;
+  phone: string;
+  formatted_phone: string;
+  display_title: string;
+  role_labels: string[];
+  unread_count: number;
+  last_inbound_at: string | null;
+  last_text_preview: string;
+};
+
+type BellSummaryItem = UnreadConversationItem | UnreadDraftBellItem;
 
 function inboundPreviewLabel(params: { messageType: string | null | undefined; textBody: string | null | undefined }): string {
   const text = params.textBody?.trim();
@@ -55,11 +70,7 @@ export async function GET(request: NextRequest) {
 
   const inboxKinds: InboxKind[] = ["anonymous", "team"];
 
-  const [
-    { data: convs, error },
-    { count: unreadConversationCount, error: countErr },
-    ...byKindCountResults
-  ] = await Promise.all([
+  const bundle = await Promise.all([
     supabase
       .from("whatsapp_conversations")
       .select("id, inbox_kind, phone, unread_count, last_inbound_at")
@@ -79,7 +90,24 @@ export async function GET(request: NextRequest) {
         .eq("inbox_kind", k)
         .gt("unread_count", 0)
     ),
+    supabase
+      .from("question_intake_drafts")
+      .select("id, phone, title, content, created_at")
+      .eq("status", "waiting_admin_approval")
+      .order("created_at", { ascending: false })
+      .limit(40),
+    supabase
+      .from("question_intake_drafts")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "waiting_admin_approval"),
   ]);
+
+  const { data: convs, error } = bundle[0];
+  const { count: unreadConversationCount, error: countErr } = bundle[1];
+  const byKindCountResults = bundle.slice(2, 2 + inboxKinds.length);
+  const kDraft = 2 + inboxKinds.length;
+  const { data: waitingDrafts, error: draftErr } = bundle[kDraft];
+  const { count: draftsWaitingCount, error: draftCountErr } = bundle[kDraft + 1];
 
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
@@ -91,6 +119,12 @@ export async function GET(request: NextRequest) {
     if (r.error) {
       return NextResponse.json({ ok: false, error: r.error.message }, { status: 500 });
     }
+  }
+  if (draftErr) {
+    return NextResponse.json({ ok: false, error: draftErr.message }, { status: 500 });
+  }
+  if (draftCountErr) {
+    return NextResponse.json({ ok: false, error: draftCountErr.message }, { status: 500 });
   }
 
   const itemsBase = (convs ?? []).map((c) => ({
@@ -140,8 +174,10 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // One unit per conversation (not sum of per-message counters).
-  const totalUnread = unreadConversationCount ?? itemsBase.length;
+  const draftsWaiting = typeof draftsWaitingCount === "number" ? draftsWaitingCount : (waitingDrafts ?? []).length;
+
+  // One unit per conversation + one per waiting draft.
+  const totalUnread = (unreadConversationCount ?? itemsBase.length) + draftsWaiting;
 
   const byKind: Record<InboxKind, number> = { bot_intake: 0, anonymous: 0, team: 0 };
   inboxKinds.forEach((k, i) => {
@@ -149,10 +185,101 @@ export async function GET(request: NextRequest) {
     byKind[k] = typeof c === "number" ? c : 0;
   });
 
-  // Previews for bell popover (detail list)
-  const top = itemsBase.slice(0, 10);
-  const previews = await Promise.all(
-    top.map(async (t) => {
+  type ConvBase = {
+    conversationId: string;
+    inbox_kind: InboxKind;
+    phone: string;
+    formatted_phone: string;
+    display_title: string;
+    role_labels: string[];
+    unread_count: number;
+    last_inbound_at: string | null;
+  };
+
+  const convBases: ConvBase[] = itemsBase.map((t) => {
+    const norm = normalizeMetaPhone(t.phone);
+    const team = norm ? teamByPhone.get(norm) : undefined;
+    return {
+      conversationId: t.conversationId,
+      inbox_kind: t.inbox_kind,
+      phone: t.phone,
+      formatted_phone: t.formatted_phone || t.phone,
+      display_title:
+        t.inbox_kind === "team"
+          ? team?.name ?? (t.formatted_phone || t.phone)
+          : (t.formatted_phone || t.phone),
+      role_labels: t.inbox_kind === "team" ? team?.role_labels ?? [] : [],
+      unread_count: t.unread_count > 0 ? 1 : 0,
+      last_inbound_at: t.last_inbound_at,
+    };
+  });
+
+  type MergeRow =
+    | { kind: "conversation"; sortAt: string; base: ConvBase }
+    | {
+        kind: "draft";
+        sortAt: string;
+        draft: {
+          id: string;
+          phone: string;
+          title: string | null;
+          content: string | null;
+          created_at: string;
+        };
+      };
+
+  const draftRows = (waitingDrafts ?? []) as {
+    id: string;
+    phone: string;
+    title: string | null;
+    content: string | null;
+    created_at: string;
+  }[];
+
+  const merged: MergeRow[] = [
+    ...convBases.map((base) => ({
+      kind: "conversation" as const,
+      sortAt: base.last_inbound_at ?? "",
+      base,
+    })),
+    ...draftRows.map((d) => ({
+      kind: "draft" as const,
+      sortAt: d.created_at,
+      draft: d,
+    })),
+  ].sort((a, b) => {
+    const tb = Date.parse(b.sortAt);
+    const ta = Date.parse(a.sortAt);
+    const nb = Number.isFinite(tb) ? tb : 0;
+    const na = Number.isFinite(ta) ? ta : 0;
+    return nb - na;
+  });
+
+  const topMerged = merged.slice(0, 10);
+
+  const items: BellSummaryItem[] = await Promise.all(
+    topMerged.map(async (row): Promise<BellSummaryItem> => {
+      if (row.kind === "draft") {
+        const d = row.draft;
+        const raw = (d.content ?? "").trim();
+        const preview =
+          raw.length > 0
+            ? raw.slice(0, 120)
+            : (d.title?.trim() ?? "") || "טיוטה ממתינה לאישור מנהל";
+        return {
+          item_kind: "draft",
+          draftId: d.id,
+          phone: d.phone,
+          formatted_phone: formatPhoneForDisplay(d.phone),
+          display_title: (d.title?.trim() || formatPhoneForDisplay(d.phone) || d.phone || "טיוטה") as string,
+          role_labels: [],
+          unread_count: 1,
+          last_inbound_at: d.created_at,
+          last_text_preview: preview,
+        };
+      }
+
+      const t = row.base;
       const { data: lastInbound } = await supabase
         .from("whatsapp_inbound_messages")
         .select("text_body, message_type, payload")
@@ -161,24 +288,19 @@ export async function GET(request: NextRequest) {
         .limit(1)
         .maybeSingle();
 
-      const textBody = (lastInbound as any)?.text_body as string | null | undefined;
-      const messageType = (lastInbound as any)?.message_type as string | null | undefined;
+      const textBody = (lastInbound as { text_body?: string | null })?.text_body as string | null | undefined;
+      const messageType = (lastInbound as { message_type?: string | null })?.message_type as string | null | undefined;
 
       const preview = inboundPreviewLabel({ messageType, textBody });
 
       const item: UnreadConversationItem = {
+        item_kind: "conversation",
         conversationId: t.conversationId,
         inbox_kind: t.inbox_kind,
         phone: t.phone,
         formatted_phone: t.formatted_phone || t.phone,
-        display_title:
-          t.inbox_kind === "team"
-            ? teamByPhone.get(normalizeMetaPhone(t.phone) ?? "")?.name ?? (t.formatted_phone || t.phone)
-            : (t.formatted_phone || t.phone),
-        role_labels:
-          t.inbox_kind === "team"
-            ? teamByPhone.get(normalizeMetaPhone(t.phone) ?? "")?.role_labels ?? []
-            : [],
+        display_title: t.display_title,
+        role_labels: t.role_labels,
         unread_count: t.unread_count > 0 ? 1 : 0,
         last_inbound_at: t.last_inbound_at,
         last_text_preview: preview,
@@ -187,13 +309,17 @@ export async function GET(request: NextRequest) {
     })
   );
 
+  const conversationsWithUnread = unreadConversationCount ?? itemsBase.length;
+
   return NextResponse.json({
     ok: true,
     totalUnread,
     byKind,
-    /** סה״כ שיחות עם דואר שלא נקרא; items הוא עד 10 לפי תצוגה */
-    conversationsWithUnread: totalUnread,
-    items: previews,
+    draftsWaitingCount: draftsWaiting,
+    /** סה״כ שיחות עם דואר שלא נקרא */
+    conversationsWithUnread,
+    /** עד 10 פריטים משולבים (שיחות + טיוטות), לפי תאריך אחרון */
+    items,
   });
 }
 

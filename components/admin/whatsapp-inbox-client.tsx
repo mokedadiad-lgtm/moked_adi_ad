@@ -71,10 +71,26 @@ function formatDateTime(iso: string) {
   }
 }
 
-export function WhatsappInboxClient({ initialDrafts }: { initialDrafts: QuestionIntakeDraftItem[] }) {
+function pickInitialDraftId(
+  list: QuestionIntakeDraftItem[],
+  preferredId: string | null | undefined
+): string | null {
+  if (preferredId && list.some((d) => d.id === preferredId)) return preferredId;
+  return list[0]?.id ?? null;
+}
+
+export function WhatsappInboxClient({
+  initialDrafts,
+  initialSelectedDraftId = null,
+}: {
+  initialDrafts: QuestionIntakeDraftItem[];
+  initialSelectedDraftId?: string | null;
+}) {
   const router = useRouter();
   const [drafts, setDrafts] = useState<QuestionIntakeDraftItem[]>(initialDrafts);
-  const [selectedId, setSelectedId] = useState<string | null>(initialDrafts[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(() =>
+    pickInitialDraftId(initialDrafts, initialSelectedDraftId)
+  );
   const [mobileView, setMobileView] = useState<"list" | "details">("list");
   const [details, setDetails] = useState<QuestionIntakeDraftDetails | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -89,10 +105,17 @@ export function WhatsappInboxClient({ initialDrafts }: { initialDrafts: Question
     setDrafts(list);
     setSelectedId((prev) => {
       if (prev && list.some((d) => d.id === prev)) return prev;
-      return list[0]?.id ?? null;
+      return pickInitialDraftId(list, initialSelectedDraftId);
     });
     if (list.length === 0) setDetails(null);
   };
+
+  useEffect(() => {
+    if (!initialSelectedDraftId) return;
+    if (drafts.some((d) => d.id === initialSelectedDraftId)) {
+      setSelectedId(initialSelectedDraftId);
+    }
+  }, [initialSelectedDraftId, drafts]);
 
   const loadDetails = async (id: string) => {
     setLoadingDetails(true);

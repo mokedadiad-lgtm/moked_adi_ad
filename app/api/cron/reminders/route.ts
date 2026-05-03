@@ -118,7 +118,9 @@ async function runReminders() {
     if (wantsWhatsApp(comm)) {
       const phone = prof?.phone?.trim();
       if (phone) {
-        const link = goLink("/respondent");
+        const link = first?.id
+          ? goLink(`/respondent?open=${encodeURIComponent(first.id)}`)
+          : goLink("/respondent");
         const linkSuffix = extractWhatsAppUrlSuffix(link);
         const name = prof?.full_name_he?.trim() ?? "";
         const greetingLegacy = name ? `שלום ${name}` : "שלום";
@@ -154,7 +156,9 @@ async function runReminders() {
     if (wantsWhatsApp(comm)) {
       const phone = prof?.phone?.trim();
       if (phone) {
-        const link = goLink("/proofreader");
+        const link = first?.id
+          ? goLink(`/proofreader?open=${encodeURIComponent(first.id)}`)
+          : goLink("/proofreader");
         const linkSuffix = extractWhatsAppUrlSuffix(link);
         const name = prof?.full_name_he?.trim() ?? "";
         const greetingLegacy = name ? `שלום ${name}` : "שלום";

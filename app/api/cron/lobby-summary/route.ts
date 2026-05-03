@@ -84,6 +84,8 @@ async function runLobbySummary() {
     }
 
     const lobbyUrl = goLink("/proofreader");
+    const { extractWhatsAppUrlSuffix } = await import("@/lib/whatsapp/urlSuffix");
+    const lobbyLinkSuffix = extractWhatsAppUrlSuffix(lobbyUrl);
 
     for (const p of list) {
       if (!wantsWhatsApp(p.communication_preference)) continue;
@@ -94,7 +96,8 @@ async function runLobbySummary() {
         templateKey: "cron_lobby_summary",
         channel_event: "cron_lobby_summary",
         idempotency_key: `lobby_sum_${dayKey}_${pt.id}_${p.id}`,
-        bodyParameters: [String(count), lobbyUrl],
+        bodyParameters: [String(count)],
+        buttonDynamicParam: lobbyLinkSuffix,
         legacyText: text,
       });
       if (wa.ok) totalSent++;

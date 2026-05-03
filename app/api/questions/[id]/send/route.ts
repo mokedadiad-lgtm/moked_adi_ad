@@ -16,6 +16,24 @@ ${downloadUrl}
 הערה: המידע בתשובה הינו כללי ואינו מהווה תחליף לייעוץ מקצועי אישי.`;
 }
 
+/**
+ * Meta URL-button templates use a fixed website prefix in Manager + one dynamic segment {{1}}.
+ * Send only the path + query relative to NEXT_PUBLIC_APP_URL (same origin as downloadUrl).
+ */
+function askerPdfUrlButtonSuffix(absoluteDownloadUrl: string): string {
+  try {
+    const u = new URL(absoluteDownloadUrl);
+    const base = new URL(APP_URL);
+    if (u.origin === base.origin) {
+      const path = u.pathname.replace(/^\//, "");
+      return path + u.search;
+    }
+  } catch {
+    /* ignore */
+  }
+  return absoluteDownloadUrl;
+}
+
 async function sendAskerPdfWhatsApp(
   phone: string,
   downloadUrl: string,
@@ -24,11 +42,14 @@ async function sendAskerPdfWhatsApp(
 ) {
   const { sendMetaWhatsAppInitiatedWithLog } = await import("@/lib/whatsapp/outbound");
   const waText = buildAskerPdfWhatsAppBody(downloadUrl, questionTitle);
+  const buttonSuffix = askerPdfUrlButtonSuffix(downloadUrl);
   return sendMetaWhatsAppInitiatedWithLog(phone, {
     templateKey: "asker_pdf_sent",
     channel_event: "asker_pdf_sent",
     idempotency_key: idempotencyKey,
-    bodyParameters: [downloadUrl],
+    /** Approved template: static body text + CTA button with dynamic URL suffix */
+    bodyParameters: [],
+    buttonDynamicParam: buttonSuffix,
     legacyText: waText,
   });
 }

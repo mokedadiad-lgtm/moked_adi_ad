@@ -259,6 +259,28 @@ export async function runBotFsm(params: {
   };
   const sendText = (t: string) => outbound.push({ kind: "text", text: t });
 
+  const finishTitleCollectIfReady = (): BotFsmResult => {
+    ctx.titleAwaitingContinuation = false;
+    const title = (ctx.title ?? "").trim();
+    const content = ((ctx as any).content ?? "").trim() as string;
+    if (!content) {
+      sendText("חלה תקלה פנימית: חסר תוכן השאלה.\nנא להתחיל מחדש.");
+      return { ok: false, error: "missing_content" };
+    }
+    if (!title) {
+      sendButtons(renderText("title_collect", ctx).trimEnd(), [
+        { id: "TITLE_DONE", title: "סיימתי" },
+        { id: "TITLE_ADD_MORE", title: WA_REPLY_ADD_MORE },
+      ]);
+      return { ok: true, nextState: "title_collect", nextContext: ctx, outbound };
+    }
+    sendButtons(renderText("response_type", ctx).trimEnd(), [
+      { id: "RESP_SHORT", title: WA_REPLY_RESP_SHORT },
+      { id: "RESP_DETAILED", title: WA_REPLY_RESP_DETAILED },
+    ]);
+    return { ok: true, nextState: "response_type", nextContext: ctx, outbound };
+  };
+
   switch (currentState) {
     case "start": {
       // Bot entry: ask gender
@@ -425,28 +447,10 @@ export async function runBotFsm(params: {
       const isTitleDoneCmd = buttonId === "TITLE_DONE" || text === "סיימתי";
 
       if (isTitleDoneCmd) {
-        ctx.titleAwaitingContinuation = false;
-        const title = (ctx.title ?? "").trim();
-        const content = ((ctx as any).content ?? "").trim() as string;
-        if (!content) {
-          sendText("חלה תקלה פנימית: חסר תוכן השאלה.\nנא להתחיל מחדש.");
-          return { ok: false, error: "missing_content" };
-        }
-        if (!title) {
-          sendButtons(renderText("title_collect", ctx).trimEnd(), [
-            { id: "TITLE_DONE", title: "סיימתי" },
-            { id: "TITLE_ADD_MORE", title: WA_REPLY_ADD_MORE },
-          ]);
-          return { ok: true, nextState: "title_collect", nextContext: ctx, outbound };
-        }
-        sendButtons(renderText("response_type", ctx).trimEnd(), [
-          { id: "RESP_SHORT", title: WA_REPLY_RESP_SHORT },
-          { id: "RESP_DETAILED", title: WA_REPLY_RESP_DETAILED },
-        ]);
-        return { ok: true, nextState: "response_type", nextContext: ctx, outbound };
+        return finishTitleCollectIfReady();
       }
 
-      // "להוסיף עוד" — wait for the next title line; don't re-send interactive buttons yet.
+      // "להוסיף עוד" — wait for the next title line (legacy / chat history).
       if (isTitleAddMoreCmd) {
         ctx.titleAwaitingContinuation = true;
         return { ok: true, nextState: "title_collect", nextContext: ctx, outbound };
@@ -460,12 +464,10 @@ export async function runBotFsm(params: {
           ctx.title = text.trim();
         }
         ctx.titleAwaitingContinuation = false;
+        return finishTitleCollectIfReady();
       }
 
-      sendButtons(renderText("title_collect_followup", ctx).trimEnd(), [
-        { id: "TITLE_DONE", title: "סיימתי" },
-        { id: "TITLE_ADD_MORE", title: WA_REPLY_ADD_MORE },
-      ]);
+      sendText(renderText("title_collect", ctx).trimEnd());
       return { ok: true, nextState: "title_collect", nextContext: ctx, outbound };
     }
 

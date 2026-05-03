@@ -186,17 +186,19 @@ export async function sendMetaWhatsAppTemplate(
   if (!to) return { ok: false, error: "Invalid phone number" };
 
   const phoneNumberId = requireEnv("META_PHONE_NUMBER_ID");
-  const components: Array<Record<string, unknown>> = [
-    {
+  const components: Array<Record<string, unknown>> = [];
+
+  if (bodyParameters.length > 0) {
+    components.push({
       type: "body",
       parameters: bodyParameters.map((text) => ({
         type: "text",
         text,
       })),
-    },
-  ];
+    });
+  }
 
-  if (buttonDynamicParam) {
+  if (buttonDynamicParam !== undefined && buttonDynamicParam !== "") {
     components.push({
       type: "button",
       sub_type: "url",
@@ -208,6 +210,10 @@ export async function sendMetaWhatsAppTemplate(
         },
       ],
     });
+  }
+
+  if (components.length === 0) {
+    return { ok: false, error: "Template requires body variables and/or a URL button parameter" };
   }
 
   return postJson(`/${phoneNumberId}/messages`, {

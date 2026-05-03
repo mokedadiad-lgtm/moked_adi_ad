@@ -60,6 +60,42 @@ describe("sendMetaWhatsAppTemplate", () => {
     expect(parsed.template.components[0].type).toBe("body");
   });
 
+  it("sends only URL button when body parameters are empty (static body template)", async () => {
+    process.env.META_ACCESS_TOKEN = "token";
+    process.env.META_PHONE_NUMBER_ID = "123";
+
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ messages: [{ id: "wamid.3" }] }),
+    })) as unknown as typeof fetch;
+    global.fetch = fetchMock;
+
+    const res = await sendMetaWhatsAppTemplate(
+      "+972547405050",
+      "asker_pdf_sent_v2",
+      "he",
+      [],
+      "api/questions/x/pdf/download?for=asker"
+    );
+    expect(res).toEqual({ ok: true, idMessage: "wamid.3" });
+
+    const [, init] = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    const parsed = JSON.parse((init as RequestInit).body as string) as {
+      template: {
+        components: Array<{
+          type: string;
+          sub_type?: string;
+          parameters?: Array<{ text: string }>;
+        }>;
+      };
+    };
+    expect(parsed.template.components).toHaveLength(1);
+    expect(parsed.template.components[0].type).toBe("button");
+    expect(parsed.template.components[0].parameters?.[0]?.text).toBe(
+      "api/questions/x/pdf/download?for=asker"
+    );
+  });
+
   it("adds CTA button component when dynamic param is provided", async () => {
     process.env.META_ACCESS_TOKEN = "token";
     process.env.META_PHONE_NUMBER_ID = "123";

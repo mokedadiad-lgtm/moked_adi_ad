@@ -8,7 +8,8 @@ import { getSupabaseBrowser } from "@/lib/supabase/client";
 
 type InboxKind = "bot_intake" | "anonymous" | "team";
 
-type UnreadSummaryItem = {
+type UnreadConversationSummaryItem = {
+  item_kind: "conversation";
   conversationId: string;
   inbox_kind: InboxKind;
   phone: string;
@@ -20,11 +21,26 @@ type UnreadSummaryItem = {
   last_text_preview: string;
 };
 
+type UnreadDraftSummaryItem = {
+  item_kind: "draft";
+  draftId: string;
+  phone: string;
+  formatted_phone: string;
+  display_title: string;
+  role_labels: string[];
+  unread_count: number;
+  last_inbound_at: string | null;
+  last_text_preview: string;
+};
+
+type UnreadSummaryItem = UnreadConversationSummaryItem | UnreadDraftSummaryItem;
+
 type UnreadSummary = {
   ok: boolean;
   totalUnread: number;
   byKind: Record<InboxKind, number>;
   conversationsWithUnread?: number;
+  draftsWaitingCount?: number;
   items: UnreadSummaryItem[];
 };
 
@@ -71,6 +87,8 @@ const TEAM_ROLE_BADGE_STYLES: Record<string, string> = {
   "עורך לשוני": "bg-emerald-100 text-emerald-800",
 };
 
+const DRAFT_BELL_BADGE_CLASS = "bg-amber-100 text-amber-900";
+
 export function WhatsappInboxBell({
   className,
 }: {
@@ -84,6 +102,8 @@ export function WhatsappInboxBell({
   const [summary, setSummary] = useState<UnreadSummary | null>(null);
   const [markAllBusy, setMarkAllBusy] = useState(false);
   const totalUnread = summary?.totalUnread ?? 0;
+  const conversationsWithUnread = summary?.conversationsWithUnread ?? 0;
+  const draftsWaitingCount = summary?.draftsWaitingCount ?? 0;
   const getAuthHeaders = async (headers?: Record<string, string>) => {
     const { data: { session } } = await getSupabaseBrowser().auth.getSession();
     const token = session?.access_token;
@@ -123,7 +143,7 @@ export function WhatsappInboxBell({
     }
   };
 
-  const openConversationFromBell = async (item: UnreadSummaryItem) => {
+  const openConversationFromBell = async (item: UnreadConversationSummaryItem) => {
     try {
       await fetch("/api/admin/whatsapp-inbox/mark-read", {
         method: "POST",
@@ -136,7 +156,9 @@ export function WhatsappInboxBell({
 
     setSummary((prev) => {
       if (!prev) return prev;
-      const nextItems = prev.items.filter((x) => x.conversationId !== item.conversationId);
+      const nextItems = prev.items.filter(
+        (x) => !(x.item_kind === "conversation" && x.conversationId === item.conversationId)
+      );
       const nextByKind = { ...prev.byKind };
       nextByKind[item.inbox_kind] = Math.max(0, (nextByKind[item.inbox_kind] ?? 0) - 1);
       return {
@@ -156,6 +178,12 @@ export function WhatsappInboxBell({
       conversationId: item.conversationId,
     });
     if (item.last_inbound_at) qs.set("unreadAnchorAt", item.last_inbound_at);
+    router.push(`/admin/whatsapp-inbox?${qs.toString()}`);
+  };
+
+  const openDraftFromBell = (item: UnreadDraftSummaryItem) => {
+    setPopoverOpen(false);
+    const qs = new URLSearchParams({ tab: "drafts", draftId: item.draftId });
     router.push(`/admin/whatsapp-inbox?${qs.toString()}`);
   };
 
@@ -236,60 +264,80 @@ export function WhatsappInboxBell({
               <div
                 ref={popoverPanelRef}
                 role="dialog"
-                aria-label="תקציר הודעות שלא נקראו"
+                aria-label="התראות דואר נכנס וטיוטות"
                 className="relative z-10 w-full max-w-[22rem] max-h-[min(70vh,28rem)] overflow-y-auto rounded-xl border border-border/60 bg-white p-3 shadow-lg"
               >
                 <div className="text-sm font-semibold text-slate-800">דואר נכנס WhatsApp</div>
                 <div className="mt-1 text-sm text-secondary">
                   {totalUnread > 0 ? (
                     <>
-                      יש <span className="font-semibold text-slate-700">{totalUnread}</span> שיחות עם דואר נכנס שלא נקרא
-                      <span className="block text-xs text-slate-500">נספרות רק שיחות שמופיעות ב-Inbox (אנונימי + צוות)</span>
-                      {summary?.conversationsWithUnread != null &&
-                      summary.conversationsWithUnread > (summary.items?.length ?? 0) ? (
-                        <span className="block text-xs text-slate-500">
-                          מוצגות {summary.items?.length ?? 0} מתוך {summary.conversationsWithUnread}
+                      <span className="font-semibold text-slate-700">{totalUnread}</span> התראות פעילות
+                      <span className="mt-1 block text-xs text-slate-500">
+                        {conversationsWithUnread > 0 ? (
+                          <>{conversationsWithUnread} שיחות (אנונימי + צוות) עם הודעות שלא נקראו</>
+                        ) : null}
+                        {conversationsWithUnread > 0 && draftsWaitingCount > 0 ? " · " : null}
+                        {draftsWaitingCount > 0 ? <>{draftsWaitingCount} טיוטות ממתינות לאישור מנהל</> : null}
+                      </span>
+                      {(conversationsWithUnread + draftsWaitingCount) > (summary?.items?.length ?? 0) ? (
+                        <span className="mt-1 block text-xs text-slate-500">
+                          מוצגות {summary?.items?.length ?? 0} פריטים אחרונים מתוך{" "}
+                          {conversationsWithUnread + draftsWaitingCount}
                         </span>
                       ) : null}
                     </>
                   ) : (
-                    "אין שיחות חדשות"
+                    "אין התראות חדשות"
                   )}
                 </div>
 
                 <div className="mt-3 space-y-2">
                   {(summary?.items ?? []).length === 0 ? (
                     <div className="rounded-lg border border-border/50 bg-slate-50 p-3 text-sm text-slate-600">
-                      אין שיחות עם הודעות שלא נקראו
+                      אין פריטים להצגה
                     </div>
                   ) : (
                     summary!.items.map((it) => (
                       <button
-                        key={it.conversationId}
+                        key={it.item_kind === "conversation" ? `c-${it.conversationId}` : `d-${it.draftId}`}
                         type="button"
                         className="w-full rounded-lg border border-border/50 bg-background p-2.5 text-right transition hover:bg-slate-50"
                         onClick={() => {
-                          void openConversationFromBell(it);
+                          if (it.item_kind === "draft") openDraftFromBell(it);
+                          else void openConversationFromBell(it);
                         }}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex min-w-0 items-center gap-1.5">
-                            <span className="text-xs font-semibold text-slate-500">{KIND_LABEL[it.inbox_kind]}</span>
-                            {it.inbox_kind === "team" && it.role_labels.length > 0 ? (
-                              <div className="flex min-w-0 flex-wrap items-center gap-1">
-                                {it.role_labels.map((role) => (
-                                  <span
-                                    key={`${it.conversationId}_${role}`}
-                                    className={[
-                                      "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                                      TEAM_ROLE_BADGE_STYLES[role] ?? "bg-slate-100 text-slate-700",
-                                    ].join(" ")}
-                                  >
-                                    {role}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : null}
+                            {it.item_kind === "draft" ? (
+                              <span
+                                className={[
+                                  "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                                  DRAFT_BELL_BADGE_CLASS,
+                                ].join(" ")}
+                              >
+                                טיוטה ממתינה
+                              </span>
+                            ) : (
+                              <>
+                                <span className="text-xs font-semibold text-slate-500">{KIND_LABEL[it.inbox_kind]}</span>
+                                {it.inbox_kind === "team" && it.role_labels.length > 0 ? (
+                                  <div className="flex min-w-0 flex-wrap items-center gap-1">
+                                    {it.role_labels.map((role) => (
+                                      <span
+                                        key={`${it.conversationId}_${role}`}
+                                        className={[
+                                          "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                                          TEAM_ROLE_BADGE_STYLES[role] ?? "bg-slate-100 text-slate-700",
+                                        ].join(" ")}
+                                      >
+                                        {role}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </>
+                            )}
                           </div>
                           <span className="text-[11px] text-slate-400">{formatTime(it.last_inbound_at)}</span>
                         </div>
@@ -307,7 +355,7 @@ export function WhatsappInboxBell({
                     type="button"
                     variant="outline"
                     className="w-full sm:w-auto"
-                    disabled={markAllBusy || totalUnread === 0}
+                    disabled={markAllBusy || conversationsWithUnread === 0}
                     onClick={() => void markAllRead()}
                   >
                     {markAllBusy ? "מסמן…" : "סמן הכל כנקרא"}
