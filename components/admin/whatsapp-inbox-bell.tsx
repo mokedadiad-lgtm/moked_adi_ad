@@ -355,7 +355,7 @@ export function WhatsappInboxBell({
                     type="button"
                     variant="outline"
                     className="w-full sm:w-auto"
-                    disabled={markAllBusy || conversationsWithUnread === 0}
+                    disabled={markAllBusy || totalUnread === 0}
                     onClick={() => void markAllRead()}
                   >
                     {markAllBusy ? "מסמן…" : "סמן הכל כנקרא"}
