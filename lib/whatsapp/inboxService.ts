@@ -449,6 +449,34 @@ export async function markAllWhatsappConversationsRead(): Promise<{ ok: boolean 
   return { ok: true };
 }
 
+/** Clears unread conversations and removes waiting intake drafts from the bell list. */
+export async function markAllWhatsappInboxItemsRead(): Promise<{ ok: boolean }> {
+  const supabase = getSupabaseAdmin();
+  const nowIso = new Date().toISOString();
+
+  const [convRes, draftsRes] = await Promise.all([
+    supabase
+      .from("whatsapp_conversations")
+      .update({ unread_count: 0, updated_at: nowIso })
+      .gt("unread_count", 0),
+    supabase
+      .from("question_intake_drafts")
+      .update({ status: "cancelled", updated_at: nowIso })
+      .eq("status", "waiting_admin_approval"),
+  ]);
+
+  if (convRes.error) {
+    console.error("markAllWhatsappInboxItemsRead: conversations update failed", convRes.error);
+    return { ok: false };
+  }
+  if (draftsRes.error) {
+    console.error("markAllWhatsappInboxItemsRead: drafts update failed", draftsRes.error);
+    return { ok: false };
+  }
+
+  return { ok: true };
+}
+
 export async function sendWhatsappHumanReply(
   conversationId: string,
   text: string

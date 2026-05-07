@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { markAllWhatsappConversationsRead } from "@/lib/whatsapp/inboxService";
+import { markAllWhatsappInboxItemsRead } from "@/lib/whatsapp/inboxService";
 import { requireAdminFromRequest } from "@/lib/supabase/admin-route-auth";
 
 export async function POST(request: NextRequest) {
@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
     }
 
-    const res = await markAllWhatsappConversationsRead();
+    const res = await markAllWhatsappInboxItemsRead();
     return NextResponse.json({ ok: res.ok });
   } catch (e) {
     const message = (e as Error)?.message ?? "Unexpected error";

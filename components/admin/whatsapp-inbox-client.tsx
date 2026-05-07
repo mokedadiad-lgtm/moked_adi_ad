@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -99,6 +99,8 @@ export function WhatsappInboxClient({
   const [discardPending, setDiscardPending] = useState(false);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const initialSelectionAppliedRef = useRef(false);
+  const detailsRequestSeqRef = useRef(0);
 
   const refreshList = async () => {
     const list = await getWaitingQuestionIntakeDrafts();
@@ -111,20 +113,30 @@ export function WhatsappInboxClient({
   };
 
   useEffect(() => {
-    if (!initialSelectedDraftId) return;
-    if (drafts.some((d) => d.id === initialSelectedDraftId)) {
+    if (initialSelectionAppliedRef.current) return;
+    if (!initialSelectedDraftId) {
+      initialSelectionAppliedRef.current = true;
+      return;
+    }
+    if (!selectedId && drafts.some((d) => d.id === initialSelectedDraftId)) {
       setSelectedId(initialSelectedDraftId);
     }
-  }, [initialSelectedDraftId, drafts]);
+    initialSelectionAppliedRef.current = true;
+  }, [initialSelectedDraftId, drafts, selectedId]);
 
   const loadDetails = async (id: string) => {
+    const requestSeq = ++detailsRequestSeqRef.current;
     setLoadingDetails(true);
     setError(null);
     try {
       const d = await getQuestionIntakeDraftDetails(id);
+      // Ignore stale responses from older requests to prevent UI jumping.
+      if (requestSeq !== detailsRequestSeqRef.current) return;
       setDetails(d);
     } finally {
-      setLoadingDetails(false);
+      if (requestSeq === detailsRequestSeqRef.current) {
+        setLoadingDetails(false);
+      }
     }
   };
 
