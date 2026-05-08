@@ -83,8 +83,8 @@ export async function GET(request: NextRequest) {
 
     const activeQa = qaRows.filter((r) => !r.deleted_at);
     const fromQaIds = new Set(activeQa.map((r) => r.question_id));
-    const fromQa: ProofreaderTask[] = activeQa
-      .map((r) => {
+    const fromQa = activeQa
+      .map((r): ProofreaderTask | null => {
         const q = Array.isArray(r.questions) ? r.questions[0] : r.questions;
         if (!q) return null;
         return {
@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
           proofreader_type_id: r.proofreader_type_id ?? null,
         };
       })
-      .filter((x): x is ProofreaderTask => Boolean(x));
+      .filter((x): x is ProofreaderTask => x !== null);
 
     const legacy = ((qRes.data ?? []) as ProofreaderTask[]).filter((q) => !fromQaIds.has(q.id));
 

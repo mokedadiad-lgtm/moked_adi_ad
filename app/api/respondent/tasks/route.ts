@@ -76,8 +76,8 @@ export async function GET(request: NextRequest) {
     const qaRows = (qaData ?? []) as QaRow[];
     const activeQa = qaRows.filter((r) => !r.deleted_at);
 
-    const fromQa: RespondentTask[] = activeQa
-      .map((r) => {
+    const fromQa = activeQa
+      .map((r): RespondentTask | null => {
         const q = Array.isArray(r.questions) ? r.questions[0] : r.questions;
         if (!q) return null;
         return {
@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
           response_text: r.response_text ?? null,
         };
       })
-      .filter((x): x is RespondentTask => Boolean(x));
+      .filter((x): x is RespondentTask => x !== null);
 
     // Legacy fallback (before question_answers flow)
     const fromQaIds = new Set(activeQa.map((r) => r.question_id));
