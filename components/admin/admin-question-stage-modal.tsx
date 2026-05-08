@@ -163,7 +163,7 @@ export function AdminQuestionStageModal({
       setTopicId(question.topic_id ?? "");
       setSubTopicId(question.sub_topic_id ?? "");
     }
-  }, [question?.id, open, question?.stage, question?.topic_id, question?.sub_topic_id]);
+  }, [question, open]);
 
   useEffect(() => {
     if (open) setTopicsList(initialTopics);

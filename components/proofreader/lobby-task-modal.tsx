@@ -62,14 +62,14 @@ export function LobbyTaskModal({
     setSavedAtLeastOnce(false);
     setDraftSavedToast(false);
     setError(null);
-  }, [open, question?.id, question?.response_text]);
+  }, [open, question]);
 
   useEffect(() => {
     if (!open || !question || !isMine) return;
     // When the proofreader claims a task, ensure editor state is hydrated
     // from the latest stored rich HTML (including headings/footnotes).
     setResponseText(question.response_text ?? "");
-  }, [open, isMine, question?.answer_id, question?.id, question?.response_text]);
+  }, [open, isMine, question]);
 
   useEffect(() => {
     if (showReturnNote && returnNoteRef.current) {

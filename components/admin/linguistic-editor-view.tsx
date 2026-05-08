@@ -58,7 +58,7 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
       return;
     }
     setSelected(updated);
-  }, [questions, selected?.id]);
+  }, [questions, selected?.id, selected]);
 
   const [pdfPending, setPdfPending] = useState<string | null>(null);
   const [mergePending, setMergePending] = useState<string | null>(null);

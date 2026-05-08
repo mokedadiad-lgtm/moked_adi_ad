@@ -59,7 +59,7 @@ export function AnswerModal({
     setSavedAtLeastOnce(false);
     setDraftSavedToast(false);
     setError(null);
-  }, [open, question?.id, question?.answer_id]);
+  }, [open, question]);
 
   useEffect(() => {
     if (!draftSavedToast) return;

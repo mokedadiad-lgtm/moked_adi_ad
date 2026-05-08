@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -104,16 +104,16 @@ export function WhatsappInboxBell({
   const totalUnread = summary?.totalUnread ?? 0;
   const conversationsWithUnread = summary?.conversationsWithUnread ?? 0;
   const draftsWaitingCount = summary?.draftsWaitingCount ?? 0;
-  const getAuthHeaders = async (headers?: Record<string, string>) => {
+  const getAuthHeaders = useCallback(async (headers?: Record<string, string>) => {
     const { data: { session } } = await getSupabaseBrowser().auth.getSession();
     const token = session?.access_token;
     return {
       ...(headers ?? {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
-  };
+  }, []);
 
-  const fetchSummary = async () => {
+  const fetchSummary = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/whatsapp-inbox/unread-summary", {
         cache: "no-store",
@@ -124,7 +124,7 @@ export function WhatsappInboxBell({
     } catch {
       // best-effort
     }
-  };
+  }, [getAuthHeaders]);
 
   const markAllRead = async () => {
     if (totalUnread === 0) return;
@@ -191,7 +191,7 @@ export function WhatsappInboxBell({
     void fetchSummary();
     const t = window.setInterval(() => void fetchSummary(), 12000);
     return () => window.clearInterval(t);
-  }, []);
+  }, [fetchSummary]);
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {

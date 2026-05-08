@@ -170,7 +170,7 @@ export function QuestionDetailsModal({
       setInitialSignature(sig);
       setSaveError(null);
     }
-  }, [open, question?.id, question?.response_text, question?.linguistic_signature]);
+  }, [open, question]);
 
   /** מחזיר true אם השמירה הצליחה או שלא היו שינויים, false אם אירעה שגיאה */
   const handleSaveResponse = async (): Promise<boolean> => {

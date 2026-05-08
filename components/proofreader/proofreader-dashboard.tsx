@@ -195,7 +195,7 @@ export function ProofreaderDashboard() {
     } else if (updated !== selected) {
       setSelected(updated);
     }
-  }, [questions, selected?.id]);
+  }, [questions, selected?.id, selected]);
 
   return (
     <>

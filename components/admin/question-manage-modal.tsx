@@ -158,7 +158,7 @@ export function QuestionManageModal({
       setTopicId(question.topic_id ?? "");
       setSubTopicId(question.sub_topic_id ?? "");
     }
-  }, [question?.id, open, question?.topic_id, question?.sub_topic_id]);
+  }, [question, open]);
 
   if (!question) return null;
 
