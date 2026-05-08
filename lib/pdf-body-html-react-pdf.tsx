@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from "@react-pdf/renderer";
 import { decodeHtmlEntities, sanitizeResponseHtmlForPdf } from "@/lib/response-text";
 
 const rtl = StyleSheet.create({
-  wrap: { direction: "rtl" as const, textAlign: "right" as const, width: "100%" },
+  wrap: { direction: "rtl" as const, textAlign: "justify" as const, width: "100%" },
   p: {
     fontSize: 11,
     lineHeight: 1.7,
@@ -48,7 +48,7 @@ const rtl = StyleSheet.create({
   li: {
     fontSize: 11,
     lineHeight: 1.7,
-    marginBottom: 4,
+    marginBottom: 6,
     paddingRight: 8,
     color: "#2C2C54",
     fontFamily: "Heebo",
@@ -108,7 +108,7 @@ function parseInline(html: string): Segment[] {
 
     if (tn === "br") {
       flush();
-      out.push({ text: "\n", bold: bold > 0, italic: italic > 0 });
+      out.push({ text: "\n\n", bold: bold > 0, italic: italic > 0 });
       continue;
     }
     if (tn === "strong" || tn === "b") {

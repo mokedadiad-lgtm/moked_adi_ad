@@ -451,7 +451,7 @@ export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpe
               )}
             >
               <TableRow className="border-0 !bg-[#A2BFED] odd:!bg-[#A2BFED] even:!bg-[#A2BFED] hover:!bg-[#A2BFED] supports-[backdrop-filter]:!bg-[#A2BFED]/95">
-                <TableHead className="text-xs font-semibold text-white md:text-sm">ID שאלה</TableHead>
+                <TableHead className="text-center text-xs font-semibold text-white md:text-sm">ID שאלה</TableHead>
                 <TableHead className="text-xs font-semibold text-white md:text-sm">שאלה</TableHead>
                 <TableHead className="text-xs font-semibold text-white md:text-sm">סטטוס</TableHead>
                 <TableHead className="text-xs font-semibold text-white md:text-sm">משיב/ה</TableHead>
@@ -480,8 +480,8 @@ export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpe
                     )}
                     onClick={() => openStageModal(q)}
                   >
-                    <TableCell className="font-mono text-[11px] text-secondary md:text-xs">
-                      <div className="flex flex-wrap items-center gap-1.5">
+                    <TableCell className="text-center font-mono text-[11px] text-secondary md:text-xs">
+                      <div className="flex flex-wrap items-center justify-center gap-1.5">
                         <span>{q.short_id ?? `${q.id.slice(0, 8)}…`}</span>
                         {q.answers_count != null && q.answers_count >= 2 && (
                           <Badge variant="secondary" className="text-[10px] font-normal bg-violet-100 text-violet-800 border-violet-200">

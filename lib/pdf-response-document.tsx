@@ -109,18 +109,17 @@ const styles = StyleSheet.create({
   bodyLine: {
     fontSize: 11,
     lineHeight: 1.7,
-    textAlign: "right",
+    textAlign: "justify",
     direction: "rtl",
-    marginBottom: 2,
+    marginBottom: 6,
     color: "#2C2C54",
   },
   bodySingle: {
     fontSize: 11,
     lineHeight: 1.7,
-    textAlign: "right",
+    textAlign: "justify",
     direction: "rtl",
-    whiteSpace: "pre-wrap" as const,
-    wordBreak: "break-word" as const,
+    marginBottom: 6,
     color: "#75759E",
   },
   footnoteSeparatorWrap: {
@@ -238,8 +237,10 @@ export function ResponsePdfDocument({
   linguisticSignature,
 }: ResponsePdfProps) {
   const useStructuredBody = Boolean(bodyHtmlForPdf && String(bodyHtmlForPdf).trim());
-  const bodyLines = bodyPlain ? bodyPlain.split("\n") : [];
+  const bodyLines = bodyPlain ? bodyPlain.split(/\n+/) : [];
   const hasBodyLines = bodyLines.length > 0;
+  const questionLines = questionContent ? questionContent.split(/\n+/) : [];
+  const hasQuestionLines = questionLines.length > 0;
 
   const sigSegments = parseSignatureHtmlSegments(effectiveLinguisticSignature(linguisticSignature));
 
@@ -286,10 +287,19 @@ export function ResponsePdfDocument({
         <View style={styles.content}>
           <Text style={styles.sectionTitle}>שאלה</Text>
           <View style={{ marginBottom: 12 }}>
-            <Text style={styles.bodySingle}>
-              {RTL_MARK}
-              {questionContent || "—"}
-            </Text>
+            {hasQuestionLines ? (
+              questionLines.map((line, i) => (
+                <Text key={i} style={styles.bodySingle}>
+                  {RTL_MARK}
+                  {line.trimEnd() || "\u00A0"}
+                </Text>
+              ))
+            ) : (
+              <Text style={styles.bodySingle}>
+                {RTL_MARK}
+                {questionContent || "—"}
+              </Text>
+            )}
           </View>
 
           <Text style={styles.sectionTitle}>תשובה</Text>
