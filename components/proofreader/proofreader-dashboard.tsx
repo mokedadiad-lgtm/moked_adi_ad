@@ -24,7 +24,9 @@ export interface LobbyQuestion {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("he-IL", {
+  const d = new Date(iso);
+  if (!iso || Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("he-IL", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -96,44 +98,18 @@ export function ProofreaderDashboard() {
       return;
     }
 
-    const [qaRes, qRes] = await Promise.all([
-      supabase
-        .from("question_answers")
-        .select("id, question_id, response_text, assigned_proofreader_id, deleted_at, questions(id, title, content, created_at)")
-        .eq("stage", "in_proofreading_lobby")
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("questions")
-        .select("id, title, content, response_text, created_at, assigned_proofreader_id")
-        .eq("stage", "in_proofreading_lobby")
-        .order("created_at", { ascending: true }),
-    ]);
-
-    const qaRows = (qaRes.data ?? []) as unknown as {
-      id: string;
-      question_id: string;
-      response_text: string | null;
-      assigned_proofreader_id: string | null;
-      deleted_at?: string | null;
-      questions: { id: string; title?: string | null; content: string; created_at: string } | { id: string; title?: string | null; content: string; created_at: string }[] | null;
-    }[];
-    const activeQa = qaRows.filter((r) => !r.deleted_at);
-    const legacyRows = (qRes.data ?? []) as LobbyQuestion[];
-    const fromQaIds = new Set(activeQa.map((r) => r.question_id));
-    const fromQa: LobbyQuestion[] = activeQa.map((r) => {
-      const q = Array.isArray(r.questions) ? r.questions[0] : r.questions;
-      return {
-        id: q?.id ?? r.question_id,
-        answer_id: r.id,
-        title: q?.title ?? null,
-        content: q?.content ?? "",
-        response_text: r.response_text,
-        created_at: q?.created_at ?? "",
-        assigned_proofreader_id: r.assigned_proofreader_id,
-      };
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token ?? null;
+    if (!token) {
+      setQuestions([]);
+      setLoading(false);
+      return;
+    }
+    const res = await fetch("/api/proofreader/tasks", {
+      headers: { Authorization: `Bearer ${token}` },
     });
-    const legacy = legacyRows.filter((q) => !fromQaIds.has(q.id));
-    setQuestions([...fromQa, ...legacy]);
+    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; tasks?: LobbyQuestion[] };
+    setQuestions(data.ok && data.tasks ? data.tasks : []);
     setLoading(false);
   }, [router, showAllForAdmin]);
 
