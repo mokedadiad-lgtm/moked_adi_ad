@@ -295,6 +295,8 @@ export function WhatsappConversationsClient({
   const threadViewportRef = useRef<HTMLDivElement | null>(null);
   const firstUnreadMessageIdRef = useRef<string | null>(null);
   const initialSelectionAppliedRef = useRef(false);
+  const markReadOnNextSelectionRef = useRef(false);
+  const threadRequestSeqRef = useRef(0);
   const mediaFileInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentMenuRef = useRef<HTMLDivElement | null>(null);
   const pinchStartDistanceRef = useRef<number | null>(null);
@@ -415,6 +417,7 @@ export function WhatsappConversationsClient({
   };
 
   const loadThread = async (conversationId: string | null, opts?: { prepend?: boolean; beforeAt?: string | null }) => {
+    const requestSeq = ++threadRequestSeqRef.current;
     if (!conversationId) {
       setThread([]);
       setThreadHasMore(false);
@@ -428,6 +431,7 @@ export function WhatsappConversationsClient({
       `/api/admin/whatsapp-inbox/thread?${params.toString()}`
     );
     if (!payload.ok) throw new Error("טעינת שיחה נכשלה");
+    if (requestSeq !== threadRequestSeqRef.current) return;
     setThread((prev) => (opts?.prepend ? [...payload.thread, ...prev] : payload.thread));
     setThreadHasMore(payload.hasMore);
     setThreadNextBeforeAt(payload.nextBeforeAt);
@@ -448,13 +452,20 @@ export function WhatsappConversationsClient({
   useEffect(() => {
     setInitialScrollDone(false);
     firstUnreadMessageIdRef.current = null;
+    // Prevent old chat from flashing while the new chat loads.
+    setThread([]);
+    setThreadHasMore(false);
+    setThreadNextBeforeAt(null);
     setThreadLoading(true);
     const currentId = selectedId;
     void loadThread(currentId)
       .catch((e) => setError((e as Error).message))
       .finally(() => {
         setThreadLoading(false);
-        if (currentId) void markConversationReadSilently(currentId);
+        if (currentId && markReadOnNextSelectionRef.current) {
+          markReadOnNextSelectionRef.current = false;
+          void markConversationReadSilently(currentId);
+        }
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
@@ -656,6 +667,13 @@ export function WhatsappConversationsClient({
     }
   };
 
+  const onComposeFieldActivate = () => {
+    if (!selectedId || busy) return;
+    if (isOutside24h) {
+      void onSendOpeningTemplate();
+    }
+  };
+
   const onLoadOlder = async () => {
     if (!selectedId || !threadHasMore || !threadNextBeforeAt) return;
     const vp = threadViewportRef.current;
@@ -691,6 +709,8 @@ export function WhatsappConversationsClient({
       return;
     }
 
+    // Mark read only on explicit user chat open, not on automatic selection.
+    markReadOnNextSelectionRef.current = true;
     setSelectedId(conversationId);
   };
 
@@ -1100,8 +1120,11 @@ export function WhatsappConversationsClient({
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
                   className="min-h-[70px] pe-14"
-                  placeholder="כתוב/כתבי תשובה לפונה..."
-                  disabled={!canSendFreeText}
+                  placeholder={isOutside24h ? "לחצו כאן לשליחת הודעת פתיחה יזומה" : "כתוב/כתבי תשובה לפונה..."}
+                  disabled={!selectedId || busy}
+                  readOnly={!canSendFreeText}
+                  onClick={onComposeFieldActivate}
+                  onFocus={onComposeFieldActivate}
                 />
                 <Button
                   type="button"
