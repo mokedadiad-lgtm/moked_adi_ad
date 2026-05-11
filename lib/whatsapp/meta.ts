@@ -212,19 +212,17 @@ export async function sendMetaWhatsAppTemplate(
     });
   }
 
-  if (components.length === 0) {
-    return { ok: false, error: "Template requires body variables and/or a URL button parameter" };
-  }
+  const template = {
+    name: templateName,
+    language: { code: languageCode },
+    ...(components.length > 0 ? { components } : {}),
+  };
 
   return postJson(`/${phoneNumberId}/messages`, {
     messaging_product: "whatsapp",
     to,
     type: "template",
-    template: {
-      name: templateName,
-      language: { code: languageCode },
-      components,
-    },
+    template,
   });
 }
 
