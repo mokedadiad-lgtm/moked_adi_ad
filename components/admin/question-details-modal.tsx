@@ -72,6 +72,14 @@ function IconFilePlus({ className }: { className?: string }) {
     </svg>
   );
 }
+function IconSend({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="m22 2-7 20-4-9-9-4Z" />
+      <path d="M22 2 11 13" />
+    </svg>
+  );
+}
 
 interface QuestionDetailsModalProps {
   question: QuestionRow | null;
@@ -234,6 +242,11 @@ export function QuestionDetailsModal({
     setSaveError(error.message);
     return false;
   };
+
+  const canShowSendInModal =
+    !!onSendAndArchive &&
+    !!question?.pdf_url &&
+    (question.stage === "in_linguistic_review" || question.stage === "ready_for_sending");
 
   const handleCreatePdfClick = async () => {
     if (!question || !onCreatePdf) return;
@@ -489,6 +502,19 @@ export function QuestionDetailsModal({
                       <IconFilePlus className="h-4 w-4 shrink-0" />
                       {pdfPending ? "מייצר…" : "יצירת PDF מחדש"}
                     </Button>
+                    {canShowSendInModal && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="gap-2 bg-green-600 text-white hover:bg-green-700"
+                        title="שליחה לשואל (מייל/וואטסאפ לפי העדפה) וארכוב"
+                        onClick={() => onSendAndArchive?.(question)}
+                        disabled={!!sendPending || needsMerge}
+                      >
+                        <IconSend className="h-4 w-4 shrink-0" />
+                        {sendPending ? "שולח…" : "שליחה"}
+                      </Button>
+                    )}
                   </>
                 ) : (
                   <Button

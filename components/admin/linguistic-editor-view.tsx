@@ -22,6 +22,59 @@ function truncate(text: string, max = 80): string {
   return t.length <= max ? t : t.slice(0, max) + "…";
 }
 
+function deliveryPreference(q: QuestionRow): "email" | "whatsapp" | "both" {
+  const p = q.asker_delivery_preference;
+  if (p === "whatsapp" || p === "both") return p;
+  return "email";
+}
+
+/** התאמה ל־POST /api/questions/[id]/send — מייל/טלפון לפי asker_delivery_preference */
+function sendPrecheckMessage(q: QuestionRow): string | null {
+  const pref = deliveryPreference(q);
+  const email = q.asker_email?.trim() ?? "";
+  const phone = (q.asker_phone ?? "").trim();
+  if (pref === "email") {
+    if (!email) return "לא הוזנה כתובת מייל לשואל. לא ניתן לשלוח.";
+  } else if (pref === "whatsapp") {
+    if (!phone) return "לא הוזן מספר וואטסאפ לשואל. לא ניתן לשלוח.";
+  } else {
+    if (!email) return "לא הוזנה כתובת מייל (נדרש לעדפת ״גם וגם״). לא ניתן לשלוח.";
+    if (!phone) return "לא הוזן מספר וואטסאפ (נדרש לעדפת ״גם וגם״). לא ניתן לשלוח.";
+  }
+  return null;
+}
+
+function SendConfirmDescription({ q }: { q: QuestionRow }) {
+  const pref = deliveryPreference(q);
+  if (pref === "email") {
+    return (
+      <>
+        לשלוח את התשובה (קישור ל-PDF) למייל{" "}
+        <span dir="ltr" className="font-mono text-xs">{q.asker_email}</span>
+        {" "}ולעבור לארכיון?
+      </>
+    );
+  }
+  if (pref === "whatsapp") {
+    return (
+      <>
+        לשלוח את התשובה (קישור ל-PDF) בוואטסאפ למספר{" "}
+        <span dir="ltr" className="font-mono text-xs">{q.asker_phone}</span>
+        {" "}ולעבור לארכיון?
+      </>
+    );
+  }
+  return (
+    <>
+      לשלוח את התשובה בוואטסאפ (למספר{" "}
+      <span dir="ltr" className="font-mono text-xs">{q.asker_phone}</span>
+      ) ובמייל (
+      <span dir="ltr" className="font-mono text-xs">{q.asker_email}</span>
+      ) ולעבור לארכיון?
+    </>
+  );
+}
+
 interface LinguisticEditorViewProps {
   questions: QuestionRow[];
 }
@@ -121,8 +174,13 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
   };
 
   const handleSendAndArchive = (q: QuestionRow) => {
-    if (!q.asker_email?.trim()) {
-      alert("לא הוזן מייל לשואל. לא ניתן לשלוח.");
+    if (!q.pdf_url?.trim()) {
+      alert("חסר קובץ PDF. יש ליצור PDF לפני שליחה.");
+      return;
+    }
+    const pre = sendPrecheckMessage(q);
+    if (pre) {
+      alert(pre);
       return;
     }
     setSendConfirmQuestion(q);
@@ -140,6 +198,8 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
         alert(data?.error ?? "שגיאה בשליחה");
         return;
       }
+      setModalOpen(false);
+      afterModalClose(() => setSelected(null));
       router.refresh();
     } catch {
       alert("שגיאה בחיבור לשרת. נסה שוב.");
@@ -216,9 +276,7 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
             <DialogTitle className="text-center">אישור שליחה וארכוב</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-slate-600 text-center">
-            {sendConfirmQuestion && (
-              <>לשלוח את התשובה למייל {sendConfirmQuestion.asker_email} ולעבור לארכיון?</>
-            )}
+            {sendConfirmQuestion && <SendConfirmDescription q={sendConfirmQuestion} />}
           </p>
           <DialogFooter className="flex justify-center gap-2 mt-4">
             <Button variant="outline" onClick={() => setSendConfirmQuestion(null)}>ביטול</Button>

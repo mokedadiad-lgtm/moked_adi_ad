@@ -7,19 +7,19 @@ import type { QuestionRow } from "@/lib/types";
 import { Suspense } from "react";
 
 const SELECT_WITH_SIGNATURE =
-  "id, short_id, stage, title, content, created_at, asker_email, asker_age, asker_gender, response_type, publication_consent, assigned_respondent_id, response_text, proofreader_note, pdf_url, pdf_generated_at, linguistic_signature, topic_id, sub_topic_id, topics(name_he), sub_topics(name_he)";
+  "id, short_id, stage, title, content, created_at, asker_email, asker_phone, asker_delivery_preference, asker_age, asker_gender, response_type, publication_consent, assigned_respondent_id, response_text, proofreader_note, pdf_url, pdf_generated_at, linguistic_signature, topic_id, sub_topic_id, topics(name_he), sub_topics(name_he)";
 
 const SELECT_NO_SIGNATURE =
-  "id, short_id, stage, title, content, created_at, asker_email, asker_age, asker_gender, response_type, publication_consent, assigned_respondent_id, response_text, proofreader_note, pdf_url, pdf_generated_at, topic_id, sub_topic_id, topics(name_he), sub_topics(name_he)";
+  "id, short_id, stage, title, content, created_at, asker_email, asker_phone, asker_delivery_preference, asker_age, asker_gender, response_type, publication_consent, assigned_respondent_id, response_text, proofreader_note, pdf_url, pdf_generated_at, topic_id, sub_topic_id, topics(name_he), sub_topics(name_he)";
 
 const QA_SELECT =
   "id, question_id, topic_id, sub_topic_id, assigned_respondent_id, stage, response_text, proofreader_note, pdf_url, pdf_generated_at, deleted_at";
 
 const QA_QUESTIONS_INNER_WITH_SIG =
-  "questions!inner(id, short_id, title, content, created_at, asker_email, asker_age, asker_gender, response_type, publication_consent, deleted_at, answers_merged_at, response_text, pdf_url, pdf_generated_at, linguistic_signature)";
+  "questions!inner(id, short_id, title, content, created_at, asker_email, asker_phone, asker_delivery_preference, asker_age, asker_gender, response_type, publication_consent, deleted_at, answers_merged_at, response_text, pdf_url, pdf_generated_at, linguistic_signature)";
 
 const QA_QUESTIONS_INNER_NO_SIG =
-  "questions!inner(id, short_id, title, content, created_at, asker_email, asker_age, asker_gender, response_type, publication_consent, deleted_at, answers_merged_at, response_text, pdf_url, pdf_generated_at)";
+  "questions!inner(id, short_id, title, content, created_at, asker_email, asker_phone, asker_delivery_preference, asker_age, asker_gender, response_type, publication_consent, deleted_at, answers_merged_at, response_text, pdf_url, pdf_generated_at)";
 
 function isMissingLinguisticSignatureError(err: { message?: string } | null | undefined): boolean {
   return (err?.message ?? "").toLowerCase().includes("linguistic_signature");
@@ -63,7 +63,7 @@ async function fetchLinguisticQuestionRows(includeSignature: boolean): Promise<Q
     pdf_url?: string | null;
     pdf_generated_at?: string | null;
     deleted_at?: string | null;
-    questions?: { id: string; short_id?: string | null; title?: string | null; content: string; created_at: string; asker_email?: string | null; asker_age?: string | null; asker_gender?: string | null; response_type?: string | null; publication_consent?: string | null; deleted_at?: string | null } | { id: string; short_id?: string | null; title?: string | null; content: string; created_at: string; asker_email?: string | null; asker_age?: string | null; asker_gender?: string | null; response_type?: string | null; publication_consent?: string | null; deleted_at?: string | null }[] | null;
+    questions?: { id: string; short_id?: string | null; title?: string | null; content: string; created_at: string; asker_email?: string | null; asker_phone?: string | null; asker_delivery_preference?: string | null; asker_age?: string | null; asker_gender?: string | null; response_type?: string | null; publication_consent?: string | null; deleted_at?: string | null } | { id: string; short_id?: string | null; title?: string | null; content: string; created_at: string; asker_email?: string | null; asker_phone?: string | null; asker_delivery_preference?: string | null; asker_age?: string | null; asker_gender?: string | null; response_type?: string | null; publication_consent?: string | null; deleted_at?: string | null }[] | null;
     topics?: TopicRef;
     sub_topics?: TopicRef;
   }[] = [];
@@ -158,6 +158,11 @@ async function fetchLinguisticQuestionRows(includeSignature: boolean): Promise<Q
       content: q?.content ?? "",
       created_at: q?.created_at ?? "",
       asker_email: q?.asker_email ?? null,
+      asker_phone: (q as { asker_phone?: string | null } | undefined)?.asker_phone ?? null,
+      asker_delivery_preference: (() => {
+        const raw = (q as { asker_delivery_preference?: string | null } | undefined)?.asker_delivery_preference;
+        return raw === "email" || raw === "whatsapp" || raw === "both" ? raw : null;
+      })(),
       asker_age: q?.asker_age ?? null,
       asker_gender: (q?.asker_gender === "M" || q?.asker_gender === "F" ? q.asker_gender : null) as "M" | "F" | null,
       response_type: (q?.response_type === "short" || q?.response_type === "detailed" ? q.response_type : null) as QuestionRow["response_type"],
@@ -190,6 +195,11 @@ async function fetchLinguisticQuestionRows(includeSignature: boolean): Promise<Q
     content: r.content,
     created_at: r.created_at,
     asker_email: r.asker_email ?? null,
+    asker_phone: (r as { asker_phone?: string | null }).asker_phone ?? null,
+    asker_delivery_preference: (() => {
+      const raw = (r as { asker_delivery_preference?: string | null }).asker_delivery_preference;
+      return raw === "email" || raw === "whatsapp" || raw === "both" ? raw : null;
+    })(),
     asker_age: r.asker_age,
     asker_gender: r.asker_gender ?? null,
     response_type: r.response_type,

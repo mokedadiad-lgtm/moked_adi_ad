@@ -154,6 +154,7 @@ export function AdminQuestionStageModal({
   const [addRespondentMessage, setAddRespondentMessage] = useState("");
   /** רשימת שיבוצים שמחכים לשליחה (משיב + נושא) – נשלחים together בלחיצה אחת */
   const [assignmentSlots, setAssignmentSlots] = useState<{ topicId: string; subTopicId: string; respondentId: string; message: string }[]>([]);
+  const [questionCopied, setQuestionCopied] = useState(false);
   const selectedTopic = topicsList.find((t) => t.id === topicId);
   const subTopics = selectedTopic?.sub_topics ?? [];
 
@@ -174,6 +175,7 @@ export function AdminQuestionStageModal({
       setChangeStatusModalOpen(false);
       setAssignTopicModalOpen(false);
       setAssignmentSlots([]);
+      setQuestionCopied(false);
     }
   }, [open]);
 
@@ -506,6 +508,26 @@ export function AdminQuestionStageModal({
     }
   };
 
+  const copyWaitingAssignmentQuestion = useCallback(async () => {
+    if (!question || question.stage !== "waiting_assignment") return;
+    const parts: string[] = [];
+    if (question.short_id?.trim()) parts.push(`מזהה: ${question.short_id.trim()}`);
+    if (question.title?.trim()) parts.push(question.title.trim());
+    parts.push(question.content.trim());
+    const text = parts.join("\n\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setQuestionCopied(true);
+      window.setTimeout(() => setQuestionCopied(false), 2000);
+    } catch {
+      setFeedback({
+        title: "העתקה נכשלה",
+        message: "הדפדפן חסם גישה ללוח. נסו לסמן את הטקסט ידנית או לאשר הרשאה להעתקה.",
+        tone: "error",
+      });
+    }
+  }, [question]);
+
   const handleDelete = async () => {
     if (!question) return;
     setDeletePending(true);
@@ -564,7 +586,20 @@ export function AdminQuestionStageModal({
             {question.title && (
               <p className="mb-1 text-right text-sm font-medium text-slate-700">{question.title}</p>
             )}
-            <p className="mb-1 text-right text-xs font-medium text-slate-500">השאלה</p>
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-right text-xs font-medium text-slate-500">השאלה</p>
+              {question.stage === "waiting_assignment" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 shrink-0 px-2 text-xs"
+                  onClick={() => void copyWaitingAssignmentQuestion()}
+                >
+                  {questionCopied ? "הועתק" : "העתק שאלה"}
+                </Button>
+              ) : null}
+            </div>
             <div className="rounded border border-slate-200 bg-white p-1.5">
               <div className="whitespace-pre-wrap text-right text-xs text-slate-800" dir="rtl">
                 {question.content}
@@ -961,10 +996,35 @@ export function AdminQuestionStageModal({
               )}
 
               {question.stage === "in_linguistic_review" && (
-                <div className="flex justify-center text-right">
+                <div className="flex flex-wrap justify-center gap-2 text-right">
                   <Button variant="default" size="sm" className="bg-primary" asChild title="גישה לשאלה">
                     <Link href={`/admin/linguistic?open=${question.id}`}>גישה לשאלה</Link>
                   </Button>
+                  {question.pdf_url ? (
+                    <>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="bg-primary"
+                        onClick={() => setShowPdfView(true)}
+                        title="צפייה במסמך PDF"
+                      >
+                        צפייה ב-PDF
+                      </Button>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="bg-primary"
+                        onClick={() => setSendConfirmOpen(true)}
+                        disabled={sendPending}
+                        title="שליחה לשואל (מייל/וואטסאפ לפי העדפה) וארכוב"
+                      >
+                        {sendPending ? "שולח…" : "שליחה"}
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="w-full text-center text-sm text-amber-700">יש ליצור PDF קודם (מעמוד עריכה לשונית)</p>
+                  )}
                 </div>
               )}
 

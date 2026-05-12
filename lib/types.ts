@@ -50,6 +50,10 @@ export interface QuestionRow {
   created_at: string;
   sent_at?: string | null;
   asker_email?: string | null;
+  /** מספר וואטסאפ לשואל — לשליחת PDF לפי asker_delivery_preference */
+  asker_phone?: string | null;
+  /** ערוץ משלוח התשובה לשואל: מייל, וואטסאפ, או שניהם */
+  asker_delivery_preference?: "email" | "whatsapp" | "both" | null;
   asker_age: string | null;
   asker_gender?: "M" | "F" | null;
   response_type: "short" | "detailed" | null;
