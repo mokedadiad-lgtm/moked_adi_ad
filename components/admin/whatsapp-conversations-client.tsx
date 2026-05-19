@@ -850,31 +850,39 @@ export function WhatsappConversationsClient({
                       type="button"
                       onClick={() => void openConversation(c.id)}
                       className={[
-                        "w-full rounded-lg border p-3 text-right transition hover:shadow-sm",
+                        "w-full rounded-lg border p-2.5 text-right transition hover:shadow-sm",
                         isSelected ? "" : "hover:bg-slate-50",
                         isSelected ? `${style.selectedBorder} ${style.selectedBg}` : style.border,
                       ].join(" ")}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className={`h-2.5 w-2.5 rounded-full ${style.dot}`} aria-hidden />
-                          <span className="text-xs font-semibold text-slate-700">{KIND_LABEL[c.inbox_kind]}</span>
-                        </div>
-                      </div>
-
-                      <div className="mt-1 flex flex-row-reverse items-center justify-between gap-2">
-                        <div className="min-w-0 flex-1 text-right">
-                          <div dir="ltr" className="flex min-w-0 items-baseline justify-end gap-1">
-                            {c.inbox_kind === "team" ? (
-                              <span dir="ltr" className="shrink-0 text-[11px] font-normal text-slate-500">({c.formatted_phone})</span>
-                            ) : null}
-                            <span className="truncate text-right text-base font-bold" dir="rtl">
-                              {c.inbox_kind === "team" ? (c.display_title || c.formatted_phone || c.phone).split(" · ")[0] : c.display_title || c.formatted_phone || c.phone}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1 overflow-hidden pe-1 text-right">
+                          <div className="flex w-full flex-wrap items-baseline justify-start gap-x-1.5 gap-y-0.5" dir="rtl">
+                            <p
+                              className="min-w-0 flex-1 text-right text-base font-bold leading-snug text-slate-900 break-words text-pretty"
+                              title={
+                                c.inbox_kind === "team"
+                                  ? (c.display_title || c.formatted_phone || c.phone).split(" · ")[0]
+                                  : c.display_title || c.formatted_phone || c.phone
+                              }
+                            >
+                              {c.inbox_kind === "team"
+                                ? (c.display_title || c.formatted_phone || c.phone).split(" · ")[0]
+                                : c.display_title || c.formatted_phone || c.phone}
+                            </p>
+                            <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-slate-600">
+                              <span className={`h-2 w-2 rounded-full ${style.dot}`} aria-hidden />
+                              {KIND_LABEL[c.inbox_kind]}
                             </span>
                           </div>
                           {c.inbox_kind === "team" ? (
-                            <div className="mt-1 flex items-center justify-between">
-                              <div className="flex flex-wrap items-center gap-1">
+                            <p className="mt-0.5 text-[11px] font-normal text-slate-500" dir="ltr">
+                              {c.formatted_phone}
+                            </p>
+                          ) : null}
+                          {c.inbox_kind === "team" ? (
+                            <div className="mt-0.5 flex items-center justify-between gap-2">
+                              <div className="flex min-w-0 flex-wrap items-center gap-1">
                                   {c.role_labels.length > 0
                                     ? c.role_labels.map((role) => (
                                         <span

@@ -154,13 +154,13 @@ export async function notifyLinguisticNewQuestion(questionId: string): Promise<{
     const { data: profiles } = await supabase
       .from("profiles")
       .select("id, full_name_he, communication_preference, phone")
-      .or("is_linguistic_editor.eq.true,is_admin.eq.true,is_technical_lead.eq.true");
+      .eq("is_linguistic_editor", true);
 
     const matched = (profiles ?? []).filter(
       (p) => wantsEmail(p.communication_preference) || wantsWhatsApp(p.communication_preference)
     );
     if (matched.length === 0) {
-      console.warn("[notifyLinguisticNewQuestion] אין עורכים/מנהלים עם ערוץ התראה מוגדר. סה״כ פרופילים:", (profiles ?? []).length);
+      console.warn("[notifyLinguisticNewQuestion] אין עורכים לשוניים עם ערוץ התראה מוגדר. סה״כ פרופילים:", (profiles ?? []).length);
       return { ok: true };
     }
 

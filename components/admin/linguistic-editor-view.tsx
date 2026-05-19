@@ -105,13 +105,25 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
   useEffect(() => {
     if (!selected?.id || questions.length === 0) return;
     const updated = questions.find((q) => q.id === selected.id);
-    if (!updated || updated === selected) return;
-    if (selected.pdf_url && !updated.pdf_url) {
-      setSelected((prev) => (prev?.id === updated.id ? { ...updated, pdf_url: prev.pdf_url, pdf_generated_at: prev.pdf_generated_at ?? null } : prev));
-      return;
-    }
-    setSelected(updated);
-  }, [questions, selected?.id, selected]);
+    if (!updated) return;
+    setSelected((prev) => {
+      if (!prev || prev.id !== updated.id) return prev;
+      if (prev.pdf_url && !updated.pdf_url) {
+        return { ...updated, pdf_url: prev.pdf_url, pdf_generated_at: prev.pdf_generated_at ?? null };
+      }
+      if (
+        prev.pdf_url === updated.pdf_url &&
+        prev.pdf_generated_at === updated.pdf_generated_at &&
+        prev.response_text === updated.response_text &&
+        prev.content === updated.content &&
+        prev.linguistic_signature === updated.linguistic_signature &&
+        prev.stage === updated.stage
+      ) {
+        return prev;
+      }
+      return { ...prev, ...updated };
+    });
+  }, [questions, selected?.id]);
 
   const [pdfPending, setPdfPending] = useState<string | null>(null);
   const [mergePending, setMergePending] = useState<string | null>(null);
@@ -140,7 +152,7 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
             ? { ...prev, pdf_url: data.pdf_url!, pdf_generated_at: data.pdf_generated_at ?? null }
             : prev
         );
-        router.refresh();
+        // לא קוראים router.refresh() כאן — גורם ל-Suspense לאפס state ולקרוס במודל; העדכון המקומי מספיק
       }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
@@ -292,7 +304,12 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
         open={modalOpen}
         onOpenChange={(open) => {
           setModalOpen(open);
-          if (!open) afterModalClose(() => setSelected(null));
+          if (!open) {
+            afterModalClose(() => {
+              setSelected(null);
+              router.refresh();
+            });
+          }
         }}
         onSaveSuccess={handleSaveSuccess}
         onResponseSaved={(payload) => {
@@ -302,12 +319,21 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
                   ...prev,
                   response_text: payload.responseText,
                   linguistic_signature: payload.linguisticSignature,
+                  ...(payload.questionContent !== undefined
+                    ? { content: payload.questionContent }
+                    : {}),
                 }
               : prev
           );
         }}
-        onSaveResponse={async (questionId, answerId, responseText, linguisticSignature) => {
-          const r = await saveLinguisticResponse(questionId, answerId, responseText, linguisticSignature);
+        onSaveResponse={async (questionId, answerId, responseText, linguisticSignature, questionContent) => {
+          const r = await saveLinguisticResponse(
+            questionId,
+            answerId,
+            responseText,
+            linguisticSignature,
+            questionContent
+          );
           return r.ok ? { ok: true } : { ok: false, error: r.error };
         }}
         showPdfActions

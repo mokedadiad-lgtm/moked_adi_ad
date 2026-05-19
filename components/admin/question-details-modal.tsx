@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import { SignatureRichField } from "@/components/admin/signature-rich-field";
 import { effectiveLinguisticSignature, sanitizeSignatureHtml } from "@/lib/response-text";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
@@ -101,7 +102,8 @@ interface QuestionDetailsModalProps {
     questionId: string,
     answerId: string | null,
     responseText: string,
-    linguisticSignature?: string | null
+    linguisticSignature?: string | null,
+    questionContent?: string | null
   ) => Promise<{ ok: boolean; error?: string }>;
   /** אחרי שמירת תשובה/חתימה — לעדכן את האובייקט בהורה (HTML עשיר) בלי להמתין ל־router.refresh */
   onResponseSaved?: (payload: {
@@ -109,6 +111,7 @@ interface QuestionDetailsModalProps {
     answerId: string | null;
     responseText: string;
     linguisticSignature: string | null;
+    questionContent?: string | null;
   }) => void;
 }
 
@@ -137,6 +140,8 @@ export function QuestionDetailsModal({
   const [versions, setVersions] = useState<ResponseVersion[]>([]);
   const [showVersions, setShowVersions] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
+  const [questionContent, setQuestionContent] = useState("");
+  const [initialQuestionContent, setInitialQuestionContent] = useState("");
   const [responseText, setResponseText] = useState("");
   const [initialResponse, setInitialResponse] = useState("");
   const [signatureText, setSignatureText] = useState("");
@@ -170,6 +175,9 @@ export function QuestionDetailsModal({
 
   useEffect(() => {
     if (open && question) {
+      const qContent = question.content ?? "";
+      setQuestionContent(qContent);
+      setInitialQuestionContent(qContent);
       const value = question.response_text ?? "";
       setResponseText(value);
       setInitialResponse(value);
@@ -180,14 +188,22 @@ export function QuestionDetailsModal({
     }
   }, [open, question]);
 
+  const canEditQuestion = canEdit && !!onSaveResponse;
+
   /** מחזיר true אם השמירה הצליחה או שלא היו שינויים, false אם אירעה שגיאה */
   const handleSaveResponse = async (): Promise<boolean> => {
     if (!question) return false;
     const nextTrimmed = responseText.trim();
     const initialTrimmed = initialResponse.trim();
+    const nextQuestionTrimmed = questionContent.trim();
+    const initialQuestionTrimmed = initialQuestionContent.trim();
     const nextSigTrim = sanitizeSignatureHtml(signatureText).trim();
     const initialSigTrim = sanitizeSignatureHtml(initialSignature).trim();
-    if (nextTrimmed === initialTrimmed && nextSigTrim === initialSigTrim) {
+    if (
+      nextTrimmed === initialTrimmed &&
+      nextSigTrim === initialSigTrim &&
+      (!canEditQuestion || nextQuestionTrimmed === initialQuestionTrimmed)
+    ) {
       setSaveError(null);
       return true;
     }
@@ -199,17 +215,20 @@ export function QuestionDetailsModal({
         question.id,
         question.answer_id ?? null,
         nextTrimmed,
-        nextSigTrim || null
+        nextSigTrim || null,
+        canEditQuestion ? nextQuestionTrimmed : undefined
       );
       setSavePending(false);
       if (result.ok) {
         setInitialResponse(nextTrimmed);
+        if (canEditQuestion) setInitialQuestionContent(nextQuestionTrimmed);
         setInitialSignature(signatureText);
         onResponseSaved?.({
           questionId: question.id,
           answerId: question.answer_id ?? null,
           responseText: nextTrimmed,
           linguisticSignature: nextSigTrim || null,
+          questionContent: canEditQuestion ? nextQuestionTrimmed : undefined,
         });
         onSaveSuccess?.();
         return true;
@@ -243,15 +262,11 @@ export function QuestionDetailsModal({
     return false;
   };
 
-  const canShowSendInModal =
-    !!onSendAndArchive &&
-    !!question?.pdf_url &&
-    (question.stage === "in_linguistic_review" || question.stage === "ready_for_sending");
-
   const handleCreatePdfClick = async () => {
     if (!question || !onCreatePdf) return;
     const hasUnsaved =
       responseText.trim() !== initialResponse.trim() ||
+      (canEditQuestion && questionContent.trim() !== initialQuestionContent.trim()) ||
       sanitizeSignatureHtml(signatureText).trim() !== sanitizeSignatureHtml(initialSignature).trim();
     if (hasUnsaved && canEdit) {
       const saved = await handleSaveResponse();
@@ -261,6 +276,11 @@ export function QuestionDetailsModal({
   };
 
   if (!question) return null;
+
+  const canShowSendInModal =
+    !!onSendAndArchive &&
+    !!question.pdf_url &&
+    (question.stage === "in_linguistic_review" || question.stage === "ready_for_sending");
 
   return (
     <>
@@ -278,11 +298,25 @@ export function QuestionDetailsModal({
             <div className="space-y-1">
               {question.title && <p className="text-sm font-medium text-slate-800 text-start">{question.title}</p>}
               <p className="text-xs font-medium text-secondary text-start">תוכן השאלה</p>
-              <div className="min-h-[5rem] max-h-[400px] overflow-y-auto rounded-xl border border-card-border bg-slate-50 p-3 text-sm text-slate-700">
-                <div className="whitespace-pre-wrap text-start" dir="rtl">
-                  {question.content}
+              {canEditQuestion && !needsMerge ? (
+                <Textarea
+                  value={questionContent}
+                  onChange={(e) => {
+                    setQuestionContent(e.target.value);
+                    setSaveError(null);
+                  }}
+                  placeholder="ערוך כאן את נוסח השאלה."
+                  disabled={savePending}
+                  className="min-h-[5rem] max-h-[400px] resize-y text-sm text-start"
+                  dir="rtl"
+                />
+              ) : (
+                <div className="min-h-[5rem] max-h-[400px] overflow-y-auto rounded-xl border border-card-border bg-slate-50 p-3 text-sm text-slate-700">
+                  <div className="whitespace-pre-wrap break-words text-start" dir="rtl">
+                    {question.content}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {question.stage === "in_linguistic_review" && question.proofreader_note && (
@@ -354,6 +388,7 @@ export function QuestionDetailsModal({
                           disabled={
                             savePending ||
                             (responseText.trim() === initialResponse.trim() &&
+                              (!canEditQuestion || questionContent.trim() === initialQuestionContent.trim()) &&
                               sanitizeSignatureHtml(signatureText).trim() ===
                                 sanitizeSignatureHtml(initialSignature).trim())
                           }
@@ -361,7 +396,9 @@ export function QuestionDetailsModal({
                           {savePending ? "שומר…" : "שמור שינויים"}
                         </Button>
                         <p className="max-w-full text-xs text-slate-500 text-start">
-                          שומר את גוף התשובה (למעלה) ואת החתימה — בפעולה אחת.
+                          {canEditQuestion
+                            ? "שומר את השאלה, גוף התשובה והחתימה — בפעולה אחת."
+                            : "שומר את גוף התשובה (למעלה) ואת החתימה — בפעולה אחת."}
                         </p>
                       </div>
                     </>

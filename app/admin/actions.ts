@@ -1947,7 +1947,8 @@ export async function saveLinguisticResponse(
   questionId: string,
   answerId: string | null,
   responseText: string,
-  linguisticSignature?: string | null
+  linguisticSignature?: string | null,
+  questionContent?: string | null
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const supabase = getSupabaseAdmin();
@@ -1965,10 +1966,16 @@ export async function saveLinguisticResponse(
         .eq("id", questionId);
       if (error) return { ok: false, error: error.message };
     }
-    const sigTrim = sanitizeLinguisticSignatureStored(linguisticSignature).trim();
+    const questionPatch: { linguistic_signature: string | null; updated_at: string; content?: string } = {
+      linguistic_signature: sanitizeLinguisticSignatureStored(linguisticSignature).trim() || null,
+      updated_at: new Date().toISOString(),
+    };
+    if (questionContent !== undefined) {
+      questionPatch.content = String(questionContent ?? "").trim();
+    }
     const { error: sigError } = await supabase
       .from("questions")
-      .update({ linguistic_signature: sigTrim || null, updated_at: new Date().toISOString() })
+      .update(questionPatch)
       .eq("id", questionId);
     if (sigError) {
       const msg = (sigError.message ?? "").toLowerCase();
