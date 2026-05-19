@@ -320,7 +320,7 @@ export function LinguisticEditorView({ questions }: LinguisticEditorViewProps) {
                   response_text: payload.responseText,
                   linguistic_signature: payload.linguisticSignature,
                   ...(payload.questionContent !== undefined
-                    ? { content: payload.questionContent }
+                    ? { content: payload.questionContent ?? prev.content }
                     : {}),
                 }
               : prev
