@@ -1,7 +1,7 @@
 "use client";
 
 import { notifyLinguisticNewQuestion } from "@/app/actions/notifications";
-import { proofreaderUpdateQuestion } from "@/app/admin/actions";
+import { proofreaderUpdateQuestion } from "@/app/actions/proofreader";
 import { RichTextEditor } from "@/components/respondent/rich-text-editor";
 import { ResponseTextView } from "@/components/response-text-view";
 import { getRichTextEditorInstanceKey } from "@/lib/rich-editor-instance-key";
