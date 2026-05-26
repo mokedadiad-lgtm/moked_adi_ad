@@ -2298,3 +2298,28 @@ export async function discardQuestionIntakeDraft(
     return { ok: false, error: safeError((e as Error)?.message) };
   }
 }
+
+// =========================
+// Proofreader lobby operations (bypass RLS with admin client)
+// =========================
+
+export async function proofreaderUpdateQuestion(payload: {
+  questionId: string;
+  answerId?: string | null;
+  updates: Record<string, unknown>;
+}) {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { questionId, answerId, updates } = payload;
+    const data = { ...updates, updated_at: new Date().toISOString() };
+
+    const { error } = answerId
+      ? await supabase.from("question_answers").update(data).eq("id", answerId)
+      : await supabase.from("questions").update(data).eq("id", questionId);
+
+    if (error) return { ok: false as const, error: error.message };
+    return { ok: true as const };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : "שגיאה" };
+  }
+}

@@ -1,10 +1,10 @@
 "use client";
 
 import { notifyLinguisticNewQuestion } from "@/app/actions/notifications";
+import { proofreaderUpdateQuestion } from "@/app/admin/actions";
 import { RichTextEditor } from "@/components/respondent/rich-text-editor";
 import { ResponseTextView } from "@/components/response-text-view";
 import { getRichTextEditorInstanceKey } from "@/lib/rich-editor-instance-key";
-import { getSupabaseBrowser } from "@/lib/supabase/client";
 import type { LobbyQuestion } from "@/components/proofreader/proofreader-dashboard";
 import { Button } from "@/components/ui/button";
 import {
@@ -115,14 +115,14 @@ export function LobbyTaskModal({
     if (!question) return;
     setPending(true);
     setError(null);
-    const supabase = getSupabaseBrowser();
-    const payload = { ...updates, updated_at: new Date().toISOString() };
-    const { error: e } = question.answer_id
-      ? await supabase.from("question_answers").update(payload).eq("id", question.answer_id)
-      : await supabase.from("questions").update(payload).eq("id", question.id);
+    const result = await proofreaderUpdateQuestion({
+      questionId: question.id,
+      answerId: question.answer_id ?? null,
+      updates,
+    });
     setPending(false);
-    if (e) {
-      setError(e.message);
+    if (!result.ok) {
+      setError(result.error ?? "שגיאה");
       return;
     }
     if (Object.prototype.hasOwnProperty.call(updates, "response_text")) {
