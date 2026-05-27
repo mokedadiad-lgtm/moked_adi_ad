@@ -1,10 +1,10 @@
 "use client";
 
 import { notifyLinguisticNewQuestion } from "@/app/actions/notifications";
-import { proofreaderUpdateQuestion } from "@/app/actions/proofreader";
 import { RichTextEditor } from "@/components/respondent/rich-text-editor";
 import { ResponseTextView } from "@/components/response-text-view";
 import { getRichTextEditorInstanceKey } from "@/lib/rich-editor-instance-key";
+import { getSupabaseBrowser } from "@/lib/supabase/client";
 import type { LobbyQuestion } from "@/components/proofreader/proofreader-dashboard";
 import { Button } from "@/components/ui/button";
 import {
@@ -115,11 +115,27 @@ export function LobbyTaskModal({
     if (!question) return;
     setPending(true);
     setError(null);
-    const result = await proofreaderUpdateQuestion({
-      questionId: question.id,
-      answerId: question.answer_id ?? null,
-      updates,
+    const supabase = getSupabaseBrowser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token ?? null;
+    if (!token) {
+      setPending(false);
+      setError("לא מחובר. רענן את העמוד ונסה שוב.");
+      return;
+    }
+    const response = await fetch("/api/proofreader/update", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        questionId: question.id,
+        answerId: question.answer_id ?? null,
+        updates,
+      }),
     });
+    const result = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string };
     setPending(false);
     if (!result.ok) {
       setError(result.error ?? "שגיאה");
