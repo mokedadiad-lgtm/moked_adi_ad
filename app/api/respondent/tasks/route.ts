@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
     const { data: legacyData, error: legacyErr } = await supabase
       .from("questions")
       .select(
-        "id, title, content, created_at, asker_age, asker_gender, response_type, publication_consent, response_text"
+        "id, title, content, created_at, asker_age, asker_gender, response_type, publication_consent, response_text, proofreader_type_id, topic_id"
       )
       .eq("stage", "with_respondent")
       .eq("assigned_respondent_id", user.id)
@@ -119,12 +119,40 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: legacyErr.message }, { status: 500 });
     }
 
-    const legacy = (legacyData ?? [])
-      .filter((q) => !fromQaIds.has(q.id))
-      .map((q) => ({
+    const legacyRows = (legacyData ?? []).filter((q) => !fromQaIds.has(q.id));
+    const legacyTopicIds = [
+      ...new Set(
+        legacyRows
+          .map((q) => (q as { topic_id?: string | null }).topic_id)
+          .filter((id): id is string => Boolean(id))
+      ),
+    ];
+    const topicProofreaderById: Record<string, string | null> = {};
+    if (legacyTopicIds.length > 0) {
+      const { data: topics } = await supabase
+        .from("topics")
+        .select("id, proofreader_type_id")
+        .in("id", legacyTopicIds);
+      if (topics) {
+        for (const t of topics) {
+          topicProofreaderById[t.id] = t.proofreader_type_id ?? null;
+        }
+      }
+    }
+
+    const legacy = legacyRows.map((q) => {
+      const row = q as {
+        proofreader_type_id?: string | null;
+        topic_id?: string | null;
+      };
+      const fromTopic =
+        row.topic_id && row.proofreader_type_id == null
+          ? topicProofreaderById[row.topic_id] ?? null
+          : null;
+      return {
         id: q.id,
         answer_id: null,
-        proofreader_type_id: null,
+        proofreader_type_id: row.proofreader_type_id ?? fromTopic,
         title: (q as { title?: string | null }).title ?? null,
         content: (q as { content: string }).content ?? "",
         created_at: (q as { created_at: string }).created_at,
@@ -147,7 +175,8 @@ export async function GET(request: NextRequest) {
                 .publication_consent as "publish" | "blur" | "none")
             : null,
         response_text: (q as { response_text?: string | null }).response_text ?? null,
-      })) as RespondentTask[];
+      };
+    }) as RespondentTask[];
 
     return NextResponse.json({ ok: true, tasks: [...fromQa, ...legacy] });
   } catch (e) {

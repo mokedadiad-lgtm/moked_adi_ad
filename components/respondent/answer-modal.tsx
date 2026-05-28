@@ -1,6 +1,5 @@
 "use client";
 
-import { getProofreaderTypeIdForQuestion } from "@/app/admin/actions";
 import { notifyLobbyNewQuestion, reportRespondentFlowErrorToAdmins } from "@/app/actions/notifications";
 import type { RespondentQuestion } from "@/components/respondent/respondent-dashboard";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
@@ -123,8 +122,23 @@ export function AnswerModal({
     }
     setPending(true);
     setError(null);
-    const proofreaderTypeId = question.proofreader_type_id ?? (await getProofreaderTypeIdForQuestion(question.id));
     const supabase = getSupabaseBrowser();
+    let proofreaderTypeId = question.proofreader_type_id ?? null;
+    if (!proofreaderTypeId) {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token ?? null;
+      if (token) {
+        const res = await fetch(
+          `/api/respondent/proofreader-type?questionId=${encodeURIComponent(question.id)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          proofreader_type_id?: string | null;
+        };
+        if (data.ok) proofreaderTypeId = data.proofreader_type_id ?? null;
+      }
+    }
     const rpcParams: { p_question_id: string; p_response_text: string; p_proofreader_type_id: string | null; p_answer_id?: string } = {
       p_question_id: question.id,
       p_response_text: responseText.trim(),
