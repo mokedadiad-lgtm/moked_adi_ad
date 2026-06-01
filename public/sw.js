@@ -22,7 +22,6 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(payload.title || "דואר נכנס", {
       body: payload.body || "",
       icon: "/icon-192.png",
-      image: "/icon-512.png",
       badge: "/notification-badge.png",
       tag: "whatsapp-inbox",
       renotify: true,

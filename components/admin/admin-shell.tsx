@@ -53,6 +53,7 @@ function CloseIcon({ className }: { className?: string }) {
 }
 
 import { getDelayedQuestions, type DelayedQuestionItem } from "@/app/admin/actions";
+import { syncAppSessionCookie } from "@/lib/sync-app-session";
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -62,23 +63,20 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    const supabase = getSupabaseBrowser();
-    const syncServerSessionCookie = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token ?? null;
-      if (!token || cancelled) return;
-      await fetch("/api/auth/session", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      }).catch(() => {});
+    const sync = async () => {
+      if (cancelled) return;
+      await syncAppSessionCookie();
     };
-    void syncServerSessionCookie();
-    const intervalId = window.setInterval(() => {
-      void syncServerSessionCookie();
-    }, 5 * 60 * 1000);
+    void sync();
+    const intervalId = window.setInterval(() => void sync(), 5 * 60 * 1000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void sync();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 

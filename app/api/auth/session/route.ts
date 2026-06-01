@@ -2,7 +2,8 @@ import { getUserFromBearerToken } from "@/lib/supabase/route-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 const SESSION_COOKIE = "app_access_token";
-const SESSION_MAX_AGE_SECONDS = 60 * 60;
+/** תואם לסשן עבודה ארוך; מתרענן מהלקוח כל כמה דקות ובחזרה לטאב */
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
 function authToken(request: NextRequest): string | null {
   const h = request.headers.get("authorization") || request.headers.get("Authorization");

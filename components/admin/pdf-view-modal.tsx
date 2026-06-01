@@ -6,7 +6,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useEffect, useState } from "react";
+import { syncAppSessionCookie } from "@/lib/sync-app-session";
+import { useEffect, useRef, useState } from "react";
 
 interface PdfViewModalProps {
   open: boolean;
@@ -17,7 +18,7 @@ interface PdfViewModalProps {
 }
 
 /**
- * חלון צפייה ב-PDF פנימי (iframe) – בשימוש בארכיון, בפרטי שאלה, ובחלון שלב מוכן לשליחה.
+ * חלון צפייה ב-PDF פנימי (blob + iframe) – מונע ניווט בדפדפן שגורם להתנתקות אחרי סגירה.
  */
 export function PdfViewModal({
   open,
@@ -25,17 +26,60 @@ export function PdfViewModal({
   questionId,
   forParam = "archive",
 }: PdfViewModalProps) {
-  const [cacheBust, setCacheBust] = useState<number>(() => Date.now());
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (open && questionId) {
-      setCacheBust(Date.now());
+    if (!open || !questionId) {
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
+      setBlobUrl(null);
+      setLoadError(null);
+      setLoading(false);
+      return;
     }
-  }, [open, questionId]);
 
-  const src =
-    questionId &&
-    `/api/questions/${questionId}/pdf/download?for=${forParam}&view=1&cb=${cacheBust}`;
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+
+    (async () => {
+      await syncAppSessionCookie();
+      const url = `/api/questions/${questionId}/pdf/download?for=${forParam}&view=1&cb=${Date.now()}`;
+      try {
+        const res = await fetch(url, { credentials: "include" });
+        if (!res.ok) {
+          throw new Error(res.status === 404 ? "קובץ PDF לא נמצא" : "לא ניתן לטעון את ה-PDF");
+        }
+        const blob = await res.blob();
+        if (cancelled) return;
+        if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+        const objectUrl = URL.createObjectURL(blob);
+        blobUrlRef.current = objectUrl;
+        setBlobUrl(objectUrl);
+        setLoadError(null);
+      } catch (e) {
+        if (!cancelled) {
+          setLoadError(e instanceof Error ? e.message : "שגיאה בטעינת PDF");
+          setBlobUrl(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
+    };
+  }, [open, questionId, forParam]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -47,10 +91,20 @@ export function PdfViewModal({
           <DialogTitle>צפייה ב-PDF</DialogTitle>
         </DialogHeader>
         <div className="flex-1 min-h-0 px-4 pb-4">
-          {src && (
+          {loading && (
+            <p className="flex h-full min-h-[70vh] items-center justify-center text-sm text-slate-500">
+              טוען PDF…
+            </p>
+          )}
+          {loadError && !loading && (
+            <p className="flex h-full min-h-[70vh] items-center justify-center text-sm text-red-600" role="alert">
+              {loadError}
+            </p>
+          )}
+          {blobUrl && !loading && (
             <iframe
               title="תצוגת PDF"
-              src={src}
+              src={blobUrl}
               className="w-full h-full min-h-[70vh] rounded-lg border border-slate-200"
             />
           )}
