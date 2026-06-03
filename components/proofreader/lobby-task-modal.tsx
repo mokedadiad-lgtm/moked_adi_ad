@@ -1,10 +1,9 @@
 "use client";
 
-import { notifyLinguisticNewQuestion } from "@/app/actions/notifications";
+import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { RichTextEditor } from "@/components/respondent/rich-text-editor";
 import { ResponseTextView } from "@/components/response-text-view";
 import { getRichTextEditorInstanceKey } from "@/lib/rich-editor-instance-key";
-import { getSupabaseBrowser } from "@/lib/supabase/client";
 import type { LobbyQuestion } from "@/components/proofreader/proofreader-dashboard";
 import { Button } from "@/components/ui/button";
 import {
@@ -161,11 +160,26 @@ export function LobbyTaskModal({
     );
 
   const notifyLinguistic = () => {
-    if (question) {
-      notifyLinguisticNewQuestion(question.id).then((r) => {
-        if (!r?.ok) console.warn("[עריכה לשונית] שליחת מייל לעורכים:", r?.error ?? "שגיאה");
-      }).catch((e) => console.error("[עריכה לשונית] שגיאה בשליחת מייל:", e));
-    }
+    if (!question) return;
+    getSupabaseBrowser()
+      .auth.getSession()
+      .then(({ data: { session } }) => {
+        const token = session?.access_token ?? null;
+        if (!token) return;
+        return fetch("/api/proofreader/notify-linguistic", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ questionId: question.id }),
+        });
+      })
+      .then((r) => r?.json().catch(() => ({})))
+      .then((r) => {
+        if (r && !r.ok) console.warn("[עריכה לשונית] שליחת מייל לעורכים:", r?.error ?? "שגיאה");
+      })
+      .catch((e) => console.error("[עריכה לשונית] שגיאה בשליחת מייל:", e));
   };
 
   const handleDoneToLinguistic = () =>

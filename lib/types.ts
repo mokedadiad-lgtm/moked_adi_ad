@@ -83,3 +83,12 @@ export interface QuestionRow {
   /** חתימה ל-PDF (עריכה לשונית) — מוצגת מיושרת לשמאל */
   linguistic_signature?: string | null;
 }
+
+/** שאלות שלא עודכנו מעל 5 ימים — לסרגל עיכובים בלוח הבקרה */
+export interface DelayedQuestionItem {
+  id: string;
+  short_id: string | null;
+  title: string | null;
+  stage: QuestionStage;
+  answer_id?: string | null;
+}

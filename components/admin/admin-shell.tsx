@@ -52,7 +52,8 @@ function CloseIcon({ className }: { className?: string }) {
   );
 }
 
-import { getDelayedQuestions, type DelayedQuestionItem } from "@/app/admin/actions";
+import { getDelayedQuestions } from "@/app/actions/delayed-questions";
+import type { DelayedQuestionItem } from "@/lib/types";
 import { syncAppSessionCookie } from "@/lib/sync-app-session";
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -105,6 +106,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (showSidebar !== true) return;
+
     let cancelled = false;
 
     const load = async () => {
@@ -117,17 +120,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     };
 
     load();
-
-    // The admin dashboard refreshes its table via `router.refresh()` (and HMR),
-    // but `delayedQuestions` lives in this component and was loaded only once.
-    // Polling keeps the sidebar status in sync with the table.
     const intervalId = window.setInterval(load, 5000);
 
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, []);
+  }, [showSidebar]);
 
   useEffect(() => {
     const onResize = () => {

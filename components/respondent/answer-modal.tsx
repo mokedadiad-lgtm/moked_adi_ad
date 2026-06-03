@@ -1,6 +1,5 @@
 "use client";
 
-import { notifyLobbyNewQuestion, reportRespondentFlowErrorToAdmins } from "@/app/actions/notifications";
 import type { RespondentQuestion } from "@/components/respondent/respondent-dashboard";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -21,6 +20,38 @@ const RESPONSE_LABEL: Record<string, string> = {
   detailed: "תשובה מפורטת",
 };
 const GENERIC_RESPONDENT_ERROR = "אירעה תקלה זמנית. צוות המערכת עודכן.";
+
+async function authHeaders(): Promise<HeadersInit | null> {
+  const { data: { session } } = await getSupabaseBrowser().auth.getSession();
+  const token = session?.access_token ?? null;
+  if (!token) return null;
+  return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+}
+
+async function reportRespondentError(payload: {
+  context: string;
+  questionId: string;
+  answerId?: string | null;
+  technicalDetail: string;
+}) {
+  const headers = await authHeaders();
+  if (!headers) return;
+  await fetch("/api/respondent/report-error", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  }).catch(() => {});
+}
+
+async function notifyLobby(questionId: string) {
+  const headers = await authHeaders();
+  if (!headers) return;
+  await fetch("/api/respondent/notify-lobby", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ questionId }),
+  }).catch(() => {});
+}
 
 interface AnswerModalProps {
   question: RespondentQuestion | null;
@@ -87,7 +118,7 @@ export function AnswerModal({
       ? await supabase.from("question_answers").update(payload).eq("id", question.answer_id)
       : await supabase.from("questions").update(payload).eq("id", question.id);
     if (saveError) {
-      void reportRespondentFlowErrorToAdmins({
+      void reportRespondentError({
         context: "שמירת טיוטה (משיב)",
         questionId: question.id,
         answerId: question.answer_id ?? null,
@@ -149,7 +180,7 @@ export function AnswerModal({
 
     setPending(false);
     if (rpcError) {
-      void reportRespondentFlowErrorToAdmins({
+      void reportRespondentError({
         context: "שליחת תשובה להגהה (RPC)",
         questionId: question.id,
         answerId: question.answer_id ?? null,
@@ -160,7 +191,7 @@ export function AnswerModal({
     }
     const result = data as { ok: boolean; error?: string } | null;
     if (result && !result.ok) {
-      void reportRespondentFlowErrorToAdmins({
+      void reportRespondentError({
         context: "שליחת תשובה להגהה (תשובת RPC)",
         questionId: question.id,
         answerId: question.answer_id ?? null,
@@ -173,7 +204,7 @@ export function AnswerModal({
     onOpenChange(false);
     onSuccess();
     reset();
-    notifyLobbyNewQuestion(question.id).catch(() => {});
+    void notifyLobby(question.id);
     fetch("/api/revalidate", { method: "POST", body: JSON.stringify({ path: "/admin" }) }).catch(() => {});
   };
 

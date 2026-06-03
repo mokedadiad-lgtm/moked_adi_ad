@@ -1,6 +1,6 @@
 "use client";
 
-import type { DelayedQuestionItem } from "@/app/admin/actions";
+import type { DelayedQuestionItem } from "@/lib/types";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { STAGE_LABELS } from "@/lib/types";
 import Link from "next/link";
