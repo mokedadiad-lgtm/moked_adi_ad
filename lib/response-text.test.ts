@@ -4,6 +4,7 @@ import {
   compactResponseHtmlForQueue,
   decodeHtmlEntities,
   getFootnoteIdsInOrder,
+  inferBaseDirFromText,
   parseResponseRich,
   responseToPlainText,
   responseToStructuredForPdf,
@@ -186,6 +187,23 @@ describe("sanitizeResponseHtmlForPdf", () => {
     const s = sanitizeResponseHtmlForPdf("<p><strong>מודגש</strong></p>");
     expect(s).toContain("<strong>מודגש</strong>");
   });
+
+  it("מוסיף dir=rtl לעברית ו-dir=ltr לאנגלית", () => {
+    expect(sanitizeResponseHtmlForPdf("<p>שלום עולם.</p>")).toContain('dir="rtl"');
+    expect(sanitizeResponseHtmlForPdf("<p>Hello world.</p>")).toContain('dir="ltr"');
+    expect(sanitizeResponseHtmlForPdf("<ul><li>First item.</li><li>Second.</li></ul>")).toContain(
+      'dir="ltr"'
+    );
+  });
+});
+
+describe("inferBaseDirFromText", () => {
+  it("מזהה עברית ואנגלית לפי התו החזק הראשון", () => {
+    expect(inferBaseDirFromText("שלום")).toBe("rtl");
+    expect(inferBaseDirFromText("Hello")).toBe("ltr");
+    expect(inferBaseDirFromText("123 Hello")).toBe("ltr");
+    expect(inferBaseDirFromText("123 שלום")).toBe("rtl");
+  });
 });
 
 /**
@@ -198,17 +216,26 @@ describe("pdf pipeline fidelity (editor → PDF HTML)", () => {
       "<h2>נושא</h2><p>פסקה ראשונה עם <strong>הדגשה</strong>.</p><p>פסקה שנייה.</p>";
     const { bodyHtmlForPdf } = responseToStructuredForPdf(editor);
     const safe = sanitizeResponseHtmlForPdf(bodyHtmlForPdf);
-    expect(safe).toContain("<h2>נושא</h2>");
+    expect(safe).toContain("<h2 dir=\"rtl\">נושא</h2>");
     expect(safe).toContain("<strong>הדגשה</strong>");
-    expect(safe.match(/<p>/g)?.length).toBe(2);
+    expect(safe.match(/<p dir="rtl">/g)?.length).toBe(2);
   });
 
   it("דוגמה 2: רשימה ופיסקה", () => {
     const editor = "<ul><li>אחת</li><li>שתיים</li></ul><p>אחרי הרשימה</p>";
     const { bodyHtmlForPdf } = responseToStructuredForPdf(editor);
     const safe = sanitizeResponseHtmlForPdf(bodyHtmlForPdf);
-    expect(safe).toContain("<ul>");
-    expect(safe).toContain("<li>אחת</li>");
-    expect(safe).toContain("<p>אחרי הרשימה</p>");
+    expect(safe).toContain("<ul dir=\"rtl\">");
+    expect(safe).toContain("<li dir=\"rtl\">אחת</li>");
+    expect(safe).toContain("<p dir=\"rtl\">אחרי הרשימה</p>");
+  });
+
+  it("דוגמה 3: תשובה באנגלית — כיוון LTR ופיסוק תקין", () => {
+    const editor =
+      "<p>This is the answer.</p><ul><li>First point.</li><li>Second point.</li></ul>";
+    const safe = sanitizeResponseHtmlForPdf(responseToStructuredForPdf(editor).bodyHtmlForPdf);
+    expect(safe).toContain('<p dir="ltr">This is the answer.</p>');
+    expect(safe).toContain('<ul dir="ltr">');
+    expect(safe).toContain('<li dir="ltr">First point.</li>');
   });
 });

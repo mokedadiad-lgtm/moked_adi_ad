@@ -1,9 +1,14 @@
 import React from "react";
 import { StyleSheet, Text, View } from "@react-pdf/renderer";
-import { decodeHtmlEntities, sanitizeResponseHtmlForPdf } from "@/lib/response-text";
+import {
+  decodeHtmlEntities,
+  inferBaseDirFromText,
+  sanitizeResponseHtmlForPdf,
+} from "@/lib/response-text";
 
-const rtl = StyleSheet.create({
-  wrap: { direction: "rtl" as const, textAlign: "justify" as const, width: "100%" },
+const base = StyleSheet.create({
+  wrapRtl: { direction: "rtl" as const, textAlign: "justify" as const, width: "100%" },
+  wrapLtr: { direction: "ltr" as const, textAlign: "left" as const, width: "100%" },
   p: {
     fontSize: 11,
     lineHeight: 1.7,
@@ -35,7 +40,7 @@ const rtl = StyleSheet.create({
     color: "#3F3D56",
     fontFamily: "Heebo",
   },
-  quote: {
+  quoteRtl: {
     fontSize: 11,
     lineHeight: 1.6,
     marginBottom: 8,
@@ -45,7 +50,17 @@ const rtl = StyleSheet.create({
     color: "#5C5C78",
     fontFamily: "Heebo",
   },
-  li: {
+  quoteLtr: {
+    fontSize: 11,
+    lineHeight: 1.6,
+    marginBottom: 8,
+    paddingLeft: 10,
+    borderLeftWidth: 2,
+    borderLeftColor: "#E8E0E5",
+    color: "#5C5C78",
+    fontFamily: "Heebo",
+  },
+  liRtl: {
     fontSize: 11,
     lineHeight: 1.7,
     marginBottom: 6,
@@ -53,13 +68,24 @@ const rtl = StyleSheet.create({
     color: "#2C2C54",
     fontFamily: "Heebo",
   },
+  liLtr: {
+    fontSize: 11,
+    lineHeight: 1.7,
+    marginBottom: 6,
+    paddingLeft: 8,
+    color: "#2C2C54",
+    fontFamily: "Heebo",
+  },
   bold: { fontWeight: 700, fontFamily: "Heebo" },
   italic: { fontStyle: "italic" as const, fontFamily: "Heebo" },
   sup: { fontSize: 7, fontFamily: "Heebo" },
   answerHeading: { color: "#AD1457" },
+  dirRtl: { direction: "rtl" as const, textAlign: "right" as const },
+  dirLtr: { direction: "ltr" as const, textAlign: "left" as const },
 });
 
 const RTL = "\u200F";
+const LTR = "\u200E";
 
 type Segment = { text: string; bold?: boolean; italic?: boolean; sup?: boolean };
 
@@ -256,19 +282,19 @@ function parseBlocks(html: string): Block[] {
 }
 
 function SegmentLine({ seg }: { seg: Segment }) {
-  const base = [
-    ...(seg.bold ? [rtl.bold] : []),
-    ...(seg.italic ? [rtl.italic] : []),
+  const styles = [
+    ...(seg.bold ? [base.bold] : []),
+    ...(seg.italic ? [base.italic] : []),
   ];
   if (seg.sup) {
     return (
-      <Text style={[rtl.sup, ...(seg.bold ? [rtl.bold] : [])]}>
+      <Text style={[base.sup, ...(seg.bold ? [base.bold] : [])]}>
         {seg.text}
       </Text>
     );
   }
   return (
-    <Text style={base.length ? base : undefined}>
+    <Text style={styles.length ? styles : undefined}>
       {seg.text.split("\n").map((line, j) => (
         <React.Fragment key={j}>
           {j > 0 ? "\n" : null}
@@ -279,25 +305,34 @@ function SegmentLine({ seg }: { seg: Segment }) {
   );
 }
 
+function blockPlainText(block: Block): string {
+  return block.segments.map((s) => s.text).join("");
+}
+
 function BlockView({ block }: { block: Block }) {
+  const dir = inferBaseDirFromText(blockPlainText(block));
+  const isLtr = dir === "ltr";
+  const mark = isLtr ? LTR : RTL;
+  const dirStyle = isLtr ? base.dirLtr : base.dirRtl;
+
   const style =
     block.tag === "h1"
-      ? rtl.h1
+      ? [base.h1, dirStyle]
       : block.tag === "h2"
-        ? rtl.h2
+        ? [base.h2, dirStyle]
         : block.tag === "h3"
           ? block.answerHeading
-            ? [rtl.h3, rtl.answerHeading]
-            : rtl.h3
+            ? [base.h3, base.answerHeading, dirStyle]
+            : [base.h3, dirStyle]
           : block.tag === "blockquote"
-            ? rtl.quote
+            ? [isLtr ? base.quoteLtr : base.quoteRtl, dirStyle]
             : block.tag === "li"
-              ? rtl.li
-              : rtl.p;
+              ? [isLtr ? base.liLtr : base.liRtl, dirStyle]
+              : [base.p, dirStyle];
 
   return (
     <Text style={style}>
-      {RTL}
+      {mark}
       {block.tag === "li" ? (
         block.listKind === "ordered" ? `${block.listIndex ?? 1}. ` : "• "
       ) : null}
@@ -324,18 +359,21 @@ export function PdfAnswerBodyFromHtml({
     const plain =
       decodeHtmlEntities(stripTags(safe)).trim() || (fallbackPlain ?? "").trim();
     if (!plain) return null;
+    const dir = inferBaseDirFromText(plain);
+    const isLtr = dir === "ltr";
     return (
-      <View style={rtl.wrap}>
-        <Text style={rtl.p}>
-          {RTL}
+      <View style={isLtr ? base.wrapLtr : base.wrapRtl}>
+        <Text style={[base.p, isLtr ? base.dirLtr : base.dirRtl]}>
+          {isLtr ? LTR : RTL}
           {plain}
         </Text>
       </View>
     );
   }
 
+  const overall = inferBaseDirFromText(blocks.map(blockPlainText).join(" "));
   return (
-    <View style={rtl.wrap}>
+    <View style={overall === "ltr" ? base.wrapLtr : base.wrapRtl}>
       {blocks.map((b, i) => (
         <BlockView key={i} block={b} />
       ))}

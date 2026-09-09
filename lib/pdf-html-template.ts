@@ -1,4 +1,8 @@
-import { effectiveLinguisticSignature, sanitizeResponseHtmlForPdf } from "./response-text";
+import {
+  effectiveLinguisticSignature,
+  inferBaseDirFromText,
+  sanitizeResponseHtmlForPdf,
+} from "./response-text";
 
 /**
  * תבנית HTML ל-PDF: עברית RTL, גופן Heebo, ב"ה, מסגרת ורודה סביב שאלה+תשובה+חתימה,
@@ -33,6 +37,7 @@ export function buildPdfHtml(options: {
     rightLogoDataUri,
   } = options;
   const safeBody = sanitizeResponseHtmlForPdf(bodyHtmlForPdf);
+  const bodyDir = inferBaseDirFromText(safeBody.replace(/<[^>]+>/g, " "));
   const sigSan = effectiveLinguisticSignature(linguisticSignature);
   const signatureHtml = sigSan
     ? `<div class="pdf-signature-block" dir="ltr">${sigSan}</div>`
@@ -43,8 +48,11 @@ export function buildPdfHtml(options: {
       ? `
     <div class="footnotes-area">
       <div class="footnote-sep-wrap"><div class="footnote-sep" aria-hidden="true"></div></div>
-      <div class="footnotes">
-        ${footnotes.map((line) => `<p class="footnote-line">${escapeHtml(line)}</p>`).join("\n")}
+      <div class="footnotes" dir="${inferBaseDirFromText(footnotes.join(" "))}">
+        ${footnotes.map((line) => {
+          const dir = inferBaseDirFromText(line);
+          return `<p class="footnote-line" dir="${dir}">${escapeHtml(line)}</p>`;
+        }).join("\n")}
       </div>
     </div>`
       : "";
@@ -175,7 +183,7 @@ export function buildPdfHtml(options: {
       overflow-wrap: break-word;
     }
     .body {
-      text-align: right;
+      text-align: start;
       padding: 0 0.65cm;
       word-wrap: break-word;
       overflow-wrap: break-word;
@@ -189,24 +197,27 @@ export function buildPdfHtml(options: {
     .body u { text-decoration: underline; }
     .body p, .body div {
       margin: 0 0 12px;
-      text-align: right;
+      text-align: start;
       line-height: 1.7;
       white-space: pre-wrap;
+      unicode-bidi: isolate;
     }
     .body p:last-child, .body div:last-child { margin-bottom: 0; }
-    .body h1 { font-size: 20px; font-weight: 600; color: #2C2C54; margin: 16px 0 10px; text-align: right; line-height: 1.4; }
-    .body h2 { font-size: 18px; font-weight: 600; color: #2C2C54; margin: 14px 0 8px; text-align: right; line-height: 1.45; }
-    .body h3 { font-size: 16px; font-weight: 600; color: #3F3D56; margin: 12px 0 6px; text-align: right; line-height: 1.5; }
+    .body h1 { font-size: 20px; font-weight: 600; color: #2C2C54; margin: 16px 0 10px; text-align: start; line-height: 1.4; unicode-bidi: isolate; }
+    .body h2 { font-size: 18px; font-weight: 600; color: #2C2C54; margin: 14px 0 8px; text-align: start; line-height: 1.45; unicode-bidi: isolate; }
+    .body h3 { font-size: 16px; font-weight: 600; color: #3F3D56; margin: 12px 0 6px; text-align: start; line-height: 1.5; unicode-bidi: isolate; }
     .body ul, .body ol {
       margin: 0 0 10px;
       padding-inline-start: 1.5em;
     }
-    .body li { margin: 0 0 6px; text-align: right; line-height: 1.7; }
+    .body li { margin: 0 0 6px; text-align: start; line-height: 1.7; unicode-bidi: isolate; }
     .body blockquote {
       margin: 10px 0;
       padding: 8px 12px;
-      border-right: 3px solid #E8E0E5;
+      border-inline-start: 3px solid #E8E0E5;
       color: #5C5C78;
+      text-align: start;
+      unicode-bidi: isolate;
     }
     .pdf-signature-block {
       text-align: left;
@@ -235,7 +246,7 @@ export function buildPdfHtml(options: {
       position: relative;
       z-index: 2;
     }
-    .footnote-line { margin: 0 0 8px; text-align: right; padding: 0 0.65cm; }
+    .footnote-line { margin: 0 0 8px; text-align: start; padding: 0 0.65cm; unicode-bidi: isolate; }
     .footnote-sep-wrap { text-align: right; margin: 18px 1cm 12px; }
     .footnote-sep {
       display: inline-block;
@@ -275,7 +286,7 @@ export function buildPdfHtml(options: {
       <h2 class="section-title question-title">שאלה</h2>
       <div class="question-content">${escapeHtml(questionContent || "—")}</div>
       <h2 class="section-title answer-title">תשובה</h2>
-      <div class="body">${safeBody}</div>
+      <div class="body" dir="${bodyDir}">${safeBody}</div>
       ${signatureHtml}
       ${footnotesHtml}
     </div>

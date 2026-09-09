@@ -351,11 +351,54 @@ export function responseToStructuredForPdf(value: string | null | undefined): {
 }
 
 /**
+ * כיוון בסיס לפי התו החזק הראשון (כמו dir=auto): עברית/ערבית → rtl, לטינית → ltr.
+ * ברירת מחדל rtl כדי לא לדרוס תשובות עבריות בלי אותיות חזקות.
+ */
+export function inferBaseDirFromText(text: string): "rtl" | "ltr" {
+  const plain = text.replace(/<[^>]+>/g, " ");
+  for (const ch of plain) {
+    const code = ch.codePointAt(0);
+    if (code === undefined) continue;
+    if (code >= 0x0590 && code <= 0x05ff) return "rtl"; // Hebrew
+    if (code >= 0x0600 && code <= 0x06ff) return "rtl"; // Arabic
+    if (code >= 0x0700 && code <= 0x074f) return "rtl"; // Syriac
+    if ((code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a)) return "ltr";
+    if (code >= 0xc0 && code <= 0x24f) return "ltr"; // Latin extended
+  }
+  return "rtl";
+}
+
+/**
+ * מוסיף dir="rtl|ltr" לבלוקי תוכן ב-PDF לפי השפה בתוך הבלוק —
+ * מתקן שבירת שורות וסימני פיסוק באנגלית בלי לשנות עברית.
+ */
+export function annotatePdfHtmlBlocksWithDir(html: string): string {
+  if (!html.trim()) return html;
+
+  const annotateLeaves = (src: string): string =>
+    src.replace(
+      /<(p|h1|h2|h3|li|blockquote)>([\s\S]*?)<\/\1>/gi,
+      (_full, tag: string, inner: string) => {
+        const dir = inferBaseDirFromText(inner);
+        return `<${tag.toLowerCase()} dir="${dir}">${inner}</${tag.toLowerCase()}>`;
+      }
+    );
+
+  const withLeaves = annotateLeaves(html);
+  return withLeaves.replace(/<(ul|ol)>([\s\S]*?)<\/\1>/gi, (_full, tag: string, inner: string) => {
+    const dir = inferBaseDirFromText(inner);
+    return `<${tag.toLowerCase()} dir="${dir}">${inner}</${tag.toLowerCase()}>`;
+  });
+}
+
+/**
  * סינון HTML ל-PDF: כמו sanitizeResponseHtml, ואז משחזר `class="fn-ref"` על עיליות מספריות
  * (אחרי הסרת מאפיינים) כדי שהעיצוב ב-PDF יתאים להערות שוליים.
+ * מוסיף dir לבלוקים לפי שפת התוכן (עברית RTL / אנגלית LTR).
  */
 export function sanitizeResponseHtmlForPdf(html: string): string {
   const s = sanitizeResponseHtml(html);
   if (!s.trim()) return s;
-  return s.replace(/<sup>(\d+)<\/sup>/g, '<sup class="fn-ref">$1</sup>');
+  const withFn = s.replace(/<sup>(\d+)<\/sup>/g, '<sup class="fn-ref">$1</sup>');
+  return annotatePdfHtmlBlocksWithDir(withFn);
 }
