@@ -8,7 +8,7 @@ import {
 
 const base = StyleSheet.create({
   wrapRtl: { direction: "rtl" as const, textAlign: "justify" as const, width: "100%" },
-  wrapLtr: { direction: "ltr" as const, textAlign: "left" as const, width: "100%" },
+  wrapLtr: { direction: "ltr" as const, textAlign: "justify" as const, width: "100%" },
   p: {
     fontSize: 11,
     lineHeight: 1.45,
@@ -80,8 +80,8 @@ const base = StyleSheet.create({
   italic: { fontStyle: "italic" as const, fontFamily: "Heebo" },
   sup: { fontSize: 7, fontFamily: "Heebo" },
   answerHeading: { color: "#AD1457" },
-  dirRtl: { direction: "rtl" as const, textAlign: "right" as const },
-  dirLtr: { direction: "ltr" as const, textAlign: "left" as const },
+  dirRtl: { direction: "rtl" as const, textAlign: "justify" as const },
+  dirLtr: { direction: "ltr" as const, textAlign: "justify" as const },
 });
 
 const RTL = "\u200F";

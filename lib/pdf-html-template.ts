@@ -183,7 +183,7 @@ export function buildPdfHtml(options: {
       overflow-wrap: break-word;
     }
     .body {
-      text-align: start;
+      text-align: justify;
       padding: 0 0.65cm;
       word-wrap: break-word;
       overflow-wrap: break-word;
@@ -198,7 +198,7 @@ export function buildPdfHtml(options: {
     .body u { text-decoration: underline; }
     .body p, .body div {
       margin: 0 0 0.45em;
-      text-align: start;
+      text-align: justify;
       line-height: 1.45;
       white-space: normal;
       unicode-bidi: isolate;
@@ -211,13 +211,13 @@ export function buildPdfHtml(options: {
       margin: 0 0 0.45em;
       padding-inline-start: 1.5em;
     }
-    .body li { margin: 0 0 0.2em; text-align: start; line-height: 1.45; unicode-bidi: isolate; }
+    .body li { margin: 0 0 0.2em; text-align: justify; line-height: 1.45; unicode-bidi: isolate; }
     .body blockquote {
       margin: 0.45em 0;
       padding: 4px 10px;
       border-inline-start: 3px solid #E8E0E5;
       color: #5C5C78;
-      text-align: start;
+      text-align: justify;
       unicode-bidi: isolate;
       line-height: 1.45;
     }
