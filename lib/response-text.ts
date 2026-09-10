@@ -392,6 +392,31 @@ export function annotatePdfHtmlBlocksWithDir(html: string): string {
 }
 
 /**
+ * מסיר פסקאות/דיבים ריקים ו־`<br>` כפולים שיוצרים מרווחים מיותרים ב-PDF.
+ */
+export function collapseEmptyPdfBlocks(html: string): string {
+  if (!html.trim()) return html;
+  let out = html;
+  // Empty / whitespace-only / only-br paragraphs and divs
+  out = out.replace(
+    /<(p|div)(\s[^>]*)?>\s*(?:&nbsp;|&#160;|\u00a0|\s|<br\s*\/?>)*\s*<\/\1>/gi,
+    ""
+  );
+  // Empty list items
+  out = out.replace(
+    /<li(\s[^>]*)?>\s*(?:&nbsp;|&#160;|\u00a0|\s|<br\s*\/?>)*\s*<\/li>/gi,
+    ""
+  );
+  // Empty lists left after removing items
+  out = out.replace(/<(ul|ol)(\s[^>]*)?>\s*<\/\1>/gi, "");
+  // Collapse 3+ consecutive <br> to a single paragraph break worth of space
+  out = out.replace(/(?:<br\s*\/?>\s*){2,}/gi, "<br>");
+  // Collapse leftover whitespace-only runs between blocks
+  out = out.replace(/>\s{2,}</g, "><");
+  return out;
+}
+
+/**
  * סינון HTML ל-PDF: כמו sanitizeResponseHtml, ואז משחזר `class="fn-ref"` על עיליות מספריות
  * (אחרי הסרת מאפיינים) כדי שהעיצוב ב-PDF יתאים להערות שוליים.
  * מוסיף dir לבלוקים לפי שפת התוכן (עברית RTL / אנגלית LTR).
@@ -400,5 +425,6 @@ export function sanitizeResponseHtmlForPdf(html: string): string {
   const s = sanitizeResponseHtml(html);
   if (!s.trim()) return s;
   const withFn = s.replace(/<sup>(\d+)<\/sup>/g, '<sup class="fn-ref">$1</sup>');
-  return annotatePdfHtmlBlocksWithDir(withFn);
+  const collapsed = collapseEmptyPdfBlocks(withFn);
+  return annotatePdfHtmlBlocksWithDir(collapsed);
 }

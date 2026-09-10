@@ -195,6 +195,15 @@ describe("sanitizeResponseHtmlForPdf", () => {
       'dir="ltr"'
     );
   });
+
+  it("מסיר פסקאות ריקות ו-br כפולים שיוצרים מרווחים מיותרים", () => {
+    const raw = "<p>שלום</p><p><br></p><p></p><p>עולם</p><p>שורה<br><br><br>המשך</p>";
+    const safe = sanitizeResponseHtmlForPdf(raw);
+    expect(safe).not.toMatch(/<p[^>]*>\s*(?:<br\s*\/?>)?\s*<\/p>/i);
+    expect(safe).toContain("שלום");
+    expect(safe).toContain("עולם");
+    expect(safe.match(/<br\s*\/?>/gi)?.length ?? 0).toBeLessThanOrEqual(1);
+  });
 });
 
 describe("inferBaseDirFromText", () => {

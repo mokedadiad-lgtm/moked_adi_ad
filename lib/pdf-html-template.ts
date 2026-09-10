@@ -87,7 +87,7 @@ export function buildPdfHtml(options: {
     body {
       font-family: 'Heebo', sans-serif;
       font-size: 14px;
-      line-height: 1.7;
+      line-height: 1.45;
       color: #2C2C54;
       background: #FAF7F9;
       display: block;
@@ -173,12 +173,12 @@ export function buildPdfHtml(options: {
     .section-title:first-child { margin-top: 0; }
     .question-content {
       white-space: pre-wrap;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
       text-align: justify;
       color: #75759E;
       padding: 0 1cm;
       font-size: 14px;
-      line-height: 1.7;
+      line-height: 1.45;
       word-wrap: break-word;
       overflow-wrap: break-word;
     }
@@ -188,6 +188,7 @@ export function buildPdfHtml(options: {
       word-wrap: break-word;
       overflow-wrap: break-word;
       white-space: normal;
+      line-height: 1.45;
     }
     .body strong, .body b {
       font-weight: 700 !important;
@@ -196,28 +197,29 @@ export function buildPdfHtml(options: {
     .body em, .body i { font-style: italic; }
     .body u { text-decoration: underline; }
     .body p, .body div {
-      margin: 0 0 12px;
+      margin: 0 0 0.45em;
       text-align: start;
-      line-height: 1.7;
-      white-space: pre-wrap;
+      line-height: 1.45;
+      white-space: normal;
       unicode-bidi: isolate;
     }
     .body p:last-child, .body div:last-child { margin-bottom: 0; }
-    .body h1 { font-size: 20px; font-weight: 600; color: #2C2C54; margin: 16px 0 10px; text-align: start; line-height: 1.4; unicode-bidi: isolate; }
-    .body h2 { font-size: 18px; font-weight: 600; color: #2C2C54; margin: 14px 0 8px; text-align: start; line-height: 1.45; unicode-bidi: isolate; }
-    .body h3 { font-size: 16px; font-weight: 600; color: #3F3D56; margin: 12px 0 6px; text-align: start; line-height: 1.5; unicode-bidi: isolate; }
+    .body h1 { font-size: 20px; font-weight: 600; color: #2C2C54; margin: 0.75em 0 0.35em; text-align: start; line-height: 1.3; unicode-bidi: isolate; }
+    .body h2 { font-size: 18px; font-weight: 600; color: #2C2C54; margin: 0.65em 0 0.3em; text-align: start; line-height: 1.35; unicode-bidi: isolate; }
+    .body h3 { font-size: 16px; font-weight: 600; color: #3F3D56; margin: 0.55em 0 0.25em; text-align: start; line-height: 1.35; unicode-bidi: isolate; }
     .body ul, .body ol {
-      margin: 0 0 10px;
+      margin: 0 0 0.45em;
       padding-inline-start: 1.5em;
     }
-    .body li { margin: 0 0 6px; text-align: start; line-height: 1.7; unicode-bidi: isolate; }
+    .body li { margin: 0 0 0.2em; text-align: start; line-height: 1.45; unicode-bidi: isolate; }
     .body blockquote {
-      margin: 10px 0;
-      padding: 8px 12px;
+      margin: 0.45em 0;
+      padding: 4px 10px;
       border-inline-start: 3px solid #E8E0E5;
       color: #5C5C78;
       text-align: start;
       unicode-bidi: isolate;
+      line-height: 1.45;
     }
     .pdf-signature-block {
       text-align: left;
@@ -233,8 +235,10 @@ export function buildPdfHtml(options: {
     .pdf-signature-block strong {
       font-weight: 700;
     }
-    .body .answer-heading { margin-top: 1.2em; color: #AD1457; }
-    .body .answer-sep { height: 0; border-bottom: 1px solid #E5E7EB; margin: 1em 0; }
+    .body .answer-heading { margin-top: 0.7em; color: #AD1457; }
+    .body .answer-sep { height: 0; border-bottom: 1px solid #E5E7EB; margin: 0.55em 0; }
+    .body br + br { display: none; }
+    .body p + p { margin-top: 0; }
     .body sup {
       font-size: 0.75em;
       vertical-align: super;
