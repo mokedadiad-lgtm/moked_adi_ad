@@ -197,7 +197,7 @@ export function buildPdfHtml(options: {
     .body em, .body i { font-style: italic; }
     .body u { text-decoration: underline; }
     .body p, .body div {
-      margin: 0 0 0.45em;
+      margin: 0 0 0.7em;
       text-align: justify;
       line-height: 1.45;
       white-space: normal;
@@ -208,7 +208,7 @@ export function buildPdfHtml(options: {
     .body h2 { font-size: 18px; font-weight: 600; color: #2C2C54; margin: 0.65em 0 0.3em; text-align: start; line-height: 1.35; unicode-bidi: isolate; }
     .body h3 { font-size: 16px; font-weight: 600; color: #3F3D56; margin: 0.55em 0 0.25em; text-align: start; line-height: 1.35; unicode-bidi: isolate; }
     .body ul, .body ol {
-      margin: 0 0 0.45em;
+      margin: 0 0 0.7em;
       padding-inline-start: 1.5em;
     }
     .body li { margin: 0 0 0.2em; text-align: justify; line-height: 1.45; unicode-bidi: isolate; }

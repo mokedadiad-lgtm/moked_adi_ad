@@ -12,7 +12,7 @@ const base = StyleSheet.create({
   p: {
     fontSize: 11,
     lineHeight: 1.45,
-    marginBottom: 5,
+    marginBottom: 8,
     color: "#2C2C54",
     fontFamily: "Heebo",
   },
@@ -43,7 +43,7 @@ const base = StyleSheet.create({
   quoteRtl: {
     fontSize: 11,
     lineHeight: 1.4,
-    marginBottom: 5,
+    marginBottom: 8,
     paddingRight: 10,
     borderRightWidth: 2,
     borderRightColor: "#E8E0E5",
@@ -53,7 +53,7 @@ const base = StyleSheet.create({
   quoteLtr: {
     fontSize: 11,
     lineHeight: 1.4,
-    marginBottom: 5,
+    marginBottom: 8,
     paddingLeft: 10,
     borderLeftWidth: 2,
     borderLeftColor: "#E8E0E5",
