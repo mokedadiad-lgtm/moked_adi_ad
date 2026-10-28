@@ -352,7 +352,7 @@ export function ResponsePdfDocument({
           <View style={styles.footerTopRule} />
           <Text style={styles.footerBody}>
             <Text style={styles.footerLine1}>
-              אסק מי פלוס – מענה אנונימי מטעם ארגון &quot;עדי עד&quot;
+              פשו&quot;ת שידוך – מענה אנונימי מטעם ארגון &quot;עדי עד&quot;
             </Text>
             {"\n"}
             <Text style={styles.footerLine2}>אתר עדי עד: www.adeyad.org</Text>

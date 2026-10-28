@@ -177,7 +177,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <Link
               href="/"
               className="absolute end-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm"
-              aria-label="אסק מי פלוס"
+              aria-label={'פשו"ת שידוך'}
             >
               <Image
                 src="/brand/logo-full.png"
@@ -218,7 +218,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               <Link
                 href="/"
                 className="mb-2 flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200/90 bg-white shadow-md md:h-[4.75rem] md:w-[4.75rem] md:border-white/15 md:bg-white/95 md:ring-1 md:ring-white/10"
-                aria-label="אסק מי פלוס"
+                aria-label={'פשו"ת שידוך'}
                 onClick={closeSidebar}
               >
                 <Image
@@ -230,7 +230,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   priority
                 />
               </Link>
-              <h2 className="text-lg font-bold text-slate-900 md:text-white">אסק מי פלוס</h2>
+              <h2 className="text-lg font-bold text-slate-900 md:text-white">פשו"ת שידוך</h2>
               <p className="mt-0.5 text-xs text-slate-600 md:text-[#a8a8c4]">ממשק מנהל</p>
             </div>
             <AdminNav delayedQuestions={delayedQuestions} onNavigate={closeSidebar} />

@@ -9,7 +9,7 @@ const APP_URL =
 function buildAskerPdfWhatsAppBody(downloadUrl: string, _questionTitle: string): string {
   return `שלום וברכה,
 
-שמחים לעדכן כי צוות אסק מי פלוס השיב לפנייתך.
+שמחים לעדכן כי צוות פשו"ת שידוך השיב לפנייתך.
 להורדת קובץ התשובה (PDF) לחץ/י על הקישור:
 ${downloadUrl}
 

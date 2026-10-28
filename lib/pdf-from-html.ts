@@ -16,7 +16,7 @@ const PDF_FOOTER_TEMPLATE = `
 <div style="width:100%;box-sizing:border-box;background:#FAF7F9!important;font-family:system-ui,'Segoe UI',sans-serif;direction:rtl;padding:0 28px 8px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
   <div style="width:75%;max-width:75%;height:2px;margin:0 auto;background:#E8B4C8;border-radius:1px;"></div>
   <div style="font-size:8px;line-height:1.45;color:#5C5C78;text-align:center;padding-top:6px;background:#FAF7F9;">
-    <div style="font-weight:700;color:#2C2C54;">אסק מי פלוס – מענה אנונימי מטעם ארגון &quot;עדי עד&quot;</div>
+    <div style="font-weight:700;color:#2C2C54;">פשו&quot;ת שידוך – מענה אנונימי מטעם ארגון &quot;עדי עד&quot;</div>
     <div style="color:#AD1457;margin-top:3px;">אתר עדי עד: www.adeyad.org</div>
     <div style="margin-top:3px;">המידע בתשובה זו הינו כללי ואינו מהווה תחליף לייעוץ מקצועי אישי.</div>
   </div>

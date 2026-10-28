@@ -22,12 +22,13 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-heebo), sans-serif;
+  font-family: var(--font-sans), "Assistant", sans-serif;
+  letter-spacing: 0.01em;
 }
 
 /* Force same font for LTR content (e.g. charts, numbers) so English matches team management */
 [dir="ltr"] {
-  font-family: var(--font-heebo), sans-serif;
+  font-family: var(--font-sans), "Assistant", sans-serif;
 }
 
 /* Smooth focus for keyboard nav */

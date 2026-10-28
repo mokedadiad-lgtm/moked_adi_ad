@@ -108,7 +108,7 @@ export async function sendPdfToAsker(
   const titleLine = questionTitle ? `<p style="margin: 0 0 1em; font-weight: 600;">${escapeHtml(questionTitle)}</p>` : "";
   const body = `
     <p style="margin: 0 0 1em;">שלום וברכה,</p>
-    <p style="margin: 0 0 1em;">שמחים לעדכן כי צוות אסק מי פלוס השיב לפנייתך בנושא:</p>
+    <p style="margin: 0 0 1em;">שמחים לעדכן כי צוות פשו"ת שידוך השיב לפנייתך בנושא:</p>
     ${titleLine}
     <p style="margin: 0 0 1em;">קובץ התשובה המלא (PDF) מצורף למייל זה לעיונך.</p>
   `;

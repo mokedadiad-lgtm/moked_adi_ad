@@ -2,7 +2,7 @@ import { BrandLogo } from "@/components/brand-logo";
 import { LoginForm } from "@/components/login/login-form";
 
 export const metadata = {
-  title: "כניסת צוות | אסק מי פלוס",
+  title: 'כניסת צוות | פשו"ת שידוך',
   description: "התחברות למערכת ניהול המוקד",
 };
 

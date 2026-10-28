@@ -3,7 +3,7 @@ import { PageLoadingFallback } from "@/components/ui/page-loading";
 import { Suspense } from "react";
 
 export const metadata = {
-  title: "לובי הגהה | אסק מי פלוס",
+  title: 'לובי הגהה | פשו"ת שידוך',
   description: "אזור מגיהים – משימות בהמתנה",
 };
 

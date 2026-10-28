@@ -3,7 +3,7 @@ import { PageLoadingFallback } from "@/components/ui/page-loading";
 import { Suspense } from "react";
 
 export const metadata = {
-  title: "שולחן עבודה - משיבים | אסק מי פלוס",
+  title: 'שולחן עבודה - משיבים | פשו"ת שידוך',
   description: "אזור עבודה למשיבים",
 };
 

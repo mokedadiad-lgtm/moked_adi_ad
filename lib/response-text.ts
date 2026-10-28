@@ -179,7 +179,7 @@ const SIGNATURE_TAGS = new Set(["b", "strong", "br", "div"]);
 
 /** טקסט חתימה ברירת מחדל ל-PDF (עריכה לשונית): שורה רגילה + שורה מודגשת, מוצגת לשמאל (LTR). */
 export const DEFAULT_LINGUISTIC_SIGNATURE_HTML =
-  "בברכה,<br><strong>משיבה מאסק מי פלוס</strong>";
+  'בברכה,<br><strong>משיבה מפשו"ת שידוך</strong>';
 
 /** מחזיר חתימה לתצוגה ו-PDF: אם אין במסד — ברירת המחדל. */
 export function effectiveLinguisticSignature(html: string | null | undefined): string {

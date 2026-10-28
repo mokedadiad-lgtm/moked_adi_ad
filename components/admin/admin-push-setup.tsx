@@ -369,7 +369,7 @@ export function AdminPushSetup() {
         <ul className="mt-2 list-disc space-y-2 pr-5 text-secondary">
           <li>
             <strong className="text-foreground">אייפון (Safari):</strong> הוסיפו את האתר למסך הבית (שיתוף → הוסף למסך הבית).
-            פתחו את האפליקציה מהאייקון. אם אין בקשה להתראות — לכו להגדרות → התראות → &quot;אסק מי פלוס&quot; ואפשרו.
+            פתחו את האפליקציה מהאייקון. אם אין בקשה להתראות — לכו להגדרות → התראות → &quot;פשו&quot;ת שידוך&quot; ואפשרו.
           </li>
           <li>
             <strong className="text-foreground">אנדרואיד (Chrome):</strong> הוסיפו למסך הבית אם תרצו, ואז בהגדרות האתר או בהגדרות

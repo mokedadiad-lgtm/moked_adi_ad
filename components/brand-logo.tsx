@@ -14,9 +14,9 @@ export function BrandLogo({ priority, imageClassName }: BrandLogoProps) {
   return (
     <Image
       src="/brand/logo-full.png"
-      alt="אסק מי פלוס"
-      width={233}
-      height={339}
+      alt='פשו"ת שידוך'
+      width={345}
+      height={618}
       className={cn(
         "h-auto w-full max-w-[280px] object-contain object-center",
         imageClassName

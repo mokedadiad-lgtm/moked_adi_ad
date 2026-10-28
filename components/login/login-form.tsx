@@ -420,7 +420,7 @@ export function LoginForm() {
     <Card className="overflow-hidden rounded-2xl shadow-dialog">
       <CardHeader className="space-y-1 flex flex-col items-center text-center">
         <CardTitle className="text-2xl font-bold text-center text-primary">
-          כניסת צוות - אסק מי פלוס
+          כניסת צוות - פשו"ת שידוך
         </CardTitle>
         <CardDescription className="text-muted-foreground text-center">
           הכנס פרטי התחברות כדי לגשת למערכת

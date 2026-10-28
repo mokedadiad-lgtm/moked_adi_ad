@@ -108,10 +108,10 @@ export function LandingForm() {
         />
       </div>
       <div className="mb-5 text-center">
-        <p className="mb-1.5 text-2xl font-bold tracking-tight text-slate-800 md:text-3xl">
-          ברוכה הבאה למוקד אסק-מי פלוס
+        <p className="mb-2 text-[1.65rem] font-bold leading-snug tracking-normal text-[#2c2c54] md:text-3xl">
+          ברוכה הבאה למוקד פשו"ת שידוך
         </p>
-        <p className="text-sm leading-relaxed text-slate-600">
+        <p className="text-[0.95rem] leading-[1.65] text-slate-600 md:text-base">
           כאן ניתן להשאיר את השאלה שלך ואנו נשתדל לענות עליה בעז&quot;ה.
           <br />
           נא לענות על השאלות הבאות ולאשר את התקנון.
