@@ -233,6 +233,14 @@ export function AnswerModal({
                 {question.content}
               </div>
               <div className="mt-4 flex flex-wrap items-center justify-start gap-6 border-t border-card-border pt-3 text-start text-sm">
+                {question.asker_gender && (
+                  <span>
+                    <span className="text-slate-500">פונה<span dir="ltr">:</span></span>{" "}
+                    <span className="text-primary">
+                      {question.asker_gender === "M" ? "בחור" : "בחורה"}
+                    </span>
+                  </span>
+                )}
                 {question.asker_age && (
                   <span>
                     <span className="text-slate-500">גיל<span dir="ltr">:</span></span>{" "}

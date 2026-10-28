@@ -1,5 +1,6 @@
 "use client";
 
+import { BRAND_NAME } from "@/lib/brand";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -420,7 +421,7 @@ export function LoginForm() {
     <Card className="overflow-hidden rounded-2xl shadow-dialog">
       <CardHeader className="space-y-1 flex flex-col items-center text-center">
         <CardTitle className="text-2xl font-bold text-center text-primary">
-          כניסת צוות - פשו"ת שידוך
+          {`כניסת צוות - ${BRAND_NAME}`}
         </CardTitle>
         <CardDescription className="text-muted-foreground text-center">
           הכנס פרטי התחברות כדי לגשת למערכת

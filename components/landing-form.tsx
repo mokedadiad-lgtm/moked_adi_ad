@@ -19,6 +19,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { submitQuestion, type SubmitState } from "@/app/actions/submit-question";
 import { ASKER_AGE_RANGE_LABELS } from "@/lib/asker-age-ranges";
+import { BRAND_NAME } from "@/lib/brand";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion } from "framer-motion";
 import { startTransition, useActionState, useEffect, useState } from "react";
@@ -27,7 +28,7 @@ import { z } from "zod";
 
 const schema = z.object({
   asker_email: z.string().min(1, "נא להזין אימייל לשליחת המענה.").email("נא להזין אימייל תקין."),
-  asker_gender: z.enum(["M", "F"]).optional(),
+  asker_gender: z.enum(["M", "F"], { message: "נא לבחור מין." }),
   asker_age: z.enum(ASKER_AGE_RANGE_LABELS, { message: "נא לבחור טווח גיל." }),
   title: z.string().min(1, "נא להזין כותרת השאלה."),
   content: z.string().min(1, "נא להזין את פירוט השאלה."),
@@ -40,7 +41,7 @@ type FormValues = z.infer<typeof schema>;
 
 const defaultValues: FormValues = {
   asker_email: "",
-  asker_gender: undefined,
+  asker_gender: "F",
   asker_age: "23-26",
   title: "",
   content: "",
@@ -52,7 +53,7 @@ const defaultValues: FormValues = {
 function formDataFromValues(values: FormValues): FormData {
   const fd = new FormData();
   fd.set("asker_email", values.asker_email);
-  if (values.asker_gender) fd.set("asker_gender", values.asker_gender);
+  fd.set("asker_gender", values.asker_gender);
   fd.set("asker_age", values.asker_age ?? "");
   fd.set("title", values.title);
   fd.set("content", values.content);
@@ -73,6 +74,8 @@ export function LandingForm() {
     resolver: zodResolver(schema),
     defaultValues,
   });
+
+  const askerGender = form.watch("asker_gender");
 
   useEffect(() => {
     if (state?.ok === true) setSubmitted(true);
@@ -109,7 +112,9 @@ export function LandingForm() {
       </div>
       <div className="mb-5 text-center">
         <p className="mb-2 text-[1.65rem] font-bold leading-snug tracking-normal text-[#2c2c54] md:text-3xl">
-          ברוכה הבאה למוקד פשו"ת שידוך
+          {askerGender === "M"
+            ? `ברוך הבא למוקד ${BRAND_NAME}`
+            : `ברוכה הבאה למוקד ${BRAND_NAME}`}
         </p>
         <p className="text-[0.95rem] leading-[1.65] text-slate-600 md:text-base">
           כאן ניתן להשאיר את השאלה שלך ואנו נשתדל לענות עליה בעז&quot;ה.
@@ -172,6 +177,11 @@ export function LandingForm() {
                 זכר
               </button>
             </div>
+            {form.formState.errors.asker_gender && (
+              <p className="text-center text-xs text-red-600">
+                {form.formState.errors.asker_gender.message}
+              </p>
+            )}
           </div>
           <div className="w-full max-w-[220px] space-y-1.5">
             <Label htmlFor="asker_age" className="text-base font-bold">גיל</Label>

@@ -22,6 +22,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ASKER_AGE_RANGE_LABELS, type AskerAgeRangeLabel } from "@/lib/asker-age-ranges";
+import {
+  ASKER_AUDIENCE_LABELS,
+  parseAskerAudience,
+  type AskerAudience,
+} from "@/lib/asker-audience";
 import { useEffect, useState } from "react";
 
 const COMM_LABELS: Record<string, string> = {
@@ -49,6 +54,7 @@ export function TeamMemberEditModal({
 }: TeamMemberEditModalProps) {
   const [full_name_he, setFullNameHe] = useState("");
   const [gender, setGender] = useState<"M" | "F">("M");
+  const [asker_audience, setAskerAudience] = useState<AskerAudience>("both");
   const [is_respondent, setIsRespondent] = useState(false);
   const [is_proofreader, setIsProofreader] = useState(false);
   const [is_linguistic_editor, setIsLinguisticEditor] = useState(false);
@@ -69,6 +75,7 @@ export function TeamMemberEditModal({
     if (profile) {
       setFullNameHe(profile.full_name_he ?? "");
       setGender(profile.gender);
+      setAskerAudience(parseAskerAudience(profile.asker_audience));
       setIsRespondent(profile.is_respondent);
       setIsProofreader(profile.is_proofreader);
       setIsLinguisticEditor(profile.is_linguistic_editor);
@@ -100,6 +107,7 @@ export function TeamMemberEditModal({
     const result = await updateTeamMember(profile.id, {
       full_name_he: full_name_he.trim() || null,
       gender,
+      asker_audience,
       is_respondent,
       is_proofreader,
       is_linguistic_editor,
@@ -167,6 +175,23 @@ export function TeamMemberEditModal({
               <SelectContent>
                 <SelectItem value="F">נקבה</SelectItem>
                 <SelectItem value="M">זכר</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>מיועד/ת לפונים</Label>
+            <Select
+              value={asker_audience}
+              onValueChange={(v) => setAskerAudience(v as AskerAudience)}
+            >
+              <SelectTrigger className="w-full text-right">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="F">{ASKER_AUDIENCE_LABELS.F}</SelectItem>
+                <SelectItem value="M">{ASKER_AUDIENCE_LABELS.M}</SelectItem>
+                <SelectItem value="both">{ASKER_AUDIENCE_LABELS.both}</SelectItem>
               </SelectContent>
             </Select>
           </div>

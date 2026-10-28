@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  audienceMatchesAskerGender,
+  parseAskerAudience,
+} from "@/lib/asker-audience";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getUserFromBearerToken } from "@/lib/supabase/route-auth";
 
@@ -26,7 +30,7 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseAdmin();
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("is_admin, is_technical_lead, is_proofreader, proofreader_type_id")
+      .select("is_admin, is_technical_lead, is_proofreader, proofreader_type_id, asker_audience")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -41,11 +45,14 @@ export async function GET(request: NextRequest) {
     }
 
     const typeId = (profile.proofreader_type_id as string | null) ?? null;
+    const audience = parseAskerAudience(
+      (profile as { asker_audience?: string }).asker_audience
+    );
 
     let qaQuery = supabase
       .from("question_answers")
       .select(
-        "id, question_id, response_text, assigned_proofreader_id, proofreader_type_id, deleted_at, questions(id, title, content, created_at)"
+        "id, question_id, response_text, assigned_proofreader_id, proofreader_type_id, deleted_at, questions(id, title, content, created_at, asker_gender)"
       )
       .eq("stage", "in_proofreading_lobby")
       .order("created_at", { ascending: true });
@@ -56,7 +63,9 @@ export async function GET(request: NextRequest) {
 
     let legacyQuery = supabase
       .from("questions")
-      .select("id, title, content, response_text, created_at, assigned_proofreader_id, proofreader_type_id")
+      .select(
+        "id, title, content, response_text, created_at, assigned_proofreader_id, proofreader_type_id, asker_gender"
+      )
       .eq("stage", "in_proofreading_lobby")
       .order("created_at", { ascending: true });
 
@@ -76,10 +85,31 @@ export async function GET(request: NextRequest) {
       proofreader_type_id?: string | null;
       deleted_at?: string | null;
       questions:
-        | { id: string; title?: string | null; content: string; created_at: string }
-        | { id: string; title?: string | null; content: string; created_at: string }[]
+        | {
+            id: string;
+            title?: string | null;
+            content: string;
+            created_at: string;
+            asker_gender?: string | null;
+          }
+        | {
+            id: string;
+            title?: string | null;
+            content: string;
+            created_at: string;
+            asker_gender?: string | null;
+          }[]
         | null;
     }[];
+
+    function genderOk(
+      askerGender: string | null | undefined,
+      assignedToMe: boolean
+    ): boolean {
+      if (isAdminOrTechLead || assignedToMe) return true;
+      const g = askerGender === "M" || askerGender === "F" ? askerGender : null;
+      return audienceMatchesAskerGender(audience, g);
+    }
 
     const activeQa = qaRows.filter((r) => !r.deleted_at);
     const fromQaIds = new Set(activeQa.map((r) => r.question_id));
@@ -87,6 +117,8 @@ export async function GET(request: NextRequest) {
       .map((r): ProofreaderTask | null => {
         const q = Array.isArray(r.questions) ? r.questions[0] : r.questions;
         if (!q) return null;
+        const assignedToMe = r.assigned_proofreader_id === user.id;
+        if (!genderOk(q.asker_gender, assignedToMe)) return null;
         return {
           id: q.id ?? r.question_id,
           answer_id: r.id,
@@ -100,7 +132,12 @@ export async function GET(request: NextRequest) {
       })
       .filter((x): x is ProofreaderTask => x !== null);
 
-    const legacy = ((qRes.data ?? []) as ProofreaderTask[]).filter((q) => !fromQaIds.has(q.id));
+    const legacy = (
+      (qRes.data ?? []) as (ProofreaderTask & { asker_gender?: string | null })[]
+    ).filter((q) => {
+      if (fromQaIds.has(q.id)) return false;
+      return genderOk(q.asker_gender, q.assigned_proofreader_id === user.id);
+    });
 
     return NextResponse.json({ ok: true, tasks: [...fromQa, ...legacy] });
   } catch (e) {

@@ -13,6 +13,11 @@ import {
   normalizeAskerAgeRangeInput,
   type AskerAgeRangeLabel,
 } from "@/lib/asker-age-ranges";
+import {
+  audienceMatchesAskerGender,
+  parseAskerAudience,
+  type AskerAudience,
+} from "@/lib/asker-audience";
 
 function revalidateAdminTopics() {
   revalidatePath("/admin/topics");
@@ -210,21 +215,53 @@ const ACTIVE_STAGES_FOR_COUNT: QuestionStage[] = [
   "ready_for_sending",
 ];
 
-/** משיבים עם סטטוס זמינות לשיבוץ (מכסה, צינון) */
+/** משיבים עם סטטוס זמינות לשיבוץ (מכסה, צינון, קהל יעד, גיל, נושא) */
 export async function getRespondentsWithEligibility(
   questionId: string,
   topicId?: string | null
 ): Promise<RespondentWithEligibility[]> {
   try {
     const supabase = getSupabaseAdmin();
+    const { data: questionMeta } = await supabase
+      .from("questions")
+      .select("asker_gender, asker_age, topic_id")
+      .eq("id", questionId)
+      .maybeSingle();
+    const askerGender =
+      questionMeta?.asker_gender === "M" || questionMeta?.asker_gender === "F"
+        ? questionMeta.asker_gender
+        : null;
+    const askerAge = normalizeAskerAgeRangeInput(questionMeta?.asker_age ?? null);
+    const effectiveTopicId = topicId ?? questionMeta?.topic_id ?? null;
+
     const { data: profiles, error: pe } = await supabase
       .from("profiles")
-      .select("id, full_name_he, concurrency_limit, cooldown_days")
+      .select("id, full_name_he, concurrency_limit, cooldown_days, asker_audience")
       .eq("is_respondent", true)
       .order("full_name_he");
     if (pe || !profiles?.length) return [];
 
     const ids = profiles.map((p) => p.id);
+    const topicsByProfile: Record<string, string[]> = {};
+    const ageRangesByProfile: Record<string, string[]> = {};
+    for (const id of ids) {
+      topicsByProfile[id] = [];
+      ageRangesByProfile[id] = [];
+    }
+    const { data: rt } = await supabase
+      .from("respondent_topics")
+      .select("profile_id, topic_id")
+      .in("profile_id", ids);
+    for (const row of rt ?? []) {
+      topicsByProfile[row.profile_id]?.push(row.topic_id);
+    }
+    const { data: rar } = await supabase
+      .from("respondent_age_ranges")
+      .select("profile_id, age_range")
+      .in("profile_id", ids);
+    for (const row of rar ?? []) {
+      ageRangesByProfile[row.profile_id]?.push(String(row.age_range ?? "").trim());
+    }
     const { data: activeCounts } = await supabase
       .from("questions")
       .select("assigned_respondent_id")
@@ -291,7 +328,31 @@ export async function getRespondentsWithEligibility(
       const cooldownDays = p.cooldown_days ?? 0;
       let eligible = true;
       let reason: string | undefined;
-      if (current >= limit) {
+
+      const audience = parseAskerAudience(
+        (p as { asker_audience?: string }).asker_audience
+      );
+      if (!audienceMatchesAskerGender(audience, askerGender)) {
+        eligible = false;
+        reason =
+          askerGender === "M"
+            ? "לא מיועד לפניות בחורים"
+            : "לא מיועד לפניות בחורות";
+      } else if (
+        askerAge &&
+        (ageRangesByProfile[p.id]?.length ?? 0) > 0 &&
+        !ageRangesByProfile[p.id]!.includes(askerAge)
+      ) {
+        eligible = false;
+        reason = "לא מיועד לטווח הגיל של הפונה";
+      } else if (
+        effectiveTopicId &&
+        (topicsByProfile[p.id]?.length ?? 0) > 0 &&
+        !topicsByProfile[p.id]!.includes(effectiveTopicId)
+      ) {
+        eligible = false;
+        reason = "לא משויך לנושא השאלה";
+      } else if (current >= limit) {
         eligible = false;
         reason = "סיים/ה מכסה";
       } else if (last && cooldownDays > 0) {
@@ -1153,6 +1214,8 @@ export interface TeamProfileRow {
   email: string | null;
   phone: string | null;
   gender: "M" | "F";
+  /** קהל פונים: בחורים / בחורות / גם וגם */
+  asker_audience: AskerAudience;
   is_respondent: boolean;
   is_proofreader: boolean;
   is_linguistic_editor: boolean;
@@ -1176,7 +1239,7 @@ export async function getTeamProfiles(): Promise<TeamProfileRow[]> {
     const { data: profiles, error } = await supabase
     .from("profiles")
     .select(
-      "id, full_name_he, gender, is_respondent, is_proofreader, is_linguistic_editor, is_technical_lead, proofreader_type_id, communication_preference, concurrency_limit, cooldown_days, phone"
+      "id, full_name_he, gender, asker_audience, is_respondent, is_proofreader, is_linguistic_editor, is_technical_lead, proofreader_type_id, communication_preference, concurrency_limit, cooldown_days, phone"
     )
     .order("full_name_he");
 
@@ -1236,6 +1299,7 @@ export async function getTeamProfiles(): Promise<TeamProfileRow[]> {
       email: emailMap[p.id] ?? null,
       phone: p.phone ?? null,
       gender: p.gender as "M" | "F",
+      asker_audience: parseAskerAudience((p as { asker_audience?: string }).asker_audience),
       is_respondent: p.is_respondent ?? false,
       is_proofreader: p.is_proofreader ?? false,
       is_linguistic_editor: p.is_linguistic_editor ?? false,
@@ -1262,6 +1326,7 @@ export async function updateTeamMember(
   data: {
     full_name_he: string | null;
     gender: "M" | "F";
+    asker_audience: AskerAudience;
     is_respondent: boolean;
     is_proofreader: boolean;
     is_linguistic_editor: boolean;
@@ -1285,6 +1350,7 @@ export async function updateTeamMember(
       .update({
         full_name_he: data.full_name_he || null,
         gender: data.gender,
+        asker_audience: parseAskerAudience(data.asker_audience),
         is_respondent: data.is_respondent,
         is_proofreader: data.is_proofreader,
         is_linguistic_editor: data.is_linguistic_editor,
@@ -1333,6 +1399,7 @@ export async function createTeamMember(data: {
   password: string;
   full_name_he: string | null;
   gender: "M" | "F";
+  asker_audience: AskerAudience;
   is_respondent: boolean;
   is_proofreader: boolean;
   is_linguistic_editor: boolean;
@@ -1389,6 +1456,7 @@ export async function createTeamMember(data: {
       id: userId,
       full_name_he: data.full_name_he || null,
       gender: data.gender,
+      asker_audience: parseAskerAudience(data.asker_audience),
       is_respondent: data.is_respondent,
       is_proofreader: data.is_proofreader,
       is_linguistic_editor: data.is_linguistic_editor,

@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  audienceMatchesAskerGender,
+  parseAskerAudience,
+} from "@/lib/asker-audience";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getUserFromBearerToken } from "@/lib/supabase/route-auth";
 
@@ -29,12 +33,35 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdmin();
     const { data: profile } = await supabase
       .from("profiles")
-      .select("is_admin, is_technical_lead, is_proofreader")
+      .select("is_admin, is_technical_lead, is_proofreader, asker_audience")
       .eq("id", user.id)
       .maybeSingle();
     const isStaff = profile?.is_admin === true || profile?.is_technical_lead === true;
     if (!isStaff && profile?.is_proofreader !== true) {
       return NextResponse.json({ ok: false, error: "אין הרשאה" }, { status: 403 });
+    }
+
+    // Claim: verify proofreader is allowed for this asker's gender
+    if (
+      !isStaff &&
+      updates.assigned_proofreader_id === user.id
+    ) {
+      const { data: q } = await supabase
+        .from("questions")
+        .select("asker_gender")
+        .eq("id", questionId)
+        .maybeSingle();
+      const askerGender =
+        q?.asker_gender === "M" || q?.asker_gender === "F" ? q.asker_gender : null;
+      const audience = parseAskerAudience(
+        (profile as { asker_audience?: string } | null)?.asker_audience
+      );
+      if (!audienceMatchesAskerGender(audience, askerGender)) {
+        return NextResponse.json(
+          { ok: false, error: "משימה זו אינה מיועדת לקהל הפונים שלך" },
+          { status: 403 }
+        );
+      }
     }
 
     const data = { ...updates, updated_at: new Date().toISOString() };

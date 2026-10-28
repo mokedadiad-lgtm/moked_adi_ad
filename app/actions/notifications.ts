@@ -2,6 +2,10 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { wantsEmail, wantsWhatsApp } from "@/lib/communicationPreference";
+import {
+  audienceMatchesAskerGender,
+  parseAskerAudience,
+} from "@/lib/asker-audience";
 import { sendAdminTechnicalAlert, sendNewQuestionInLobbyToProofreaders, sendToLinguisticEditor } from "@/lib/email";
 
 const APP_URL =
@@ -20,11 +24,15 @@ export async function notifyLobbyNewQuestion(questionId: string): Promise<{ ok: 
     const supabase = getSupabaseAdmin();
     const { data: question, error: qErr } = await supabase
       .from("questions")
-      .select("id, short_id, stage, proofreader_type_id, topic_id, sub_topic_id")
+      .select("id, short_id, stage, proofreader_type_id, topic_id, sub_topic_id, asker_gender")
       .eq("id", questionId)
       .single();
 
     if (qErr || !question) return { ok: false, error: "שאלה לא נמצאה" };
+    const askerGender =
+      question.asker_gender === "M" || question.asker_gender === "F"
+        ? question.asker_gender
+        : null;
 
     /** לובי יכול להיות רק ב־questions (legacy) או ב־question_answers; אם ה־RPC עדכן רק את question_answers, stage ב־questions נשאר ישן — עדיין צריך להתריע */
     const inLobbyOnQuestion = question.stage === "in_proofreading_lobby";
@@ -44,7 +52,7 @@ export async function notifyLobbyNewQuestion(questionId: string): Promise<{ ok: 
 
     const { data: allProof } = await supabase
       .from("profiles")
-      .select("id, full_name_he, communication_preference, proofreader_type_id, phone");
+      .select("id, full_name_he, communication_preference, proofreader_type_id, phone, asker_audience");
     const { data: fromJunction } = await supabase
       .from("profile_proofreader_types")
       .select("profile_id")
@@ -55,7 +63,13 @@ export async function notifyLobbyNewQuestion(questionId: string): Promise<{ ok: 
     }
     for (const r of fromJunction ?? []) typeMatchIds.add(r.profile_id);
 
-    const matchedProfiles = (allProof ?? []).filter((p) => typeMatchIds.has(p.id));
+    const matchedProfiles = (allProof ?? []).filter((p) => {
+      if (!typeMatchIds.has(p.id)) return false;
+      return audienceMatchesAskerGender(
+        parseAskerAudience((p as { asker_audience?: string }).asker_audience),
+        askerGender
+      );
+    });
     if (matchedProfiles.length === 0) return { ok: true };
 
     const { data: authData } = await supabase.auth.admin.listUsers({ perPage: 1000 });

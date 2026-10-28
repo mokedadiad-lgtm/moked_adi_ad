@@ -22,6 +22,10 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ASKER_AGE_RANGE_LABELS, type AskerAgeRangeLabel } from "@/lib/asker-age-ranges";
+import {
+  ASKER_AUDIENCE_LABELS,
+  type AskerAudience,
+} from "@/lib/asker-audience";
 import { useState } from "react";
 
 const COMM_LABELS: Record<string, string> = {
@@ -48,6 +52,7 @@ export function AddTeamMemberModal({
   const [password, setPassword] = useState("");
   const [full_name_he, setFullNameHe] = useState("");
   const [gender, setGender] = useState<"M" | "F">("M");
+  const [asker_audience, setAskerAudience] = useState<AskerAudience>("both");
   const [is_respondent, setIsRespondent] = useState(false);
   const [is_proofreader, setIsProofreader] = useState(false);
   const [is_linguistic_editor, setIsLinguisticEditor] = useState(false);
@@ -67,6 +72,7 @@ export function AddTeamMemberModal({
     setPassword("");
     setFullNameHe("");
     setGender("M");
+    setAskerAudience("both");
     setIsRespondent(false);
     setIsProofreader(false);
     setIsLinguisticEditor(false);
@@ -103,6 +109,10 @@ export function AddTeamMemberModal({
       setError("למשיב/ה יש לבחור לפחות טווח גיל אחד.");
       return;
     }
+    if ((is_respondent || is_proofreader) && !asker_audience) {
+      setError("נא לבחור למי מיועד/ת איש הצוות (בחורים / בחורות / גם וגם).");
+      return;
+    }
     setPending(true);
     setError(null);
     const result = await createTeamMember({
@@ -110,6 +120,7 @@ export function AddTeamMemberModal({
       password,
       full_name_he: full_name_he.trim() || null,
       gender,
+      asker_audience,
       is_respondent,
       is_proofreader,
       is_linguistic_editor,
@@ -184,6 +195,22 @@ export function AddTeamMemberModal({
               <SelectContent>
                 <SelectItem value="F">נקבה</SelectItem>
                 <SelectItem value="M">זכר</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>מיועד/ת לפונים</Label>
+            <Select
+              value={asker_audience}
+              onValueChange={(v) => setAskerAudience(v as AskerAudience)}
+            >
+              <SelectTrigger className="w-full text-right">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="F">{ASKER_AUDIENCE_LABELS.F}</SelectItem>
+                <SelectItem value="M">{ASKER_AUDIENCE_LABELS.M}</SelectItem>
+                <SelectItem value="both">{ASKER_AUDIENCE_LABELS.both}</SelectItem>
               </SelectContent>
             </Select>
           </div>

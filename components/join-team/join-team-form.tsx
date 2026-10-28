@@ -13,6 +13,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ASKER_AGE_RANGE_LABELS, type AskerAgeRangeLabel } from "@/lib/asker-age-ranges";
+import {
+  ASKER_AUDIENCE_LABELS,
+  type AskerAudience,
+} from "@/lib/asker-audience";
 import { useState } from "react";
 
 const COMM: Record<string, string> = {
@@ -40,6 +44,7 @@ export function JoinTeamForm({
   const [password2, setPassword2] = useState("");
   const [full_name_he, setFullNameHe] = useState("");
   const [gender, setGender] = useState<"M" | "F">("M");
+  const [asker_audience, setAskerAudience] = useState<AskerAudience>("both");
   const [communication_preference, setCommunicationPreference] = useState<"whatsapp" | "email" | "both">("email");
   const [phone, setPhone] = useState("");
   const [concurrency_limit, setConcurrencyLimit] = useState(1);
@@ -89,6 +94,7 @@ export function JoinTeamForm({
       email: email.trim(),
       full_name_he: full_name_he.trim() || null,
       gender,
+      asker_audience,
       communication_preference,
       phone: phone.trim() || null,
       concurrency_limit,
@@ -170,6 +176,23 @@ export function JoinTeamForm({
           <SelectContent>
             <SelectItem value="F">נקבה</SelectItem>
             <SelectItem value="M">זכר</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label>מיועד/ת לפונים</Label>
+        <Select
+          value={asker_audience}
+          onValueChange={(v) => setAskerAudience(v as AskerAudience)}
+        >
+          <SelectTrigger className="text-right">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="F">{ASKER_AUDIENCE_LABELS.F}</SelectItem>
+            <SelectItem value="M">{ASKER_AUDIENCE_LABELS.M}</SelectItem>
+            <SelectItem value="both">{ASKER_AUDIENCE_LABELS.both}</SelectItem>
           </SelectContent>
         </Select>
       </div>

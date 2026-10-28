@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ASKER_AUDIENCE_LABELS } from "@/lib/asker-audience";
 import { afterModalClose } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -55,6 +56,7 @@ export function TeamTable({ profiles, proofreaderTypes, topics }: TeamTableProps
                 <TableHead>שם מלא</TableHead>
                 <TableHead>אימייל</TableHead>
                 <TableHead>מגדר</TableHead>
+                <TableHead>מיועד ל</TableHead>
                 <TableHead>תפקידים</TableHead>
                 <TableHead>נושאים משויכים</TableHead>
                 <TableHead className="w-[80px]">פעולות</TableHead>
@@ -63,7 +65,7 @@ export function TeamTable({ profiles, proofreaderTypes, topics }: TeamTableProps
             <TableBody>
               {profiles.length === 0 ? (
                 <TableRow className="border-0 !bg-transparent odd:!bg-transparent even:!bg-transparent hover:!bg-transparent">
-                  <TableCell colSpan={6} className="py-8 text-center text-secondary">
+                  <TableCell colSpan={7} className="py-8 text-center text-secondary">
                     אין אנשי צוות במערכת
                   </TableCell>
                 </TableRow>
@@ -82,6 +84,11 @@ export function TeamTable({ profiles, proofreaderTypes, topics }: TeamTableProps
                     </TableCell>
                     <TableCell className="text-sm text-secondary">
                       {GENDER_LABEL[p.gender] ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-sm text-secondary">
+                      {p.is_respondent || p.is_proofreader
+                        ? ASKER_AUDIENCE_LABELS[p.asker_audience] ?? "—"
+                        : "—"}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">

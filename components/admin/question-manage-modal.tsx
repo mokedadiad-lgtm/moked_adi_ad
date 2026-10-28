@@ -36,11 +36,16 @@ const RESPONSE_LABEL: Record<string, string> = {
   short: "קצר ולעניין",
   detailed: "תשובה מפורטת",
 };
-const PUB_LABEL: Record<string, string> = {
-  publish: "מסכימה לפרסם",
-  blur: "מסכימה בטשטוש נתונים",
-  none: "לא לפרסום",
-};
+function pubLabel(
+  consent: string | null | undefined,
+  askerGender: "M" | "F" | null | undefined
+): string {
+  const male = askerGender === "M";
+  if (consent === "publish") return male ? "מסכים לפרסם" : "מסכימה לפרסם";
+  if (consent === "blur") return male ? "מסכים בטשטוש נתונים" : "מסכימה בטשטוש נתונים";
+  if (consent === "none") return "לא לפרסום";
+  return "—";
+}
 
 interface QuestionManageModalProps {
   question: QuestionRow | null;
@@ -199,7 +204,7 @@ export function QuestionManageModal({
             <div>
               <p className="text-xs text-slate-500">הסכמת פרסום</p>
               <p className="font-medium text-primary">
-                {question.publication_consent ? PUB_LABEL[question.publication_consent] ?? "—" : "—"}
+                {pubLabel(question.publication_consent, question.asker_gender)}
               </p>
             </div>
           </div>

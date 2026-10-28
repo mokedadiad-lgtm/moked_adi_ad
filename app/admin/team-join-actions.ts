@@ -152,6 +152,10 @@ export async function approveTeamJoinSubmission(
         password,
         full_name_he: p.full_name_he ? String(p.full_name_he) : null,
         gender: p.gender === "F" || p.gender === "M" ? p.gender : "M",
+        asker_audience:
+          p.asker_audience === "M" || p.asker_audience === "F" || p.asker_audience === "both"
+            ? p.asker_audience
+            : "both",
         is_respondent: true,
         is_proofreader: false,
         is_linguistic_editor: false,
@@ -177,6 +181,10 @@ export async function approveTeamJoinSubmission(
         password,
         full_name_he: p.full_name_he ? String(p.full_name_he) : null,
         gender: p.gender === "F" || p.gender === "M" ? p.gender : "M",
+        asker_audience:
+          p.asker_audience === "M" || p.asker_audience === "F" || p.asker_audience === "both"
+            ? p.asker_audience
+            : "both",
         is_respondent: false,
         is_proofreader: true,
         is_linguistic_editor: false,
