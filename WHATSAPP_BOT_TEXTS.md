@@ -279,7 +279,6 @@ M: תודה.
 {{content}}
 
 *מסלול מענה:* {{response_type}}
-*אפשרות פרסום:* {{publication_consent}}
 *ערוץ קבלת תשובה:* {{delivery_preference}}
 {% if asker_email exists %}*אימייל:* {{asker_email}}{% endif %}
 
@@ -296,7 +295,6 @@ F: תודה.
 {{content}}
 
 *מסלול מענה:* {{response_type}}
-*אפשרות פרסום:* {{publication_consent}}
 *ערוץ קבלת תשובה:* {{delivery_preference}}
 {% if asker_email exists %}*אימייל:* {{asker_email}}{% endif %}
 
@@ -311,7 +309,7 @@ F: תודה.
 **אחרי לחיצה על `שינוי` — תפריטי משנה לפי קטגוריה**
 - `EDIT_CAT_PERSONAL`: שינוי מגדר (`EDIT_GENDER`) | שינוי גיל (`EDIT_AGE`)
 - `EDIT_CAT_CONTENT`: שינוי שאלה (`EDIT_BODY`) | שינוי כותרת (`EDIT_TITLE`)
-- `EDIT_CAT_ANSWER`: שינוי מסלול מענה (`EDIT_RESPONSE_TYPE`) | שינוי אפשרות פרסום (`EDIT_PUBLICATION_CONSENT`) | שינוי ערוץ (`EDIT_DELIVERY_PREFERENCE`)
+- `EDIT_CAT_ANSWER`: שינוי מסלול מענה (`EDIT_RESPONSE_TYPE`) | שינוי ערוץ (`EDIT_DELIVERY_PREFERENCE`)
 
 ---
 

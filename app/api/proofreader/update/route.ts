@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  audienceMatchesAskerGender,
-  parseAskerAudience,
-} from "@/lib/asker-audience";
+  fetchDualProofreadersConfig,
+  isConfiguredDualProofreader,
+} from "@/lib/dual-proofreaders";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getUserFromBearerToken } from "@/lib/supabase/route-auth";
 
@@ -16,6 +16,9 @@ function authToken(request: NextRequest): string | null {
   const h = request.headers.get("authorization");
   return h?.startsWith("Bearer ") ? h.slice(7) : null;
 }
+
+/** Dual-gate update: only response_text (and staff stage overrides). */
+const ALLOWED_KEYS = new Set(["response_text", "stage", "proofreader_note", "assigned_proofreader_id"]);
 
 export async function POST(request: NextRequest) {
   try {
@@ -33,49 +36,47 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdmin();
     const { data: profile } = await supabase
       .from("profiles")
-      .select("is_admin, is_technical_lead, is_proofreader, asker_audience")
+      .select("is_admin, is_technical_lead, is_proofreader")
       .eq("id", user.id)
       .maybeSingle();
     const isStaff = profile?.is_admin === true || profile?.is_technical_lead === true;
-    if (!isStaff && profile?.is_proofreader !== true) {
+    const cfg = await fetchDualProofreadersConfig(supabase);
+    const isDual = isConfiguredDualProofreader(cfg, user.id);
+
+    if (!isStaff && !isDual) {
       return NextResponse.json({ ok: false, error: "אין הרשאה" }, { status: 403 });
     }
 
-    // Claim: verify proofreader is allowed for this asker's gender
-    if (
-      !isStaff &&
-      updates.assigned_proofreader_id === user.id
-    ) {
-      const { data: q } = await supabase
-        .from("questions")
-        .select("asker_gender")
-        .eq("id", questionId)
-        .maybeSingle();
-      const askerGender =
-        q?.asker_gender === "M" || q?.asker_gender === "F" ? q.asker_gender : null;
-      const audience = parseAskerAudience(
-        (profile as { asker_audience?: string } | null)?.asker_audience
-      );
-      if (!audienceMatchesAskerGender(audience, askerGender)) {
+    // Dual proofreaders may only edit response text while in lobby (completion goes through complete-review).
+    if (!isStaff && isDual) {
+      const keys = Object.keys(updates);
+      if (keys.length === 0 || keys.some((k) => k !== "response_text")) {
         return NextResponse.json(
-          { ok: false, error: "משימה זו אינה מיועדת לקהל הפונים שלך" },
-          { status: 403 }
+          { ok: false, error: "לסיום הגהה השתמשי בכפתורי האישור/הערה" },
+          { status: 400 }
         );
       }
     }
 
-    const data = { ...updates, updated_at: new Date().toISOString() };
+    const sanitized: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(updates)) {
+      if (ALLOWED_KEYS.has(k)) sanitized[k] = v;
+    }
+    if (Object.keys(sanitized).length === 0) {
+      return NextResponse.json({ ok: false, error: "אין שדות לעדכון" }, { status: 400 });
+    }
+
+    const data = { ...sanitized, updated_at: new Date().toISOString() };
     const { error } = answerId
       ? await supabase.from("question_answers").update(data).eq("id", answerId)
       : await supabase.from("questions").update(data).eq("id", questionId);
 
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
 
-    // Keep parent question stage aligned with question_answers stage transitions.
-    if (answerId && typeof updates.stage === "string" && updates.stage) {
+    if (answerId && typeof sanitized.stage === "string" && sanitized.stage) {
       await supabase
         .from("questions")
-        .update({ stage: updates.stage, updated_at: new Date().toISOString() })
+        .update({ stage: sanitized.stage, updated_at: new Date().toISOString() })
         .eq("id", questionId);
     }
 

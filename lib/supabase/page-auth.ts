@@ -57,9 +57,21 @@ export async function canAccessRespondentFromServerCookie(): Promise<boolean> {
 
 export async function canAccessProofreaderFromServerCookie(): Promise<boolean> {
   const auth = await getAuthFromServerCookie();
-  if (!auth.ok || !auth.profile) return false;
+  if (!auth.ok || !auth.profile || !auth.userId) return false;
   const isAdmin = auth.profile.is_admin === true || auth.profile.is_technical_lead === true;
-  const isProofreader =
-    auth.profile.is_proofreader === true && Boolean(auth.profile.proofreader_type_id);
-  return isAdmin || isProofreader;
+  if (isAdmin) return true;
+  if (auth.profile.is_proofreader !== true) return false;
+
+  const supabase = getSupabaseAdmin();
+  const { data: dual } = await supabase
+    .from("system_dual_proofreaders")
+    .select("proofreader_a_id, proofreader_b_id")
+    .eq("id", 1)
+    .maybeSingle();
+  const a = (dual as { proofreader_a_id?: string | null } | null)?.proofreader_a_id ?? null;
+  const b = (dual as { proofreader_b_id?: string | null } | null)?.proofreader_b_id ?? null;
+  if (auth.userId === a || auth.userId === b) return true;
+
+  // fallback: מגיהים עם סוג הגהה (תאימות לאחור עד שמגדירים את השתיים הקבועות)
+  return Boolean(auth.profile.proofreader_type_id);
 }

@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { QuestionRow } from "@/lib/types";
 
 const ARCHIVE_SELECT =
-  "id, short_id, stage, title, content, created_at, sent_at, asker_email, asker_age, asker_gender, response_type, publication_consent, assigned_respondent_id, assigned_proofreader_id, response_text, proofreader_note, pdf_url, pdf_generated_at, topic_id, sub_topic_id, topics(name_he), sub_topics(name_he)";
+  "id, short_id, stage, title, content, created_at, sent_at, asker_email, asker_phone, asker_age, asker_gender, response_type, publication_consent, assigned_respondent_id, assigned_proofreader_id, response_text, proofreader_note, pdf_url, pdf_generated_at, topic_id, sub_topic_id, topics(name_he), sub_topics(name_he)";
 
 type TopicRef = { name_he: string } | { name_he: string }[] | null | undefined;
 type ArchiveRowRaw = QuestionRow & {

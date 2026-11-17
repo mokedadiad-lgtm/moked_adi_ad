@@ -14,7 +14,6 @@ export async function submitQuestion(formData: FormData): Promise<SubmitState> {
   const title = String(formData.get("title") ?? "").trim();
   const content = String(formData.get("content") ?? "").trim();
   const response_type = formData.get("response_type") as string | null;
-  const publication_consent = formData.get("publication_consent") as string | null;
   const terms_accepted = formData.get("terms_accepted") === "on";
 
   if (!email) return { ok: false, error: "נא להזין אימייל לקבלת מענה." };
@@ -22,8 +21,6 @@ export async function submitQuestion(formData: FormData): Promise<SubmitState> {
   if (!content) return { ok: false, error: "נא להזין את פירוט השאלה." };
   if (!response_type || !["short", "detailed"].includes(response_type))
     return { ok: false, error: "נא לבחור מסלול מענה." };
-  if (!publication_consent || !["publish", "blur", "none"].includes(publication_consent))
-    return { ok: false, error: "נא לבחור אפשרות פרסום." };
   if (!terms_accepted) return { ok: false, error: "נא לאשר את תנאי השימוש." };
 
   const asker_age = normalizeAskerAgeRangeInput(asker_age_raw);
@@ -41,7 +38,7 @@ export async function submitQuestion(formData: FormData): Promise<SubmitState> {
         asker_gender: asker_gender === "M" || asker_gender === "F" ? asker_gender : null,
         asker_age,
         response_type: response_type as "short" | "detailed",
-        publication_consent: publication_consent as "publish" | "blur" | "none",
+        publication_consent: "not_asked",
         terms_accepted: true,
       })
       .select("id")

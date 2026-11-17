@@ -2024,7 +2024,7 @@ export interface QuestionIntakeDraftItem {
   title: string | null;
   content_preview: string;
   response_type: "short" | "detailed" | null;
-  publication_consent: "publish" | "blur" | "none" | null;
+  publication_consent: "publish" | "blur" | "none" | "not_asked" | null;
   delivery_preference: "whatsapp" | "email" | "both" | null;
   asker_email: string | null;
   edit_count: number;
@@ -2142,7 +2142,7 @@ export async function updateQuestionIntakeDraft(
     title: string | null;
     content: string | null;
     response_type: "short" | "detailed" | null;
-    publication_consent: "publish" | "blur" | "none" | null;
+    publication_consent: "publish" | "blur" | "none" | "not_asked" | null;
     delivery_preference: "whatsapp" | "email" | "both" | null;
     asker_email: string | null;
   }>
@@ -2211,7 +2211,7 @@ export async function approveQuestionIntakeDraft(
         asker_gender: draft.asker_gender ?? null,
         asker_age: draft.asker_age ?? null,
         response_type: draft.response_type ?? "short",
-        publication_consent: draft.publication_consent ?? "none",
+        publication_consent: "not_asked",
         asker_delivery_preference: draft.delivery_preference ?? null,
         terms_accepted: true,
         updated_at: new Date().toISOString(),
@@ -2306,6 +2306,90 @@ export async function discardQuestionIntakeDraft(
       .eq("id", draftId);
 
     if (upErr) return { ok: false, error: upErr.message };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: safeError((e as Error)?.message) };
+  }
+}
+
+export type DualProofreadersAdminConfig = {
+  proofreader_a_id: string | null;
+  proofreader_b_id: string | null;
+  proofreader_a_name: string | null;
+  proofreader_b_name: string | null;
+};
+
+export async function getDualProofreadersConfig(): Promise<DualProofreadersAdminConfig> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data } = await supabase
+      .from("system_dual_proofreaders")
+      .select("proofreader_a_id, proofreader_b_id")
+      .eq("id", 1)
+      .maybeSingle();
+    const aId = (data as { proofreader_a_id?: string | null } | null)?.proofreader_a_id ?? null;
+    const bId = (data as { proofreader_b_id?: string | null } | null)?.proofreader_b_id ?? null;
+    const ids = [aId, bId].filter(Boolean) as string[];
+    let names: Record<string, string> = {};
+    if (ids.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name_he")
+        .in("id", ids);
+      names = Object.fromEntries(
+        (profiles ?? []).map((p) => [p.id, (p.full_name_he ?? "").trim()])
+      );
+    }
+    return {
+      proofreader_a_id: aId,
+      proofreader_b_id: bId,
+      proofreader_a_name: aId ? names[aId] || null : null,
+      proofreader_b_name: bId ? names[bId] || null : null,
+    };
+  } catch {
+    return {
+      proofreader_a_id: null,
+      proofreader_b_id: null,
+      proofreader_a_name: null,
+      proofreader_b_name: null,
+    };
+  }
+}
+
+export async function updateDualProofreadersConfig(input: {
+  proofreader_a_id: string | null;
+  proofreader_b_id: string | null;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const a = input.proofreader_a_id?.trim() || null;
+    const b = input.proofreader_b_id?.trim() || null;
+    if (a && b && a === b) {
+      return { ok: false, error: "יש לבחור שתי מגיהות שונות" };
+    }
+    const supabase = getSupabaseAdmin();
+    if (a || b) {
+      const ids = [a, b].filter(Boolean) as string[];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, is_proofreader")
+        .in("id", ids);
+      const byId = Object.fromEntries((profiles ?? []).map((p) => [p.id, p]));
+      for (const id of ids) {
+        if (!byId[id]?.is_proofreader) {
+          return { ok: false, error: "יש לבחור רק אנשי צוות עם תפקיד מגיה/ה" };
+        }
+      }
+    }
+    const { error } = await supabase.from("system_dual_proofreaders").upsert({
+      id: 1,
+      proofreader_a_id: a,
+      proofreader_b_id: b,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/admin/team");
+    revalidatePath("/admin");
+    revalidatePath("/proofreader");
     return { ok: true };
   } catch (e) {
     return { ok: false, error: safeError((e as Error)?.message) };

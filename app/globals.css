@@ -2,7 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* === עיצוב ישן (גלאס + סרגל כהה) === */
+:root,
+html[data-ui-style="classic"] {
   --background: #faf7f9;
   --foreground: #2c2c54;
   --primary: #d81b60;
@@ -17,10 +19,92 @@
   --border: #e5dde2;
   --ring: #d81b60;
   --radius: 0.75rem;
+  --shadow-soft: 0 2px 15px -3px rgb(0 0 0 / 0.06), 0 4px 6px -4px rgb(0 0 0 / 0.04);
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05);
+  --shadow-dialog: 0 25px 50px -12px rgb(0 0 0 / 0.12);
+  --app-atmosphere: none;
+  --surface-glass: color-mix(in srgb, var(--background) 80%, transparent);
+  --surface-glass-strong: color-mix(in srgb, var(--card) 70%, transparent);
+  --blur-amount: 8px;
+
+  --sidebar-bg: #1a1a35;
+  --sidebar-fg: #ffffff;
+  --sidebar-muted: #a8a8c4;
+  --sidebar-border: rgb(255 255 255 / 0.12);
+  --sidebar-surface: rgb(0 0 0 / 0.18);
+  --sidebar-hover: rgb(255 255 255 / 0.08);
+  --sidebar-text: #cbd5e1;
+  --sidebar-text-strong: #f8fafc;
+  --sidebar-active-bg: color-mix(in srgb, var(--primary) 32%, transparent);
+  --sidebar-active-fg: #ffffff;
+  --sidebar-logo-ring: rgb(255 255 255 / 0.14);
+  --sidebar-scroll-track: #52525b;
+  --sidebar-scroll-thumb: #e2e8f0;
+
+  --table-header-bg: #a2bfed;
+  --table-header-border: #8baae8;
+  --table-header-fg: #ffffff;
+  --table-row-odd: #ffffff;
+  --table-row-even: #f1f5f9;
+  --table-row-hover: #e2e8f0;
+  --table-shell-bg: rgb(241 245 249 / 0.5);
+}
+
+/* === עיצוב חדש — גלאס מודרני + אפור כהה בכותרות === */
+html[data-ui-style="fresh"] {
+  --background: #f6f2f5;
+  --foreground: #2a2430;
+  --primary: #c9184a;
+  --primary-hover: #a0123c;
+  --primary-foreground: #ffffff;
+  --secondary: #5b5260;
+  --muted: #f1eaee;
+  --muted-foreground: #7a6f7a;
+  --accent: #fde8ef;
+  --card: rgb(255 255 255 / 0.72);
+  --card-border: rgb(234 223 229 / 0.9);
+  --border: rgb(230 219 226 / 0.95);
+  --ring: #c9184a;
+  --radius: 1rem;
+  --shadow-soft: 0 1px 2px rgb(42 36 48 / 0.04), 0 12px 32px -14px rgb(42 36 48 / 0.14);
+  --shadow-card: 0 1px 2px rgb(42 36 48 / 0.04), 0 8px 24px -10px rgb(42 36 48 / 0.12);
+  --shadow-dialog: 0 24px 56px -18px rgb(42 36 48 / 0.22);
+  --app-atmosphere:
+    radial-gradient(980px 560px at 100% -8%, rgb(201 24 74 / 0.11), transparent 58%),
+    radial-gradient(760px 440px at -5% 18%, rgb(120 90 110 / 0.08), transparent 52%),
+    linear-gradient(180deg, #faf7f8 0%, #f3edf1 100%);
+  --surface-glass: color-mix(in srgb, #ffffff 70%, transparent);
+  --surface-glass-strong: color-mix(in srgb, #ffffff 82%, transparent);
+  --blur-amount: 14px;
+
+  --sidebar-bg: color-mix(in srgb, #ffffff 78%, transparent);
+  --sidebar-fg: #2a2430;
+  --sidebar-muted: #8a7f8a;
+  --sidebar-border: rgb(234 223 229 / 0.85);
+  --sidebar-surface: color-mix(in srgb, #ffffff 55%, transparent);
+  --sidebar-hover: color-mix(in srgb, #f8eef3 80%, transparent);
+  --sidebar-text: #4a4250;
+  --sidebar-text-strong: #2a2430;
+  --sidebar-active-bg: color-mix(in srgb, var(--primary) 14%, white);
+  --sidebar-active-fg: var(--primary);
+  --sidebar-logo-ring: color-mix(in srgb, var(--primary) 18%, white);
+  --sidebar-scroll-track: #efe6eb;
+  --sidebar-scroll-thumb: #c4b3bc;
+
+  /* אפור כהה יחסית — לא שחור / לא בורדו */
+  --table-header-bg: #6b7280;
+  --table-header-border: #4b5563;
+  --table-header-fg: #ffffff;
+  --table-row-odd: rgb(255 255 255 / 0.88);
+  --table-row-even: rgb(250 246 248 / 0.9);
+  --table-row-hover: rgb(243 232 237 / 0.95);
+  --table-shell-bg: color-mix(in srgb, #faf6f8 65%, transparent);
 }
 
 body {
   background: var(--background);
+  background-image: var(--app-atmosphere);
+  background-attachment: fixed;
   color: var(--foreground);
   font-family: var(--font-sans), "Assistant", sans-serif;
   letter-spacing: 0.01em;
@@ -35,6 +119,93 @@ body {
 *:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
+}
+
+/* עיצוב חדש: גלאס מודרני על כרטיסים וסרגל */
+html[data-ui-style="fresh"] .shadow-soft {
+  box-shadow: var(--shadow-soft);
+}
+
+html[data-ui-style="fresh"] .rounded-2xl {
+  border-radius: calc(var(--radius) + 0.25rem);
+}
+
+html[data-ui-style="fresh"] .shadow-card {
+  box-shadow: var(--shadow-card);
+}
+
+html[data-ui-style="fresh"] .bg-card,
+html[data-ui-style="fresh"] [class*="bg-card"] {
+  -webkit-backdrop-filter: blur(var(--blur-amount));
+  backdrop-filter: blur(var(--blur-amount));
+}
+
+/* סרגל ניהול — צבעים משותפים לשני הסגנונות */
+.admin-sidebar {
+  background: var(--sidebar-bg);
+  border-color: var(--sidebar-border);
+  color: var(--sidebar-fg);
+}
+
+html[data-ui-style="fresh"] .admin-sidebar {
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: blur(18px) saturate(1.15);
+}
+
+html[data-ui-style="fresh"] .admin-sidebar-section {
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.admin-sidebar-header {
+  border-color: var(--sidebar-border);
+  background: transparent;
+}
+
+.admin-sidebar-title {
+  color: var(--sidebar-fg);
+}
+
+.admin-sidebar-subtitle {
+  color: var(--sidebar-muted);
+}
+
+.admin-sidebar-section {
+  border: 1px solid var(--sidebar-border);
+  background: var(--sidebar-surface);
+}
+
+.admin-sidebar-section-btn {
+  color: var(--sidebar-text);
+}
+
+.admin-sidebar-section-btn:hover {
+  background: var(--sidebar-hover);
+  color: var(--sidebar-text-strong);
+}
+
+.admin-sidebar-link {
+  color: var(--sidebar-text);
+}
+
+.admin-sidebar-link:hover {
+  background: var(--sidebar-hover);
+  color: var(--sidebar-text-strong);
+}
+
+.admin-sidebar-link-active {
+  background: var(--sidebar-active-bg);
+  color: var(--sidebar-active-fg);
+  font-weight: 600;
+}
+
+.admin-sidebar-divider {
+  border-color: var(--sidebar-border);
+}
+
+.admin-sidebar-logo {
+  border-color: var(--sidebar-border);
+  box-shadow: 0 0 0 1px var(--sidebar-logo-ring);
 }
 
 /* גלגלת בסרגל כהה: מסלול אפור, ידית בהירה (היפוך מברירת המחדל הלבנה) */
@@ -57,38 +228,24 @@ body {
   background: #f8fafc;
 }
 
-/* גלגלת סרגל ניווט: בהיר במובייל, כהה מ־md (מתאים לרקע הסרגל) */
+/* גלגלת סרגל ניווט — לפי משתני הסרגל */
 .scrollbar-sidebar-nav {
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 #f1f5f9;
+  scrollbar-color: var(--sidebar-scroll-thumb) var(--sidebar-scroll-track);
 }
 .scrollbar-sidebar-nav::-webkit-scrollbar {
   width: 8px;
 }
 .scrollbar-sidebar-nav::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: var(--sidebar-scroll-track);
   border-radius: 4px;
 }
 .scrollbar-sidebar-nav::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--sidebar-scroll-thumb);
   border-radius: 4px;
 }
 .scrollbar-sidebar-nav::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
-@media (min-width: 768px) {
-  .scrollbar-sidebar-nav {
-    scrollbar-color: #e2e8f0 #52525b;
-  }
-  .scrollbar-sidebar-nav::-webkit-scrollbar-track {
-    background: #52525b;
-  }
-  .scrollbar-sidebar-nav::-webkit-scrollbar-thumb {
-    background: #e2e8f0;
-  }
-  .scrollbar-sidebar-nav::-webkit-scrollbar-thumb:hover {
-    background: #f8fafc;
-  }
+  background: color-mix(in srgb, var(--sidebar-scroll-thumb) 70%, var(--sidebar-fg));
 }
 
 /* גלגלת עדינה למודלים גדולים (צמודה לקצה עם מסלול שקוף) */

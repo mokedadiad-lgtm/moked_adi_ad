@@ -16,7 +16,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-40 bg-slate-800/40 backdrop-blur-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 z-40 bg-foreground/35 backdrop-blur-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className
     )}
     {...props}
@@ -37,7 +37,7 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg max-h-[min(90vh,calc(100dvh-1rem))] translate-x-[-50%] translate-y-[-50%] gap-3 rounded-xl border border-slate-200 bg-white p-4 text-start shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg max-h-[min(90vh,calc(100dvh-1rem))] translate-x-[-50%] translate-y-[-50%] gap-3 rounded-2xl border border-card-border bg-card p-4 text-start text-foreground shadow-dialog duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
         showClose && "pt-10 pr-10 pl-4 rtl:pr-4 rtl:pl-10",
         className
       )}
@@ -45,7 +45,7 @@ const DialogContent = React.forwardRef<
     >
       {showClose && (
         <DialogPrimitive.Close
-          className="absolute right-4 top-4 z-10 rounded-md p-1.5 text-slate-500 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:pointer-events-none rtl:right-auto rtl:left-4"
+          className="absolute right-4 top-4 z-10 rounded-md p-1.5 text-muted-foreground opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring/40 disabled:pointer-events-none rtl:right-auto rtl:left-4"
           aria-label="סגור"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

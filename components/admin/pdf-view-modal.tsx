@@ -1,5 +1,6 @@
 "use client";
 
+import { PdfShareButton } from "@/components/admin/pdf-share-button";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +17,9 @@ interface PdfViewModalProps {
   questionId: string | null;
   /** for=asker | for=archive – משפיע על שם הקובץ ב-URL (לצפייה משתמשים ב-view=1) */
   forParam?: "asker" | "archive";
+  title?: string | null;
+  shortId?: string | null;
+  pdfGeneratedAt?: string | null;
 }
 
 /** Android/iOS לא מציגים PDF בתוך iframe עם blob: — רק URL ישיר לשרת */
@@ -36,6 +40,9 @@ export function PdfViewModal({
   onOpenChange,
   questionId,
   forParam = "archive",
+  title,
+  shortId,
+  pdfGeneratedAt,
 }: PdfViewModalProps) {
   const [viewerSrc, setViewerSrc] = useState<string | null>(null);
   const [directApiUrl, setDirectApiUrl] = useState<string | null>(null);
@@ -117,8 +124,19 @@ export function PdfViewModal({
         className="max-w-4xl w-[95vw] h-[85vh] flex flex-col p-0"
         dir="rtl"
       >
-        <DialogHeader className="px-4 pt-4 pb-0 shrink-0">
+        <DialogHeader className="flex flex-row items-center justify-between gap-2 px-4 pt-4 pb-0 shrink-0 space-y-0">
           <DialogTitle>צפייה ב-PDF</DialogTitle>
+          {questionId ? (
+            <PdfShareButton
+              questionId={questionId}
+              forParam={forParam}
+              pdfGeneratedAt={pdfGeneratedAt}
+              title={title}
+              shortId={shortId}
+              showLabel
+              buttonClassName="border-red-300 text-red-600 hover:bg-red-50"
+            />
+          ) : null}
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col px-4 pb-4">
           {loading && (

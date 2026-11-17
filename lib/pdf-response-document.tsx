@@ -207,6 +207,7 @@ export interface ResponsePdfProps {
   centerLogoDataUri?: string;
   rightLogoDataUri?: string;
   linguisticSignature?: string | null;
+  askerGender?: "M" | "F" | null;
 }
 
 function formatHebrewCreatedDate(iso: string): string {
@@ -235,6 +236,7 @@ export function ResponsePdfDocument({
   centerLogoDataUri,
   rightLogoDataUri,
   linguisticSignature,
+  askerGender,
 }: ResponsePdfProps) {
   const useStructuredBody = Boolean(bodyHtmlForPdf && String(bodyHtmlForPdf).trim());
   const bodyLines = bodyPlain ? bodyPlain.split(/\n+/) : [];
@@ -242,7 +244,9 @@ export function ResponsePdfDocument({
   const questionLines = questionContent ? questionContent.split(/\n+/) : [];
   const hasQuestionLines = questionLines.length > 0;
 
-  const sigSegments = parseSignatureHtmlSegments(effectiveLinguisticSignature(linguisticSignature));
+  const sigSegments = parseSignatureHtmlSegments(
+    effectiveLinguisticSignature(linguisticSignature, askerGender)
+  );
 
   return (
     <Document>

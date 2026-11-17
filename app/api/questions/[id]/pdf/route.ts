@@ -73,6 +73,7 @@ export async function POST(
     stage?: string;
     answers_merged_at?: string | null;
     linguistic_signature?: string | null;
+    asker_gender?: "M" | "F" | null;
   };
   try {
     const supabase = getSupabaseAdmin();
@@ -80,7 +81,9 @@ export async function POST(
     let error: { message?: string } | null = null;
     const withSig = await supabase
       .from("questions")
-      .select("content, response_text, created_at, stage, answers_merged_at, linguistic_signature")
+      .select(
+        "content, response_text, created_at, stage, answers_merged_at, linguistic_signature, asker_gender"
+      )
       .eq("id", id)
       .single();
     if (
@@ -89,7 +92,7 @@ export async function POST(
     ) {
       const noSig = await supabase
         .from("questions")
-        .select("content, response_text, created_at, stage, answers_merged_at")
+        .select("content, response_text, created_at, stage, answers_merged_at, asker_gender")
         .eq("id", id)
         .single();
       data = noSig.data ? { ...noSig.data, linguistic_signature: null as string | null } : null;
@@ -168,12 +171,17 @@ export async function POST(
   }
 
   const pdfGeneratedAt = new Date().toISOString();
+  const askerGender =
+    question.asker_gender === "M" || question.asker_gender === "F"
+      ? question.asker_gender
+      : null;
   const pdfOptions = {
     questionContent: question.content,
     bodyHtmlForPdf,
     footnotes,
     createdAt: pdfGeneratedAt,
     linguisticSignature: question.linguistic_signature ?? null,
+    askerGender,
   };
 
   let buffer: Buffer;

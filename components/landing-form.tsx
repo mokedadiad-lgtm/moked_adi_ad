@@ -33,7 +33,6 @@ const schema = z.object({
   title: z.string().min(1, "נא להזין כותרת השאלה."),
   content: z.string().min(1, "נא להזין את פירוט השאלה."),
   response_type: z.enum(["short", "detailed"]),
-  publication_consent: z.enum(["publish", "blur", "none"]),
   terms_accepted: z.boolean().refine((v) => v === true, { message: "נא לאשר את תנאי השימוש." }),
 });
 
@@ -46,7 +45,6 @@ const defaultValues: FormValues = {
   title: "",
   content: "",
   response_type: "short",
-  publication_consent: "publish",
   terms_accepted: false,
 };
 
@@ -58,7 +56,8 @@ function formDataFromValues(values: FormValues): FormData {
   fd.set("title", values.title);
   fd.set("content", values.content);
   fd.set("response_type", values.response_type);
-  fd.set("publication_consent", values.publication_consent);
+  // ללא שאלת פרסום בטופס — ברירת מחדל: לא נשאל
+  fd.set("publication_consent", "not_asked");
   fd.set("terms_accepted", values.terms_accepted ? "on" : "");
   return fd;
 }
@@ -92,10 +91,10 @@ export function LandingForm() {
       <motion.section
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="rounded-xl border border-slate-200/80 bg-white p-6 text-center shadow-sm"
+        className="rounded-2xl border border-card-border bg-card p-6 text-center shadow-card"
       >
         <p className="text-base font-semibold text-primary">השאלה נשלחה בהצלחה</p>
-        <p className="mt-1.5 text-sm text-slate-600">
+        <p className="mt-1.5 text-sm text-muted-foreground">
           נשתדל להחזיר לך תשובה בהתאם למסלול שבחרת, בעז&quot;ה.
         </p>
       </motion.section>
@@ -111,23 +110,23 @@ export function LandingForm() {
         />
       </div>
       <div className="mb-5 text-center">
-        <p className="mb-2 text-[1.65rem] font-bold leading-snug tracking-normal text-[#2c2c54] md:text-3xl">
+        <p className="mb-2 text-[1.65rem] font-bold leading-snug tracking-normal text-foreground md:text-3xl">
           {askerGender === "M"
             ? `ברוך הבא למוקד ${BRAND_NAME}`
             : `ברוכה הבאה למוקד ${BRAND_NAME}`}
         </p>
-        <p className="text-[0.95rem] leading-[1.65] text-slate-600 md:text-base">
+        <p className="text-[0.95rem] leading-[1.65] text-muted-foreground md:text-base">
           כאן ניתן להשאיר את השאלה שלך ואנו נשתדל לענות עליה בעז&quot;ה.
           <br />
           נא לענות על השאלות הבאות ולאשר את התקנון.
         </p>
       </div>
 
-      <section className="mb-6 rounded-xl border border-amber-300/80 bg-amber-50 p-4 text-center shadow-sm">
-        <h2 className="mb-2 flex items-center justify-center gap-1.5 text-base font-bold text-amber-800">
+      <section className="mb-6 rounded-2xl border border-amber-200/90 bg-amber-50/90 p-4 text-center shadow-card">
+        <h2 className="mb-2 flex items-center justify-center gap-1.5 text-base font-bold text-amber-900">
           <span>🔒</span> דיסקרטיות מלאה
         </h2>
-        <p className="text-xs leading-relaxed text-slate-600">
+        <p className="text-xs leading-relaxed text-muted-foreground">
           הכל נשאר חסוי ואנונימי. אנו מתחייבים לשמור על דיסקרטיות מלאה, ולכן גם
           אם יש פרטים שידועים לנו על הפונה, הם חסויים וישארו כך. למעט מקרים בהם
           מתקיים נוהל חירום והצלת חיים, שבהם אנו מחויבים על פי חוק ומוסריות לעשות כל מאמץ להציל חיים.
@@ -136,7 +135,7 @@ export function LandingForm() {
 
       <form onSubmit={onSubmit} className="mx-auto max-w-2xl space-y-5 text-center">
       {/* פרטי פונה: אימייל, מין, גיל */}
-      <section className="space-y-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
+      <section className="space-y-4 rounded-2xl border border-card-border bg-card p-4 shadow-card">
         <div className="grid grid-cols-1 place-items-center gap-3 md:grid-cols-3 md:items-start md:justify-items-center">
           <div className="w-full max-w-xs space-y-1.5">
             <Label htmlFor="asker_email" className="text-base font-bold">אימייל (לשליחת המענה)</Label>
@@ -208,7 +207,7 @@ export function LandingForm() {
       </section>
 
       {/* השאלה: כותרת ופרטים */}
-      <section className="space-y-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
+      <section className="space-y-4 rounded-2xl border border-card-border bg-card p-4 shadow-card">
         <div className="space-y-1.5">
           <Label htmlFor="title" className="text-base font-bold">כותרת השאלה</Label>
           <Input
@@ -239,7 +238,7 @@ export function LandingForm() {
       </section>
 
       {/* בחירת מסלול */}
-      <section className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
+      <section className="rounded-2xl border border-card-border bg-card p-4 shadow-card">
         <Label className="mb-3 block text-center text-base font-bold">בחירת מסלול</Label>
         <RadioGroup
           value={form.watch("response_type")}
@@ -294,47 +293,6 @@ export function LandingForm() {
         <p className="mt-2 text-center text-xs text-slate-500">
           * לעיתים רחוקות ייתכנו עיכובים במענה, אנו עושים כל מאמץ, בעז&quot;ה, לצמצם
           זאת ככל האפשר.
-        </p>
-      </section>
-
-      {/* פרסום והסכמה */}
-      <section className="space-y-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
-        <Label className="block text-center text-base font-bold">פרסום והסכמה</Label>
-        <Select
-          value={form.watch("publication_consent")}
-          onValueChange={(v) => form.setValue("publication_consent", v as "publish" | "blur" | "none")}
-        >
-          <SelectTrigger className="mx-auto max-w-md">
-            <SelectValue placeholder={form.watch("asker_gender") === "M" ? "בחר אפשרות פרסום" : "בחרי אפשרות פרסום"} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="publish">
-              <span dir="rtl">
-                {form.watch("asker_gender") === "M" ? "אני מסכים לפרסם את השאלה שלי" : "אני מסכימה לפרסם את השאלה שלי"}
-                {"\u200E"}.
-              </span>
-            </SelectItem>
-            <SelectItem value="blur">
-              <span dir="rtl">
-                {form.watch("asker_gender") === "M" ? "אני מסכים לפרסם בטשטוש נתונים" : "אני מסכימה לפרסם בטשטוש נתונים"}
-                {"\u200E"}.
-              </span>
-            </SelectItem>
-            <SelectItem value="none">
-              <span dir="rtl">השאלה שלי לא לפרסום{"\u200E"}.</span>
-            </SelectItem>
-          </SelectContent>
-        </Select>
-
-        <p className="text-center text-xs leading-relaxed text-slate-600">
-          {form.watch("asker_gender") === "M"
-            ? "פעמים רבות השאלות שאנו נשאלים יכולות לסייע למתמודדים נוספים. אתה חשוב לנו ולעולם לא נפרסם את השאלה שלך אם לא תסכים."
-            : "פעמים רבות השאלות שאנו נשאלים יכולות לסייע למתמודדות נוספות. את חשובה לנו ולעולם לא נפרסם את השאלה שלך אם לא תסכימי."}
-        </p>
-        <p className="text-center text-xs leading-relaxed text-slate-600">
-          {form.watch("asker_gender") === "M"
-            ? "את התשובות שאנו עונים יש לנו את הזכות לפרסם לתועלת נערים נוספים, בטשטוש פרטים מזהים."
-            : "את התשובות שאנו עונים יש לנו את הזכות לפרסם לתועלת נערות נוספות, בטשטוש פרטים מזהים."}
         </p>
       </section>
 

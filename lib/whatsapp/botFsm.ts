@@ -4,7 +4,7 @@ import { WA_INTERACTIVE_BODY_BUTTONS_ONLY } from "@/lib/whatsapp/waInteractive";
 
 export type Gender = "M" | "F";
 export type ResponseType = "short" | "detailed";
-export type PublicationConsent = "publish" | "blur" | "none";
+export type PublicationConsent = "publish" | "blur" | "none" | "not_asked";
 export type DeliveryPreference = "whatsapp" | "email" | "both";
 
 export type BotConversationState =
@@ -187,6 +187,7 @@ function responseTypeLabel(rt: ResponseType): string {
 function publicationConsentLabel(pc: PublicationConsent): string {
   if (pc === "publish") return PUBLICATION_PUBLISH_BUTTON_TITLE;
   if (pc === "blur") return PUBLICATION_BLUR_BUTTON_TITLE;
+  if (pc === "not_asked") return "לא נשאל";
   return PUBLICATION_NONE_BUTTON_TITLE;
 }
 
@@ -486,31 +487,19 @@ export async function runBotFsm(params: {
         return { ok: true, nextState: "response_type", nextContext: ctx, outbound };
       }
       ctx.response_type = rt;
-      sendButtons(renderText("publication_consent", ctx).trimEnd(), [
-        { id: "PUB_PUBLISH", title: WA_REPLY_PUB_PUBLISH },
-        { id: "PUB_BLUR", title: WA_REPLY_PUB_BLUR },
-        { id: "PUB_NONE", title: WA_REPLY_PUB_NONE },
+      // פרסום לא נשאל יותר — ברירת מחדל "לא נשאל", ממשיכים ישר לערוץ קבלת תשובה
+      ctx.publication_consent = "not_asked";
+      sendButtons(renderText("delivery_preference", ctx).trimEnd(), [
+        { id: "DELIV_WHATSAPP", title: DELIVERY_WHATSAPP_BUTTON_TITLE },
+        { id: "DELIV_EMAIL", title: DELIVERY_EMAIL_BUTTON_TITLE },
+        { id: "DELIV_BOTH", title: WA_REPLY_DELIV_BOTH },
       ]);
-      return { ok: true, nextState: "publication_consent", nextContext: ctx, outbound };
+      return { ok: true, nextState: "delivery_preference", nextContext: ctx, outbound };
     }
 
     case "publication_consent": {
-      const pc =
-        buttonId === "PUB_PUBLISH" ? ("publish" as const) :
-        buttonId === "PUB_BLUR" ? ("blur" as const) :
-        buttonId === "PUB_NONE" ? ("none" as const) :
-        (text === "אפשר לפרסם" || text === "פרסום" || text === "ניתן לפרסם" ? ("publish" as const) :
-          text === "פרסום בטשטוש" || text === "פרסום בטשטוש פרטים מזהים" || text === "בטשטוש" ? ("blur" as const) :
-          text === "ללא פרסום" ? ("none" as const) : null);
-      if (!pc) {
-        sendButtons("לא זיהיתי בחירה תקינה בפרסום.\nנא לבחור שוב.", [
-          { id: "PUB_PUBLISH", title: WA_REPLY_PUB_PUBLISH },
-          { id: "PUB_BLUR", title: WA_REPLY_PUB_BLUR },
-          { id: "PUB_NONE", title: WA_REPLY_PUB_NONE },
-        ]);
-        return { ok: true, nextState: "publication_consent", nextContext: ctx, outbound };
-      }
-      ctx.publication_consent = pc;
+      // תאימות לאחור לשיחות ישנות שעדיין במצב פרסום — מדלגים הלאה
+      ctx.publication_consent = "not_asked";
       sendButtons(renderText("delivery_preference", ctx).trimEnd(), [
         { id: "DELIV_WHATSAPP", title: DELIVERY_WHATSAPP_BUTTON_TITLE },
         { id: "DELIV_EMAIL", title: DELIVERY_EMAIL_BUTTON_TITLE },
@@ -585,9 +574,8 @@ export async function runBotFsm(params: {
         const title = (ctx.title ?? "").trim();
         const content = (((ctx as any).content ?? "") as string).trim();
         const response_type = ctx.response_type as ResponseType | undefined;
-        const publication_consent = ctx.publication_consent as PublicationConsent | undefined;
         const delivery_preference = ctx.delivery_preference as DeliveryPreference | undefined;
-        if (!asker_gender || !asker_age || !title || !content || !response_type || !publication_consent || !delivery_preference) {
+        if (!asker_gender || !asker_age || !title || !content || !response_type || !delivery_preference) {
           return { ok: false, error: "missing_fields" };
         }
         const createRes = await createDraftFn({
@@ -597,7 +585,7 @@ export async function runBotFsm(params: {
           title,
           content,
           response_type,
-          publication_consent,
+          publication_consent: "not_asked",
           delivery_preference,
           asker_email: ctx.asker_email,
           terms_accepted: true,
@@ -648,7 +636,6 @@ export async function runBotFsm(params: {
         case EDIT_CAT_ANSWER_BUTTON_ID:
           sendButtons("בחירה", [
             { id: "EDIT_RESPONSE_TYPE", title: "שינוי מסלול מענה" },
-            { id: "EDIT_PUBLICATION_CONSENT", title: "שינוי אפשרות פרסום" },
             { id: "EDIT_DELIVERY_PREFERENCE", title: WA_REPLY_EDIT_DELIVERY },
           ]);
           return { ok: true, nextState: "confirm", nextContext: ctx, outbound };
@@ -676,12 +663,9 @@ export async function runBotFsm(params: {
           ]);
           return { ok: true, nextState: "edit_response_type", nextContext: ctx, outbound };
         case "EDIT_PUBLICATION_CONSENT":
-          sendButtons(renderText("edit_publication_consent", ctx).trimEnd(), [
-            { id: "PUB_PUBLISH", title: WA_REPLY_PUB_PUBLISH },
-            { id: "PUB_BLUR", title: WA_REPLY_PUB_BLUR },
-            { id: "PUB_NONE", title: WA_REPLY_PUB_NONE },
-          ]);
-          return { ok: true, nextState: "edit_publication_consent", nextContext: ctx, outbound };
+          // פרסום הוסר מהזרימה — חוזרים לסיכום
+          ctx.publication_consent = "not_asked";
+          return showConfirm(outbound, ctx);
         case "EDIT_DELIVERY_PREFERENCE":
           sendButtons(renderText("edit_delivery_preference", ctx).trimEnd(), [
             { id: "DELIV_WHATSAPP", title: DELIVERY_WHATSAPP_BUTTON_TITLE },
@@ -697,10 +681,10 @@ export async function runBotFsm(params: {
 
     case "edit_field_choice": {
       const field = text;
-      const allowed = ["מגדר", "גיל", "שאלה", "כותרת", "מסלול מענה", "פרסום", "ערוץ קבלת תשובה"];
+      const allowed = ["מגדר", "גיל", "שאלה", "כותרת", "מסלול מענה", "ערוץ קבלת תשובה"];
       if (!allowed.includes(field)) {
         sendText(
-          "לא זיהיתי שדה.\nנא לבחור אחד מהאפשרויות הרשומות:\nמגדר / גיל / שאלה / כותרת / מסלול מענה / פרסום / ערוץ קבלת תשובה"
+          "לא זיהיתי שדה.\nנא לבחור אחד מהאפשרויות הרשומות:\nמגדר / גיל / שאלה / כותרת / מסלול מענה / ערוץ קבלת תשובה"
         );
         return { ok: true, nextState: "edit_field_choice", nextContext: ctx, outbound };
       }
@@ -732,14 +716,6 @@ export async function runBotFsm(params: {
           { id: "RESP_DETAILED", title: WA_REPLY_RESP_DETAILED },
         ]);
         return { ok: true, nextState: "edit_response_type", nextContext: ctx, outbound };
-      }
-      if (field === "פרסום") {
-        sendButtons(renderText("edit_publication_consent", ctx).trimEnd(), [
-          { id: "PUB_PUBLISH", title: WA_REPLY_PUB_PUBLISH },
-          { id: "PUB_BLUR", title: WA_REPLY_PUB_BLUR },
-          { id: "PUB_NONE", title: WA_REPLY_PUB_NONE },
-        ]);
-        return { ok: true, nextState: "edit_publication_consent", nextContext: ctx, outbound };
       }
       // ערוץ קבלת תשובה
       sendButtons(renderText("edit_delivery_preference", ctx).trimEnd(), [
@@ -854,23 +830,7 @@ export async function runBotFsm(params: {
     }
 
     case "edit_publication_consent": {
-      const pc =
-        buttonId === "PUB_PUBLISH" ? ("publish" as const) :
-        buttonId === "PUB_BLUR" ? ("blur" as const) :
-        buttonId === "PUB_NONE" ? ("none" as const) :
-        (text === "אפשר לפרסם" || text === "ניתן לפרסם" ? ("publish" as const) :
-          text === "פרסום בטשטוש" || text === "פרסום בטשטוש פרטים מזהים" || text === "בטשטוש" ? ("blur" as const) :
-          text === "ללא פרסום" ? ("none" as const) : null);
-      if (!pc) {
-        sendButtons("לא זיהיתי בחירה. נא לבחור שוב.", [
-          { id: "PUB_PUBLISH", title: WA_REPLY_PUB_PUBLISH },
-          { id: "PUB_BLUR", title: WA_REPLY_PUB_BLUR },
-          { id: "PUB_NONE", title: WA_REPLY_PUB_NONE },
-        ]);
-        return { ok: true, nextState: "edit_publication_consent", nextContext: ctx, outbound };
-      }
-      ctx.publication_consent = pc;
-      ctx.edit_count = (ctx.edit_count ?? 0) + 1;
+      ctx.publication_consent = "not_asked";
       return showConfirm(outbound, ctx);
     }
 

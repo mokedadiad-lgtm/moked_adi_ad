@@ -2,10 +2,6 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { wantsEmail, wantsWhatsApp } from "@/lib/communicationPreference";
-import {
-  audienceMatchesAskerGender,
-  parseAskerAudience,
-} from "@/lib/asker-audience";
 import { sendAdminTechnicalAlert, sendNewQuestionInLobbyToProofreaders, sendToLinguisticEditor } from "@/lib/email";
 
 const APP_URL =
@@ -29,10 +25,6 @@ export async function notifyLobbyNewQuestion(questionId: string): Promise<{ ok: 
       .single();
 
     if (qErr || !question) return { ok: false, error: "שאלה לא נמצאה" };
-    const askerGender =
-      question.asker_gender === "M" || question.asker_gender === "F"
-        ? question.asker_gender
-        : null;
 
     /** לובי יכול להיות רק ב־questions (legacy) או ב־question_answers; אם ה־RPC עדכן רק את question_answers, stage ב־questions נשאר ישן — עדיין צריך להתריע */
     const inLobbyOnQuestion = question.stage === "in_proofreading_lobby";
@@ -46,30 +38,24 @@ export async function notifyLobbyNewQuestion(questionId: string): Promise<{ ok: 
 
     if (!inLobbyOnQuestion && !qaLobby) return { ok: true };
 
-    const proofreaderTypeId =
-      (question.proofreader_type_id as string | null) ?? (qaLobby?.proofreader_type_id as string | null) ?? null;
-    if (!proofreaderTypeId) return { ok: true };
+    // Dual proofreader gate: notify the two configured proofreaders
+    const { data: dualCfg } = await supabase
+      .from("system_dual_proofreaders")
+      .select("proofreader_a_id, proofreader_b_id")
+      .eq("id", 1)
+      .maybeSingle();
+    const dualIds = [
+      (dualCfg as { proofreader_a_id?: string | null } | null)?.proofreader_a_id ?? null,
+      (dualCfg as { proofreader_b_id?: string | null } | null)?.proofreader_b_id ?? null,
+    ].filter(Boolean) as string[];
 
-    const { data: allProof } = await supabase
+    if (dualIds.length === 0) return { ok: true };
+
+    const { data: matchedProfilesRaw } = await supabase
       .from("profiles")
-      .select("id, full_name_he, communication_preference, proofreader_type_id, phone, asker_audience");
-    const { data: fromJunction } = await supabase
-      .from("profile_proofreader_types")
-      .select("profile_id")
-      .eq("proofreader_type_id", proofreaderTypeId);
-    const typeMatchIds = new Set<string>();
-    for (const p of allProof ?? []) {
-      if (p.proofreader_type_id === proofreaderTypeId) typeMatchIds.add(p.id);
-    }
-    for (const r of fromJunction ?? []) typeMatchIds.add(r.profile_id);
-
-    const matchedProfiles = (allProof ?? []).filter((p) => {
-      if (!typeMatchIds.has(p.id)) return false;
-      return audienceMatchesAskerGender(
-        parseAskerAudience((p as { asker_audience?: string }).asker_audience),
-        askerGender
-      );
-    });
+      .select("id, full_name_he, communication_preference, phone, asker_audience")
+      .in("id", dualIds);
+    const matchedProfiles = matchedProfilesRaw ?? [];
     if (matchedProfiles.length === 0) return { ok: true };
 
     const { data: authData } = await supabase.auth.admin.listUsers({ perPage: 1000 });

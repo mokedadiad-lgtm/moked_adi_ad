@@ -57,7 +57,7 @@ export interface QuestionRow {
   asker_age: string | null;
   asker_gender?: "M" | "F" | null;
   response_type: "short" | "detailed" | null;
-  publication_consent?: "publish" | "blur" | "none" | null;
+  publication_consent?: "publish" | "blur" | "none" | "not_asked" | null;
   respondent_name?: string | null;
   proofreader_name?: string | null;
   topic_id?: string | null;
@@ -82,6 +82,27 @@ export interface QuestionRow {
   answers_count?: number;
   /** חתימה ל-PDF (עריכה לשונית) — מוצגת מיושרת לשמאל */
   linguistic_signature?: string | null;
+  /** התקדמות שער הגהה כפול (0–2) */
+  dual_proof_completed?: number;
+  dual_proof_required?: number;
+  dual_proof_reviews?: {
+    proofreader_id: string;
+    proofreader_name?: string | null;
+    outcome: "approved" | "noted";
+    note: string | null;
+    completed_at: string;
+  }[];
+  dual_proof_slots?: {
+    id: string | null;
+    name: string | null;
+    review: {
+      proofreader_id: string;
+      proofreader_name?: string | null;
+      outcome: "approved" | "noted";
+      note: string | null;
+      completed_at: string;
+    } | null;
+  }[];
 }
 
 /** שאלות שלא עודכנו מעל 5 ימים — לסרגל עיכובים בלוח הבקרה */

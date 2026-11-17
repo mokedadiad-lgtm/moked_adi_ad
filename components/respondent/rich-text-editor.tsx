@@ -368,7 +368,7 @@ export function RichTextEditor({
 
   return (
     <div className={className}>
-      <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-t-xl border border-b-0 border-card-border bg-slate-100 p-2 shadow-sm backdrop-blur-sm supports-[backdrop-filter]:bg-slate-100/95">
+      <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-t-xl border border-b-0 border-card-border bg-muted p-2 shadow-card">
         <button
           type="button"
           onMouseDown={(e) => e.preventDefault()}
@@ -414,7 +414,7 @@ export function RichTextEditor({
         ref={ref}
         contentEditable={!disabled}
         dir="rtl"
-        className="min-h-[3rem] max-h-[400px] overflow-y-auto w-full rounded-b-xl border border-card-border bg-white p-4 text-start text-base focus:outline-none focus:ring-2 focus:ring-primary/20 [&_h2]:!text-xl [&_h2]:!font-bold [&_h2_strong]:!text-xl [&_h3]:!text-lg [&_h3]:font-semibold [&_h3_strong]:!text-lg"
+        className="min-h-[3rem] max-h-[400px] overflow-y-auto w-full rounded-b-xl border border-card-border bg-card p-4 text-start text-base text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 [&_h2]:!text-xl [&_h2]:!font-bold [&_h2_strong]:!text-xl [&_h3]:!text-lg [&_h3]:font-semibold [&_h3_strong]:!text-lg"
         onInput={capture}
         onBlur={capture}
         data-placeholder={placeholder}

@@ -560,7 +560,7 @@ export function AnalyticsView({
                     <TableCell className="whitespace-nowrap text-slate-600">{q.sent_at ? q.sent_at.slice(0, 10) : "—"}</TableCell>
                     <TableCell className="max-w-[140px] truncate font-mono text-slate-600" dir="ltr">{q.asker_email || "—"}</TableCell>
                     <TableCell>{q.response_type === "short" ? "קצר" : q.response_type === "detailed" ? "מפורט" : "—"}</TableCell>
-                    <TableCell>{q.publication_consent === "publish" ? "פרסום" : q.publication_consent === "blur" ? "טשטוש" : q.publication_consent === "none" ? "לא" : "—"}</TableCell>
+                    <TableCell>{q.publication_consent === "publish" ? "פרסום" : q.publication_consent === "blur" ? "טשטוש" : q.publication_consent === "none" ? "לא" : q.publication_consent === "not_asked" ? "לא נשאל" : "—"}</TableCell>
                   </TableRow>
                 ))
               )}
@@ -607,7 +607,7 @@ export function AnalyticsView({
                 <p className="text-slate-500">סוג תשובה</p>
                 <p>{detailQuestion.response_type === "short" ? "קצר ולעניין" : detailQuestion.response_type === "detailed" ? "מפורט" : "—"}</p>
                 <p className="text-slate-500">פרסום</p>
-                <p>{detailQuestion.publication_consent === "publish" ? "מסכימ/ה לפרסם" : detailQuestion.publication_consent === "blur" ? "בטשטוש" : detailQuestion.publication_consent === "none" ? "לא לפרסום" : "—"}</p>
+                <p>{detailQuestion.publication_consent === "publish" ? "מסכימ/ה לפרסם" : detailQuestion.publication_consent === "blur" ? "בטשטוש" : detailQuestion.publication_consent === "none" ? "לא לפרסום" : detailQuestion.publication_consent === "not_asked" ? "לא נשאל" : "—"}</p>
               </div>
               <div>
                 <p className="mb-1 font-medium text-slate-600">תוכן השאלה</p>

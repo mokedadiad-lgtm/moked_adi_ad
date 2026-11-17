@@ -2,7 +2,6 @@
 
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { RichTextEditor } from "@/components/respondent/rich-text-editor";
-import { ResponseTextView } from "@/components/response-text-view";
 import { getRichTextEditorInstanceKey } from "@/lib/rich-editor-instance-key";
 import type { LobbyQuestion } from "@/components/proofreader/proofreader-dashboard";
 import { Button } from "@/components/ui/button";
@@ -15,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import { outcomeLabelHe } from "@/lib/dual-proofreaders";
 import { useEffect, useRef, useState } from "react";
 
 interface LobbyTaskModalProps {
@@ -23,12 +23,13 @@ interface LobbyTaskModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onActionDone: () => void;
-  /** אחרי שמירת response_text — לעדכן מיידית את הרשימה בלי להמתין לרענון רשת */
   onDraftSaved?: (payload: {
     questionId: string;
     answerId?: string | null;
     responseText: string | null;
   }) => void;
+  /** אם true — מגיהה קבועה יכולה לסיים (לא רק מנהל צופה) */
+  canComplete?: boolean;
 }
 
 export function LobbyTaskModal({
@@ -38,20 +39,25 @@ export function LobbyTaskModal({
   onOpenChange,
   onActionDone,
   onDraftSaved,
+  canComplete = true,
 }: LobbyTaskModalProps) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [returnNote, setReturnNote] = useState("");
-  const [showReturnNote, setShowReturnNote] = useState(false);
+  const [note, setNote] = useState("");
+  const [showNoteForm, setShowNoteForm] = useState(false);
   const [responseText, setResponseText] = useState("");
   const [draftSavedToast, setDraftSavedToast] = useState(false);
   const [draftSaveTick, setDraftSaveTick] = useState(0);
   const [lastSavedSnapshot, setLastSavedSnapshot] = useState("");
   const [savedAtLeastOnce, setSavedAtLeastOnce] = useState(false);
-  const returnNoteRef = useRef<HTMLTextAreaElement>(null);
+  const noteRef = useRef<HTMLTextAreaElement>(null);
 
-  const isMine = question && userId && question.assigned_proofreader_id === userId;
+  const alreadyDone = Boolean(question?.my_review);
+  const editable = canComplete && !alreadyDone;
   const isDirty = responseText.trim() !== lastSavedSnapshot;
+  const otherSlot = question?.dual_progress?.slots.find(
+    (s) => s.id && s.id !== userId
+  );
 
   useEffect(() => {
     if (!open || !question) return;
@@ -61,20 +67,15 @@ export function LobbyTaskModal({
     setSavedAtLeastOnce(false);
     setDraftSavedToast(false);
     setError(null);
+    setNote("");
+    setShowNoteForm(false);
   }, [open, question]);
 
   useEffect(() => {
-    if (!open || !question || !isMine) return;
-    // When the proofreader claims a task, ensure editor state is hydrated
-    // from the latest stored rich HTML (including headings/footnotes).
-    setResponseText(question.response_text ?? "");
-  }, [open, isMine, question]);
-
-  useEffect(() => {
-    if (showReturnNote && returnNoteRef.current) {
-      returnNoteRef.current.focus();
+    if (showNoteForm && noteRef.current) {
+      noteRef.current.focus();
     }
-  }, [showReturnNote]);
+  }, [showNoteForm]);
 
   useEffect(() => {
     if (!draftSavedToast) return;
@@ -84,22 +85,11 @@ export function LobbyTaskModal({
 
   const reset = () => {
     setError(null);
-    setReturnNote("");
-    setShowReturnNote(false);
+    setNote("");
+    setShowNoteForm(false);
     setDraftSavedToast(false);
     setLastSavedSnapshot("");
     setSavedAtLeastOnce(false);
-  };
-
-  const handleSaveResponse = () => {
-    if (!responseText.trim()) return;
-    runUpdate({ response_text: responseText.trim() }, () => {
-      const snap = responseText.trim();
-      setLastSavedSnapshot(snap);
-      setSavedAtLeastOnce(true);
-      setDraftSavedToast(true);
-      setDraftSaveTick((n) => n + 1);
-    });
   };
 
   const handleOpenChange = (next: boolean) => {
@@ -107,108 +97,113 @@ export function LobbyTaskModal({
     onOpenChange(next);
   };
 
-  const runUpdate = async (
-    updates: Record<string, unknown>,
-    onSuccess?: () => void
-  ) => {
-    if (!question) return;
+  const authHeaders = async () => {
+    const supabase = getSupabaseBrowser();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const token = session?.access_token ?? null;
+    if (!token) return null;
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
+  };
+
+  const handleSaveResponse = async () => {
+    if (!question || !responseText.trim() || !editable) return;
     setPending(true);
     setError(null);
-    const supabase = getSupabaseBrowser();
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token ?? null;
-    if (!token) {
+    const headers = await authHeaders();
+    if (!headers) {
       setPending(false);
       setError("לא מחובר. רענן את העמוד ונסה שוב.");
       return;
     }
     const response = await fetch("/api/proofreader/update", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers,
       body: JSON.stringify({
         questionId: question.id,
         answerId: question.answer_id ?? null,
-        updates,
+        updates: { response_text: responseText.trim() },
       }),
     });
-    const result = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+    const result = (await response.json().catch(() => ({}))) as {
+      ok?: boolean;
+      error?: string;
+    };
     setPending(false);
     if (!result.ok) {
       setError(result.error ?? "שגיאה");
       return;
     }
-    if (Object.prototype.hasOwnProperty.call(updates, "response_text")) {
-      onDraftSaved?.({
-        questionId: question.id,
-        answerId: question.answer_id ?? null,
-        responseText: (updates.response_text as string | null) ?? null,
-      });
-    }
-    onSuccess?.();
+    const snap = responseText.trim();
+    setLastSavedSnapshot(snap);
+    setSavedAtLeastOnce(true);
+    setDraftSavedToast(true);
+    setDraftSaveTick((n) => n + 1);
+    onDraftSaved?.({
+      questionId: question.id,
+      answerId: question.answer_id ?? null,
+      responseText: snap,
+    });
     onActionDone();
   };
 
-  const handleClaim = () => runUpdate({ assigned_proofreader_id: userId });
-
-  const handleRelease = () =>
-    runUpdate(
-      { assigned_proofreader_id: null, response_text: responseText.trim() || null },
-      () => onOpenChange(false)
-    );
-
   const notifyLinguistic = () => {
     if (!question) return;
-    getSupabaseBrowser()
-      .auth.getSession()
-      .then(({ data: { session } }) => {
-        const token = session?.access_token ?? null;
-        if (!token) return;
-        return fetch("/api/proofreader/notify-linguistic", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ questionId: question.id }),
-        });
-      })
-      .then((r) => r?.json().catch(() => ({})))
-      .then((r) => {
-        if (r && !r.ok) console.warn("[עריכה לשונית] שליחת מייל לעורכים:", r?.error ?? "שגיאה");
-      })
-      .catch((e) => console.error("[עריכה לשונית] שגיאה בשליחת מייל:", e));
+    authHeaders().then((headers) => {
+      if (!headers) return;
+      return fetch("/api/proofreader/notify-linguistic", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ questionId: question.id }),
+      });
+    });
   };
 
-  const handleDoneToLinguistic = () =>
-    runUpdate(
-      {
-        stage: "in_linguistic_review",
-        proofreader_note: null,
-        response_text: responseText.trim() || null,
-      },
-      () => {
-        notifyLinguistic();
-        onOpenChange(false);
-      }
-    );
-
-  const handleReturnToAdmin = () => {
-    if (showReturnNote) {
-      runUpdate(
-        {
-          stage: "pending_manager",
-          assigned_proofreader_id: null,
-          proofreader_note: returnNote.trim() || null,
-          response_text: responseText.trim() || null,
-        },
-        () => onOpenChange(false)
-      );
+  const completeReview = async (outcome: "approved" | "noted") => {
+    if (!question || !editable) return;
+    if (outcome === "noted" && !note.trim()) {
+      setShowNoteForm(true);
+      setError("יש לכתוב הערה למנהלת");
       return;
     }
-    setShowReturnNote(true);
+    setPending(true);
+    setError(null);
+    const headers = await authHeaders();
+    if (!headers) {
+      setPending(false);
+      setError("לא מחובר. רענן את העמוד ונסה שוב.");
+      return;
+    }
+    const response = await fetch("/api/proofreader/complete-review", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        questionId: question.id,
+        answerId: question.answer_id ?? null,
+        outcome,
+        note: note.trim() || null,
+        responseText: responseText.trim() || null,
+      }),
+    });
+    const result = (await response.json().catch(() => ({}))) as {
+      ok?: boolean;
+      error?: string;
+      moved_to_linguistic?: boolean;
+    };
+    setPending(false);
+    if (!result.ok) {
+      setError(result.error ?? "שגיאה");
+      return;
+    }
+    if (result.moved_to_linguistic) {
+      notifyLinguistic();
+    }
+    onActionDone();
+    onOpenChange(false);
   };
 
   if (!question) return null;
@@ -220,22 +215,54 @@ export function LobbyTaskModal({
         dir="rtl"
       >
         <DialogHeader className="shrink-0 px-4 sm:px-6">
-          <DialogTitle>{isMine ? "משימה שלי" : "משימה בתור"}</DialogTitle>
+          <DialogTitle>הגהה משותפת</DialogTitle>
         </DialogHeader>
 
         <div className="min-h-0 w-full flex-1 overflow-y-auto">
-        <div className="space-y-4 px-4 pb-1 text-start sm:px-6">
-          <div>
-            {question.title && <p className="mb-1 text-sm font-medium text-slate-800">{question.title}</p>}
-            <p className="mb-1 text-xs font-medium text-secondary">תוכן השאלה</p>
-            <ScrollArea className="h-48 rounded-xl border border-card-border bg-slate-50 p-3 text-sm text-start">
-              <div className="whitespace-pre-wrap" dir="rtl">{question.content}</div>
-            </ScrollArea>
-          </div>
-          <div>
-            <p className="mb-1 text-xs font-medium text-secondary">תשובת המשיב/ה</p>
-            {isMine ? (
-              <>
+          <div className="space-y-4 px-4 pb-1 text-start sm:px-6">
+            <div className="rounded-xl border border-violet-200 bg-violet-50/70 px-3 py-2 text-sm text-violet-950">
+              <p className="font-medium">
+                התקדמות הגהה: {question.dual_progress?.completed ?? 0}/2
+              </p>
+              {otherSlot ? (
+                <p className="mt-1 text-xs text-violet-800">
+                  {otherSlot.name || "המגיהה השנייה"}:{" "}
+                  {otherSlot.review
+                    ? `סיימה (${outcomeLabelHe(otherSlot.review.outcome)})`
+                    : "טרם סיימה"}
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-violet-800">
+                  טרם הוגדרו שתי המגיהות הקבועות במערכת.
+                </p>
+              )}
+              {otherSlot?.review?.note?.trim() ? (
+                <p className="mt-2 whitespace-pre-wrap rounded-lg border border-violet-200 bg-white/80 px-2 py-1.5 text-xs text-slate-800">
+                  הערת {otherSlot.name || "המגיהה השנייה"}: {otherSlot.review.note}
+                </p>
+              ) : null}
+              {alreadyDone && question.my_review ? (
+                <p className="mt-2 text-xs font-medium text-emerald-800">
+                  סיימת את ההגהה שלך ({outcomeLabelHe(question.my_review.outcome)}).
+                </p>
+              ) : null}
+            </div>
+
+            <div>
+              {question.title && (
+                <p className="mb-1 text-sm font-medium text-slate-800">{question.title}</p>
+              )}
+              <p className="mb-1 text-xs font-medium text-secondary">תוכן השאלה</p>
+              <ScrollArea className="h-48 rounded-xl border border-card-border bg-slate-50 p-3 text-sm text-start">
+                <div className="whitespace-pre-wrap" dir="rtl">
+                  {question.content}
+                </div>
+              </ScrollArea>
+            </div>
+
+            <div>
+              <p className="mb-1 text-xs font-medium text-secondary">תשובת המשיב/ה</p>
+              {editable ? (
                 <div className="rounded-xl border border-card-border bg-slate-50 p-3 text-sm">
                   <RichTextEditor
                     key={getRichTextEditorInstanceKey(question.id, question.answer_id)}
@@ -246,34 +273,40 @@ export function LobbyTaskModal({
                     className="w-full"
                   />
                 </div>
-              </>
-            ) : (
-              <ScrollArea className="h-80 rounded-xl border border-card-border bg-slate-50 p-3 text-sm">
-                <ResponseTextView value={question.response_text} variant="compact" />
-              </ScrollArea>
+              ) : (
+                <ScrollArea className="h-80 rounded-xl border border-card-border bg-slate-50 p-3 text-sm">
+                  <div
+                    className="prose prose-sm max-w-none text-start"
+                    dangerouslySetInnerHTML={{
+                      __html: question.response_text || "—",
+                    }}
+                  />
+                </ScrollArea>
+              )}
+            </div>
+
+            {showNoteForm && editable && (
+              <div>
+                <p className="mb-1 text-xs font-medium text-secondary">
+                  הערה למנהלת (חובה בנתיב הערה)
+                </p>
+                <Textarea
+                  ref={noteRef}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="למשל: צריך הבהרה לגבי..."
+                  className="min-h-[80px] text-start"
+                  disabled={pending}
+                />
+              </div>
+            )}
+
+            {error && (
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+                {error}
+              </p>
             )}
           </div>
-
-          {showReturnNote && (
-            <div>
-              <p className="text-xs font-medium text-secondary mb-1">הערה למנהל (אופציונלי)</p>
-              <Textarea
-                ref={returnNoteRef}
-                value={returnNote}
-                onChange={(e) => setReturnNote(e.target.value)}
-                placeholder="למשל: צריך הבהרה לגבי..."
-                className="min-h-[80px] text-start"
-                disabled={pending}
-              />
-            </div>
-          )}
-
-          {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
-              {error}
-            </p>
-          )}
-        </div>
         </div>
 
         <div className="shrink-0 border-t border-slate-100 px-4 pb-4 pt-3 sm:px-6">
@@ -286,70 +319,62 @@ export function LobbyTaskModal({
               הטיוטה נשמרה.
             </p>
           )}
-        <DialogFooter className="w-full flex-row flex-wrap justify-end sm:justify-end gap-2 border-0 p-0 shadow-none">
-          {!isMine ? (
-            <Button
-              type="button"
-              onClick={handleClaim}
-              disabled={pending || !userId}
-            >
-              {pending ? "שומר…" : "תפוס משימה"}
-            </Button>
-          ) : (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleSaveResponse}
-                disabled={pending || !responseText.trim() || (!isDirty && savedAtLeastOnce)}
-                className={
-                  !isDirty && savedAtLeastOnce
-                    ? "border-emerald-500 bg-emerald-50 text-emerald-900 hover:bg-emerald-50 hover:text-emerald-900"
-                    : undefined
-                }
-              >
-                {pending
-                  ? "שומר…"
-                  : !isDirty && savedAtLeastOnce
-                    ? "הטיוטה נשמרה"
-                    : "שמור טיוטה"}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleRelease}
-                disabled={pending}
-              >
-                שחרר (החזר לתור)
-              </Button>
-              {!showReturnNote ? (
+          <DialogFooter className="w-full flex-row flex-wrap justify-end gap-2 border-0 p-0 shadow-none sm:justify-end">
+            {editable ? (
+              <>
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={handleReturnToAdmin}
-                  disabled={pending}
+                  onClick={handleSaveResponse}
+                  disabled={pending || !responseText.trim() || (!isDirty && savedAtLeastOnce)}
+                  className={
+                    !isDirty && savedAtLeastOnce
+                      ? "border-emerald-500 bg-emerald-50 text-emerald-900 hover:bg-emerald-50 hover:text-emerald-900"
+                      : undefined
+                  }
                 >
-                  החזר למנהל (עם הערה)
+                  {pending
+                    ? "שומר…"
+                    : !isDirty && savedAtLeastOnce
+                      ? "הטיוטה נשמרה"
+                      : "שמור טיוטה"}
                 </Button>
-              ) : (
+                {!showNoteForm ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowNoteForm(true);
+                      setError(null);
+                    }}
+                    disabled={pending}
+                  >
+                    הערה למנהלת
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => completeReview("noted")}
+                    disabled={pending || !note.trim()}
+                  >
+                    {pending ? "שולח…" : "שלח הערה וסיים"}
+                  </Button>
+                )}
                 <Button
                   type="button"
-                  onClick={handleReturnToAdmin}
+                  onClick={() => completeReview("approved")}
                   disabled={pending}
                 >
-                  {pending ? "שולח…" : "שלח למנהל"}
+                  {pending ? "שומר…" : "אשרתי"}
                 </Button>
-              )}
-              <Button
-                type="button"
-                onClick={handleDoneToLinguistic}
-                disabled={pending}
-              >
-                {pending ? "שומר…" : "סיים והעבר לעריכה לשונית"}
+              </>
+            ) : (
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                סגור
               </Button>
-            </>
-          )}
-        </DialogFooter>
+            )}
+          </DialogFooter>
         </div>
       </DialogContent>
     </Dialog>

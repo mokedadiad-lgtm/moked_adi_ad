@@ -40,6 +40,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { PageLoadingSpinner } from "@/components/ui/page-loading";
 import type { QuestionRow, QuestionStage } from "@/lib/types";
 import { STAGE_LABELS, STAGE_ORDER } from "@/lib/types";
+import { PdfShareButton } from "@/components/admin/pdf-share-button";
 import { PdfViewModal } from "@/components/admin/pdf-view-modal";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -982,7 +983,26 @@ export function AdminQuestionStageModal({
 
               {question.stage === "in_proofreading_lobby" && (
                 <div className="space-y-3 text-center">
-                  <p className="text-sm font-medium text-slate-700">שם המגיה/ה{"\u200E"}: {question.proofreader_name ?? "—"}</p>
+                  <p className="text-sm font-medium text-slate-700">
+                    הגהה כפולה{"\u200E"}: {question.dual_proof_completed ?? 0}/{question.dual_proof_required ?? 2}
+                  </p>
+                  {(question.dual_proof_slots?.length ?? 0) > 0 ? (
+                    <ul className="mx-auto max-w-md space-y-1.5 rounded-lg border border-violet-200 bg-violet-50/60 px-3 py-2 text-start text-xs text-slate-800">
+                      {(question.dual_proof_slots ?? []).map((s, i) => (
+                        <li key={s.id ?? `dual-${i}`}>
+                          <span className="font-medium">{s.name || "מגיהה"}</span>
+                          {": "}
+                          {s.review
+                            ? `${s.review.outcome === "approved" ? "אישור" : "הערה"}${
+                                s.review.note?.trim() ? ` — ${s.review.note.trim()}` : ""
+                              }`
+                            : "טרם סיימה"}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-slate-600">שם המגיה/ה{"\u200E"}: {question.proofreader_name ?? "—"}</p>
+                  )}
                   <div className="flex flex-col items-center gap-2">
                     <Button variant="default" size="sm" className="bg-primary" asChild title="גישה לשאלה">
                       <Link href={`/proofreader?open=${question.id}`}>גישה לשאלה</Link>
@@ -996,6 +1016,25 @@ export function AdminQuestionStageModal({
               )}
 
               {question.stage === "in_linguistic_review" && (
+                <div className="space-y-3">
+                  {(question.dual_proof_slots?.some((s) => s.review) || question.proofreader_note?.trim()) && (
+                    <div className="rounded-lg border border-violet-200 bg-violet-50/50 px-3 py-2 text-start text-xs text-slate-800">
+                      <p className="mb-1 font-medium text-violet-900">סיכום הגהה כפולה</p>
+                      {(question.dual_proof_slots ?? [])
+                        .filter((s) => s.review)
+                        .map((s, i) => (
+                          <p key={s.id ?? `rev-${i}`} className="whitespace-pre-wrap">
+                            <span className="font-medium">{s.name || "מגיהה"}</span>
+                            {": "}
+                            {s.review!.outcome === "approved" ? "אישור" : "הערה"}
+                            {s.review!.note?.trim() ? ` — ${s.review!.note.trim()}` : ""}
+                          </p>
+                        ))}
+                      {!question.dual_proof_slots?.some((s) => s.review) && question.proofreader_note?.trim() ? (
+                        <p className="whitespace-pre-wrap">{question.proofreader_note}</p>
+                      ) : null}
+                    </div>
+                  )}
                 <div className="flex flex-wrap justify-center gap-2 text-right">
                   <Button variant="default" size="sm" className="bg-primary" asChild title="גישה לשאלה">
                     <Link href={`/admin/linguistic?open=${question.id}`}>גישה לשאלה</Link>
@@ -1011,6 +1050,16 @@ export function AdminQuestionStageModal({
                       >
                         צפייה ב-PDF
                       </Button>
+                      <PdfShareButton
+                        questionId={question.id}
+                        forParam="archive"
+                        pdfGeneratedAt={question.pdf_generated_at}
+                        title={question.title}
+                        shortId={question.short_id}
+                        showLabel
+                        variant="default"
+                        buttonClassName="bg-primary text-primary-foreground hover:bg-primary/90"
+                      />
                       <Button
                         variant="default"
                         size="sm"
@@ -1025,6 +1074,7 @@ export function AdminQuestionStageModal({
                   ) : (
                     <p className="w-full text-center text-sm text-amber-700">יש ליצור PDF קודם (מעמוד עריכה לשונית)</p>
                   )}
+                </div>
                 </div>
               )}
 
@@ -1059,6 +1109,16 @@ export function AdminQuestionStageModal({
                       >
                         צפייה ב-PDF
                       </Button>
+                      <PdfShareButton
+                        questionId={question.id}
+                        forParam="archive"
+                        pdfGeneratedAt={question.pdf_generated_at}
+                        title={question.title}
+                        shortId={question.short_id}
+                        showLabel
+                        variant="default"
+                        buttonClassName="bg-primary text-primary-foreground hover:bg-primary/90"
+                      />
                       <Button variant="default" size="sm" className="bg-primary" onClick={() => setSendConfirmOpen(true)} disabled={sendPending} title="אישור ושליחה לשואל וארכוב">
                         {sendPending ? "שולח…" : "אישור ושליחה"}
                       </Button>
@@ -1367,6 +1427,9 @@ export function AdminQuestionStageModal({
         onOpenChange={setShowPdfView}
         questionId={question?.id ?? null}
         forParam="archive"
+        title={question?.title}
+        shortId={question?.short_id}
+        pdfGeneratedAt={question?.pdf_generated_at}
       />
     </>
   );

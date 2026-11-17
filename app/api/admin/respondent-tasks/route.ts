@@ -14,7 +14,7 @@ interface RespondentTask {
   asker_age: string | null;
   asker_gender: "M" | "F" | null;
   response_type: "short" | "detailed" | null;
-  publication_consent: "publish" | "blur" | "none" | null;
+  publication_consent: "publish" | "blur" | "none" | "not_asked" | null;
   response_text?: string | null;
 }
 
@@ -95,8 +95,9 @@ export async function GET(request: NextRequest) {
         publication_consent:
           q?.publication_consent === "publish" ||
           q?.publication_consent === "blur" ||
-          q?.publication_consent === "none"
-            ? (q.publication_consent as "publish" | "blur" | "none")
+          q?.publication_consent === "none" ||
+          q?.publication_consent === "not_asked"
+            ? (q.publication_consent as "publish" | "blur" | "none" | "not_asked")
             : null,
         response_text: r.response_text ?? null,
       };
@@ -139,9 +140,10 @@ export async function GET(request: NextRequest) {
         publication_consent:
           (q as { publication_consent?: string | null }).publication_consent === "publish" ||
           (q as { publication_consent?: string | null }).publication_consent === "blur" ||
-          (q as { publication_consent?: string | null }).publication_consent === "none"
+          (q as { publication_consent?: string | null }).publication_consent === "none" ||
+          (q as { publication_consent?: string | null }).publication_consent === "not_asked"
             ? ((q as { publication_consent?: string | null })
-                .publication_consent as "publish" | "blur" | "none")
+                .publication_consent as "publish" | "blur" | "none" | "not_asked")
             : null,
         response_text: (q as { response_text?: string | null }).response_text ?? null,
       })) as RespondentTask[];

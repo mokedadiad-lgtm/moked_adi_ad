@@ -29,11 +29,6 @@ import { ASKER_AGE_RANGE_LABELS } from "@/lib/asker-age-ranges";
 
 const GENDER_LABEL: Record<string, string> = { M: "זכר", F: "נקבה" };
 const RESPONSE_LABEL: Record<string, string> = { short: "קצר ולעניין", detailed: "מורחב" };
-const PUB_LABEL: Record<string, string> = {
-  publish: "אפשר לפרסם",
-  blur: "פרסום בטשטוש",
-  none: "ללא פרסום",
-};
 const DELIVERY_LABEL: Record<string, string> = {
   whatsapp: "וואטסאפ",
   email: "אימייל",
@@ -179,7 +174,7 @@ export function WhatsappInboxClient({
         title: details.title,
         content: details.content,
         response_type: details.response_type,
-        publication_consent: details.publication_consent,
+        publication_consent: "not_asked",
         delivery_preference: details.delivery_preference,
         asker_email: details.asker_email,
       };
@@ -349,24 +344,6 @@ export function WhatsappInboxClient({
                           <SelectContent>
                             <SelectItem value="short">קצר ולעניין</SelectItem>
                             <SelectItem value="detailed">מורחב</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1">
-                        <p className="text-xs text-slate-500">פרסום</p>
-                        <Select
-                          value={details.publication_consent ?? ""}
-                          onValueChange={(v) => updateDetailsField("publication_consent", v as any)}
-                          disabled={loadingDetails}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="בחר/י" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="publish">אפשר לפרסם</SelectItem>
-                            <SelectItem value="blur">פרסום בטשטוש</SelectItem>
-                            <SelectItem value="none">ללא פרסום</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

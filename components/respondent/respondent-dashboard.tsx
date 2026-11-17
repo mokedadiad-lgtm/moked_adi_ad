@@ -23,7 +23,7 @@ export interface RespondentQuestion {
   asker_age: string | null;
   asker_gender: "M" | "F" | null;
   response_type: "short" | "detailed" | null;
-  publication_consent: "publish" | "blur" | "none" | null;
+  publication_consent: "publish" | "blur" | "none" | "not_asked" | null;
   response_text?: string | null;
 }
 

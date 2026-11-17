@@ -1,3 +1,5 @@
+import { BRAND_NAME } from "@/lib/brand";
+
 const FOOTNOTES_MARKER = "data-footnotes-json";
 
 export interface ParsedResponse {
@@ -177,15 +179,26 @@ export function compactResponseHtmlForQueue(html: string): string {
 
 const SIGNATURE_TAGS = new Set(["b", "strong", "br", "div"]);
 
-/** טקסט חתימה ברירת מחדל ל-PDF (עריכה לשונית): שורה רגילה + שורה מודגשת, מוצגת לשמאל (LTR). */
+/** חתימת ברירת מחדל לפונה נקבה (וכשאין מגדר). */
 export const DEFAULT_LINGUISTIC_SIGNATURE_HTML =
-  'בברכה,<br><strong>משיבה מפשו"ת שידוך</strong>';
+  `בברכה,<br><strong>משיבה מ${BRAND_NAME}</strong>`;
 
-/** מחזיר חתימה לתצוגה ו-PDF: אם אין במסד — ברירת המחדל. */
-export function effectiveLinguisticSignature(html: string | null | undefined): string {
+/** חתימת ברירת מחדל לפונה זכר. */
+export const DEFAULT_LINGUISTIC_SIGNATURE_HTML_MALE =
+  `בברכה,<br><strong>תשובה מ${BRAND_NAME}</strong>`;
+
+/** מחזיר חתימה לתצוגה ו-PDF: אם אין במסד — ברירת מחדל לפי מין הפונה. */
+export function effectiveLinguisticSignature(
+  html: string | null | undefined,
+  askerGender?: "M" | "F" | null
+): string {
   const s = sanitizeSignatureHtml(html ?? "").trim();
   if (s) return s;
-  return sanitizeSignatureHtml(DEFAULT_LINGUISTIC_SIGNATURE_HTML).trim();
+  const fallback =
+    askerGender === "M"
+      ? DEFAULT_LINGUISTIC_SIGNATURE_HTML_MALE
+      : DEFAULT_LINGUISTIC_SIGNATURE_HTML;
+  return sanitizeSignatureHtml(fallback).trim();
 }
 
 /** HTML מותר לשדה חתימה ב-PDF: מודגש ושורות (בלי מאפיינים). */

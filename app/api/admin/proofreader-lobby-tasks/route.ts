@@ -1,16 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  buildDualProgress,
+  fetchDualProofreadersConfig,
+  fetchReviewsForQuestions,
+  type DualProofreaderProgress,
+  type ProofreaderReviewRow,
+} from "@/lib/dual-proofreaders";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { requireAdminFromRequest } from "@/lib/supabase/admin-route-auth";
 
 interface ProofreaderLobbyTask {
   id: string;
-  /** When task is from question_answers */
   answer_id?: string | null;
   assigned_proofreader_id: string | null;
   title?: string | null;
   content: string;
   response_text: string | null;
   created_at: string;
+  my_review?: ProofreaderReviewRow | null;
+  dual_progress?: DualProofreaderProgress;
 }
 
 /** מחזיר למנהל/ת את כל המשימות בתור ההגהה (עוקף RLS בעזרת service role). */
@@ -22,6 +30,7 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin();
+    const cfg = await fetchDualProofreadersConfig(supabase);
 
     const { data: qaData, error: qaError } = await supabase
       .from("question_answers")
@@ -63,7 +72,6 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // שאלות ישנות ישירות מטבלת questions (למקרה שאין להן רשומת question_answers)
     const { data: qData, error: qError } = await supabase
       .from("questions")
       .select("id, title, content, response_text, created_at, assigned_proofreader_id")
@@ -79,18 +87,41 @@ export async function GET(request: NextRequest) {
       .map((q) => ({
         id: q.id,
         answer_id: null,
-        assigned_proofreader_id: (q as { assigned_proofreader_id?: string | null }).assigned_proofreader_id ?? null,
+        assigned_proofreader_id:
+          (q as { assigned_proofreader_id?: string | null }).assigned_proofreader_id ?? null,
         title: (q as { title?: string | null }).title ?? null,
         content: (q as { content: string }).content ?? "",
         response_text: (q as { response_text?: string | null }).response_text ?? null,
         created_at: (q as { created_at: string }).created_at,
       })) as ProofreaderLobbyTask[];
 
-    const tasks: ProofreaderLobbyTask[] = [...fromQa, ...legacy];
-    return NextResponse.json({ ok: true, tasks });
+    const tasksBase = [...fromQa, ...legacy];
+    const reviewsByQ = await fetchReviewsForQuestions(
+      supabase,
+      tasksBase.map((t) => t.id)
+    );
+
+    const tasks: ProofreaderLobbyTask[] = tasksBase.map((t) => {
+      const reviews = reviewsByQ[t.id] ?? [];
+      return {
+        ...t,
+        dual_progress: buildDualProgress(cfg, reviews),
+        my_review: null,
+      };
+    });
+
+    return NextResponse.json({
+      ok: true,
+      tasks,
+      dual_config: {
+        proofreader_a_id: cfg.proofreader_a_id,
+        proofreader_b_id: cfg.proofreader_b_id,
+        proofreader_a_name: cfg.proofreader_a_name ?? null,
+        proofreader_b_name: cfg.proofreader_b_name ?? null,
+      },
+    });
   } catch (e) {
     const message = (e as Error)?.message ?? "Unexpected error";
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
-

@@ -1,9 +1,14 @@
+import {
+  buildDualProgress,
+  fetchDualProofreadersConfig,
+  fetchReviewsForQuestions,
+} from "@/lib/dual-proofreaders";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { QuestionRow } from "@/lib/types";
 import { ADMIN_TABLE_STAGES } from "@/lib/types";
 
 const BASE_SELECT =
-  "id, short_id, stage, title, content, created_at, updated_at, asker_email, asker_age, asker_gender, response_type, publication_consent, assigned_respondent_id, assigned_proofreader_id, response_text, proofreader_note, pdf_url, pdf_generated_at, proofreader_type_id";
+  "id, short_id, stage, title, content, created_at, updated_at, asker_email, asker_phone, asker_age, asker_gender, response_type, publication_consent, assigned_respondent_id, assigned_proofreader_id, response_text, proofreader_note, pdf_url, pdf_generated_at, proofreader_type_id";
 const EXTENDED_SELECT = `${BASE_SELECT}, topic_id, sub_topic_id, topics(name_he), sub_topics(name_he)`;
 
 type TopicRef = { name_he: string } | { name_he: string }[] | null | undefined;
@@ -12,7 +17,7 @@ type QuestionRowRaw = Omit<QuestionRow, "short_id"> & {
   assigned_respondent_id?: string | null;
   assigned_proofreader_id?: string | null;
   asker_gender?: "M" | "F" | null;
-  publication_consent?: "publish" | "blur" | "none" | null;
+  publication_consent?: "publish" | "blur" | "none" | "not_asked" | null;
   topic_id?: string | null;
   sub_topic_id?: string | null;
   topics?: TopicRef;
@@ -55,6 +60,7 @@ type QuestionAnswerRaw = {
     content: string;
     created_at: string;
     asker_email?: string | null;
+    asker_phone?: string | null;
     asker_age?: string | null;
     asker_gender?: string | null;
     response_type?: string | null;
@@ -80,7 +86,7 @@ export async function getActiveQuestions(): Promise<QuestionRow[]> {
     const qaRes = await supabase
       .from("question_answers")
       .select(
-        `${QA_SELECT}, questions!inner(short_id, title, content, created_at, asker_email, asker_age, asker_gender, response_type, publication_consent, deleted_at), topics(name_he), sub_topics(name_he)`
+        `${QA_SELECT}, questions!inner(short_id, title, content, created_at, asker_email, asker_phone, asker_age, asker_gender, response_type, publication_consent, deleted_at), topics(name_he), sub_topics(name_he)`
       )
       .in("stage", ADMIN_TABLE_STAGES)
       .order("created_at", { ascending: false });
@@ -143,6 +149,7 @@ export async function getActiveQuestions(): Promise<QuestionRow[]> {
       content: q?.content ?? "",
       created_at: q?.created_at ?? r.created_at,
       asker_email: q?.asker_email ?? null,
+      asker_phone: q?.asker_phone ?? null,
       asker_age: q?.asker_age ?? null,
       asker_gender: (q?.asker_gender as "M" | "F" | null) ?? null,
       response_type: q?.response_type ?? null,
@@ -189,6 +196,7 @@ export async function getActiveQuestions(): Promise<QuestionRow[]> {
       content: q?.content ?? "",
       created_at: q?.created_at ?? first.created_at,
       asker_email: q?.asker_email ?? null,
+      asker_phone: q?.asker_phone ?? null,
       asker_age: q?.asker_age ?? null,
       asker_gender: (q?.asker_gender as "M" | "F" | null) ?? null,
       response_type: q?.response_type ?? null,
@@ -216,6 +224,7 @@ export async function getActiveQuestions(): Promise<QuestionRow[]> {
     content: r.content,
     created_at: r.created_at,
     asker_email: (r as { asker_email?: string | null }).asker_email ?? null,
+    asker_phone: (r as { asker_phone?: string | null }).asker_phone ?? null,
     asker_age: r.asker_age,
     asker_gender: r.asker_gender ?? null,
     response_type: r.response_type,
@@ -238,5 +247,23 @@ export async function getActiveQuestions(): Promise<QuestionRow[]> {
   const combined = [...answerRows, ...legacyMapped].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
+
+  try {
+    const cfg = await fetchDualProofreadersConfig(supabase);
+    const reviewsByQ = await fetchReviewsForQuestions(
+      supabase,
+      combined.map((q) => q.id)
+    );
+    for (const q of combined) {
+      const progress = buildDualProgress(cfg, reviewsByQ[q.id] ?? []);
+      q.dual_proof_completed = progress.completed;
+      q.dual_proof_required = progress.required;
+      q.dual_proof_reviews = progress.reviews;
+      q.dual_proof_slots = progress.slots;
+    }
+  } catch {
+    // dual proofreader tables may not exist yet
+  }
+
   return combined;
 }

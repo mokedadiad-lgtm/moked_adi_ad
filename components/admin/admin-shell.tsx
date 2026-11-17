@@ -2,6 +2,7 @@
 
 import { AdminNav } from "@/components/admin/admin-nav";
 import { InactivityLogout } from "@/components/inactivity-logout";
+import { UiStyleToggle } from "@/components/ui-style-toggle";
 import { BRAND_NAME } from "@/lib/brand";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -167,14 +168,15 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             >
               <HamburgerIcon />
             </button>
-            {showWhatsappHeaderTools ? (
-              <div className="absolute end-16 top-1/2 z-10 -translate-y-1/2 md:hidden">
-                <div className="flex items-center gap-2">
+            <div className="absolute end-16 top-1/2 z-10 flex -translate-y-1/2 items-center gap-2 md:hidden">
+              <UiStyleToggle compact />
+              {showWhatsappHeaderTools ? (
+                <>
                   <WhatsappInboxPushSettingsIcon />
                   <WhatsappInboxBell />
-                </div>
-              </div>
-            ) : null}
+                </>
+              ) : null}
+            </div>
             <Link
               href="/"
               className="absolute end-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm"
@@ -201,24 +203,23 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           />
           <aside
             className={cn(
-              "fixed right-0 top-0 z-[35] flex h-full min-h-dvh w-64 flex-col border-l pt-0 shadow-xl transition-transform duration-200 ease-out",
-              "border-slate-200/90 bg-slate-50 md:border-primary/15 md:bg-[#1a1a35]",
+              "admin-sidebar fixed right-0 top-0 z-[35] flex h-full min-h-dvh w-64 flex-col border-l pt-0 shadow-xl transition-transform duration-200 ease-out",
               "md:translate-x-0 md:transition-none",
               sidebarOpen ? "translate-x-0" : "translate-x-full md:translate-x-0"
             )}
           >
-            <div className="relative flex flex-col items-center border-b border-slate-200/90 bg-white/70 px-4 pb-4 pt-12 text-center md:border-white/10 md:bg-transparent md:px-5 md:pt-4">
+            <div className="admin-sidebar-header relative flex flex-col items-center border-b px-4 pb-4 pt-12 text-center md:px-5 md:pt-4">
               <button
                 type="button"
                 onClick={closeSidebar}
-                className="absolute start-3 top-3 flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-200 hover:text-slate-900 md:hidden"
+                className="absolute start-3 top-3 flex h-9 w-9 items-center justify-center rounded-lg text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-hover)] hover:text-[var(--sidebar-text-strong)] md:hidden"
                 aria-label="סגור תפריט"
               >
                 <CloseIcon />
               </button>
               <Link
                 href="/"
-                className="mb-2 flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200/90 bg-white shadow-md md:h-[4.75rem] md:w-[4.75rem] md:border-white/15 md:bg-white/95 md:ring-1 md:ring-white/10"
+                className="admin-sidebar-logo mb-2 flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-white shadow-md md:h-[4.75rem] md:w-[4.75rem]"
                 aria-label={BRAND_NAME}
                 onClick={closeSidebar}
               >
@@ -231,8 +232,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   priority
                 />
               </Link>
-              <h2 className="text-lg font-bold text-slate-900 md:text-white">{BRAND_NAME}</h2>
-              <p className="mt-0.5 text-xs text-slate-600 md:text-[#a8a8c4]">ממשק מנהל</p>
+              <h2 className="admin-sidebar-title text-lg font-bold">{BRAND_NAME}</h2>
+              <p className="admin-sidebar-subtitle mt-0.5 text-xs">ממשק מנהל</p>
             </div>
             <AdminNav delayedQuestions={delayedQuestions} onNavigate={closeSidebar} />
           </aside>
@@ -247,11 +248,16 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             : "px-4 pt-4 md:px-8 md:pt-6"
         )}
       >
-        {showSidebar === true && showWhatsappHeaderTools && (
-          <div className="hidden md:block fixed top-4 left-4 z-[30]">
+        {showSidebar === true && (
+          <div className="fixed left-4 top-4 z-[30] hidden md:block">
             <div className="flex items-center gap-2">
-              <WhatsappInboxPushSettingsIcon />
-              <WhatsappInboxBell />
+              <UiStyleToggle />
+              {showWhatsappHeaderTools ? (
+                <>
+                  <WhatsappInboxPushSettingsIcon />
+                  <WhatsappInboxBell />
+                </>
+              ) : null}
             </div>
           </div>
         )}

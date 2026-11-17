@@ -494,7 +494,7 @@ export function LoginForm() {
           >
             שכחתי סיסמה
           </button>
-          <p className="mt-4 pt-4 border-t border-slate-200 text-center text-sm text-slate-600">
+          <p className="mt-4 border-t border-card-border pt-4 text-center text-sm text-secondary">
             <Link href="/" className="text-primary font-medium underline hover:no-underline">
               טופס שליחת שאלה
             </Link>

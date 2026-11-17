@@ -4,9 +4,15 @@ import { ResponseTextView } from "@/components/response-text-view";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { PageLoadingFallback } from "@/components/ui/page-loading";
 import { PageHeader } from "@/components/page-header";
 import { RoleSwitcher, useHasSidebar } from "@/components/role-switcher";
+import {
+  outcomeLabelHe,
+  type DualProofreaderProgress,
+  type ProofreaderReviewRow,
+} from "@/lib/dual-proofreaders";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { afterModalClose, cn } from "@/lib/utils";
@@ -14,13 +20,14 @@ import { LobbyTaskModal } from "./lobby-task-modal";
 
 export interface LobbyQuestion {
   id: string;
-  /** When task is from question_answers */
   answer_id?: string | null;
   title?: string | null;
   content: string;
   response_text: string | null;
   created_at: string;
   assigned_proofreader_id: string | null;
+  my_review?: ProofreaderReviewRow | null;
+  dual_progress?: DualProofreaderProgress;
 }
 
 function formatDate(iso: string): string {
@@ -38,6 +45,25 @@ function truncateSummary(text: string, maxLen = 100): string {
   return t.length <= maxLen ? t : t.slice(0, maxLen) + "…";
 }
 
+function DualProgressBadge({ progress }: { progress?: DualProofreaderProgress }) {
+  const done = progress?.completed ?? 0;
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "rounded-md border text-[10px] font-medium",
+        done >= 2
+          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+          : done === 1
+            ? "border-amber-200 bg-amber-50 text-amber-800"
+            : "border-violet-200 bg-violet-50 text-violet-800"
+      )}
+    >
+      הגהה {done}/2
+    </Badge>
+  );
+}
+
 export function ProofreaderDashboard() {
   const router = useRouter();
   const hasSidebar = useHasSidebar();
@@ -47,18 +73,23 @@ export function ProofreaderDashboard() {
   const [modalOpen, setModalOpen] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isProofreader, setIsProofreader] = useState(false);
+  const [isDualProofreader, setIsDualProofreader] = useState(false);
   const [showAllForAdmin, setShowAllForAdmin] = useState(true);
+  const [accessError, setAccessError] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const openQuestionId = searchParams.get("open");
   const openedFromLink = useRef(false);
 
   const fetchQuestions = useCallback(async () => {
     const supabase = getSupabaseBrowser();
-    let { data: { user } } = await supabase.auth.getUser();
+    let {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) {
       await new Promise((r) => setTimeout(r, 400));
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       user = session?.user ?? null;
     }
     if (!user) {
@@ -67,49 +98,58 @@ export function ProofreaderDashboard() {
     }
     const { data: profile } = await supabase
       .from("profiles")
-      .select("is_admin, is_technical_lead, is_proofreader, proofreader_type_id")
+      .select("is_admin, is_technical_lead, is_proofreader")
       .eq("id", user.id)
       .single();
-    const isAdminOrTechLead = profile?.is_admin === true || profile?.is_technical_lead === true;
-    const canLobby = isAdminOrTechLead || (profile?.is_proofreader && profile?.proofreader_type_id);
-    if (!canLobby) {
-      router.replace("/admin");
-      return;
-    }
+    const isAdminOrTechLead =
+      profile?.is_admin === true || profile?.is_technical_lead === true;
+
     setUserId(user.id);
     setIsAdmin(isAdminOrTechLead);
-    setIsProofreader(!!profile?.is_proofreader);
 
-    // מנהלים: במצב "כל המשימות" נשתמש ב-API עם service role כדי לא להיתקע על RLS
-    if (isAdminOrTechLead && showAllForAdmin) {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token ?? null;
-      if (!token) {
-        setQuestions([]);
-        setLoading(false);
-        return;
-      }
-      const res = await fetch("/api/admin/proofreader-lobby-tasks", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; tasks?: LobbyQuestion[] };
-      setQuestions(data.ok && data.tasks ? data.tasks : []);
-      setLoading(false);
-      return;
-    }
-
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     const token = session?.access_token ?? null;
     if (!token) {
       setQuestions([]);
       setLoading(false);
       return;
     }
-    const res = await fetch("/api/proofreader/tasks", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; tasks?: LobbyQuestion[] };
-    setQuestions(data.ok && data.tasks ? data.tasks : []);
+
+    const useAdminAll = isAdminOrTechLead && showAllForAdmin;
+    const res = await fetch(
+      useAdminAll ? "/api/admin/proofreader-lobby-tasks" : "/api/proofreader/tasks",
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const data = (await res.json().catch(() => ({}))) as {
+      ok?: boolean;
+      error?: string;
+      tasks?: LobbyQuestion[];
+      dual_config?: {
+        proofreader_a_id: string | null;
+        proofreader_b_id: string | null;
+      };
+    };
+
+    if (!data.ok) {
+      setAccessError(data.error ?? "אין הרשאה");
+      setQuestions([]);
+      setIsDualProofreader(false);
+      setLoading(false);
+      if (!isAdminOrTechLead) {
+        // non-dual proofreaders are redirected away from empty lobby
+        router.replace("/admin");
+      }
+      return;
+    }
+
+    const dual =
+      data.dual_config?.proofreader_a_id === user.id ||
+      data.dual_config?.proofreader_b_id === user.id;
+    setIsDualProofreader(dual);
+    setAccessError(null);
+    setQuestions(data.tasks ?? []);
     setLoading(false);
   }, [router, showAllForAdmin]);
 
@@ -117,7 +157,6 @@ export function ProofreaderDashboard() {
     fetchQuestions();
   }, [fetchQuestions]);
 
-  // קישור עם ?open=QUESTION_ID — לפתוח ישירות את חלון השאלה
   useEffect(() => {
     if (openedFromLink.current || loading || !openQuestionId || questions.length === 0) return;
     const q = questions.find((x) => x.id === openQuestionId);
@@ -137,13 +176,6 @@ export function ProofreaderDashboard() {
     router.refresh();
   };
 
-  const mine = userId ? questions.filter((q) => q.assigned_proofreader_id === userId) : [];
-  const takenByOthers =
-    userId && (showAllForAdmin || !isAdmin || !isProofreader)
-      ? questions.filter((q) => q.assigned_proofreader_id && q.assigned_proofreader_id !== userId)
-      : [];
-  const available = questions.filter((q) => !q.assigned_proofreader_id);
-
   const openModal = (q: LobbyQuestion) => {
     setSelected(q);
     setModalOpen(true);
@@ -156,7 +188,10 @@ export function ProofreaderDashboard() {
 
   const handleActionDone = () => {
     fetchQuestions();
-    fetch("/api/revalidate", { method: "POST", body: JSON.stringify({ path: "/admin" }) }).catch(() => {});
+    fetch("/api/revalidate", {
+      method: "POST",
+      body: JSON.stringify({ path: "/admin" }),
+    }).catch(() => {});
   };
 
   const handleDraftSaved = ({
@@ -185,10 +220,11 @@ export function ProofreaderDashboard() {
     });
   };
 
-  // אחרי רענון: אם השאלה כבר לא בתור — לסגור מודאל; אם עדיין בתור — לעדכן את השאלה (למשל אחרי "תפוס משימה") כדי להציג עריכה
   useEffect(() => {
     if (!selected) return;
-    const updated = questions.find((q) => (q.answer_id ? q.answer_id === selected.answer_id : q.id === selected.id));
+    const updated = questions.find((q) =>
+      q.answer_id ? q.answer_id === selected.answer_id : q.id === selected.id
+    );
     if (!updated) {
       setModalOpen(false);
       afterModalClose(() => setSelected(null));
@@ -197,11 +233,20 @@ export function ProofreaderDashboard() {
     }
   }, [questions, selected?.id, selected]);
 
+  const waitingForMe = userId
+    ? questions.filter((q) => !q.my_review)
+    : questions;
+  const canCompleteSelected =
+    Boolean(userId) &&
+    isDualProofreader &&
+    Boolean(selected) &&
+    !selected?.my_review;
+
   return (
     <>
       <PageHeader title="לובי הגהה">
         <RoleSwitcher />
-        {isAdmin && isProofreader && (
+        {isAdmin && (
           <div className="flex items-center gap-2">
             <Button
               type="button"
@@ -228,7 +273,7 @@ export function ProofreaderDashboard() {
         )}
       </PageHeader>
 
-      <main className="mx-auto max-w-4xl px-4 py-6 space-y-8">
+      <main className="mx-auto max-w-4xl space-y-8 px-4 py-6">
         {loading ? (
           <PageLoadingFallback
             className="w-full"
@@ -236,115 +281,84 @@ export function ProofreaderDashboard() {
           />
         ) : (
           <>
-            {mine.length > 0 && (
-              <section>
-                <h2 className="mb-3 text-start text-sm font-medium text-secondary">המשימות שלי ({mine.length})</h2>
-                <ul className="space-y-3">
-                  {mine.map((q) => (
-                    <li key={q.answer_id ?? q.id}>
-                      <Card
-                        className="cursor-pointer border-violet-200 bg-violet-50/50 transition-shadow hover:shadow-md"
-                        onClick={() => openModal(q)}
-                      >
-                        <CardContent className="p-4">
-                          <p className="text-xs text-secondary">{formatDate(q.created_at)}</p>
-                          {q.title && <p className="mt-1 text-sm font-medium text-slate-800">{q.title}</p>}
-                          <p className={cn("mt-1 line-clamp-2 text-start text-sm text-primary", q.title && "mt-0.5")}>
-                            {truncateSummary(q.content)}
-                          </p>
-                          {q.response_text && (
-                            <div className="mt-2 rounded-md border border-slate-200/70 bg-white/70 px-2 py-1.5">
-                              <p className="mb-1 text-[11px] text-slate-500">תשובה{"\u200E"}:</p>
-                              <div className="max-h-20 overflow-hidden">
-                                <ResponseTextView value={q.response_text} variant="compact" />
-                              </div>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </li>
-                  ))}
-                </ul>
-              </section>
+            {accessError && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                {accessError}
+              </div>
             )}
 
-            {(showAllForAdmin || !isAdmin || !isProofreader) && takenByOthers.length > 0 && (
-              <section>
-                <h2 className="mb-3 text-start text-sm font-medium text-secondary">
-                  נתפסו ע״י מגיהים אחרים ({takenByOthers.length})
-                </h2>
+            <section>
+              <h2 className="mb-3 text-start text-sm font-medium text-secondary">
+                משימות להגהה ({waitingForMe.length})
+              </h2>
+              {waitingForMe.length === 0 ? (
+                <div className="rounded-2xl border border-card-border bg-card p-12 text-start shadow-soft">
+                  <p className="text-lg font-medium text-primary">אין משימות בהמתנה</p>
+                  <p className="mt-2 text-secondary">
+                    משימות חדשות יופיעו כאן כשמשיבים ישלחו תשובות{"\u200E"}.
+                  </p>
+                </div>
+              ) : (
                 <ul className="space-y-3">
-                  {takenByOthers.map((q) => (
-                    <li key={q.answer_id ?? q.id}>
-                      <Card
-                        className="cursor-pointer border-amber-200 bg-amber-50/50 transition-shadow hover:shadow-md"
-                        onClick={() => openModal(q)}
-                      >
-                        <CardContent className="p-4">
-                          <p className="text-xs text-secondary">{formatDate(q.created_at)}</p>
-                          {q.title && <p className="mt-1 text-sm font-medium text-slate-800">{q.title}</p>}
-                          <p className={cn("mt-1 line-clamp-2 text-start text-sm text-primary", q.title && "mt-0.5")}>
-                            {truncateSummary(q.content)}
-                          </p>
-                          {q.response_text && (
-                            <div className="mt-2 rounded-md border border-slate-200/70 bg-white/70 px-2 py-1.5">
-                              <p className="mb-1 text-[11px] text-slate-500">תשובה{"\u200E"}:</p>
-                              <div className="max-h-20 overflow-hidden">
-                                <ResponseTextView value={q.response_text} variant="compact" />
-                              </div>
-                            </div>
-                          )}
-                          {q.assigned_proofreader_id && (
-                            <p className="mt-2 text-start text-[11px] text-slate-500">
-                              נתפס על ידי: {q.assigned_proofreader_id.slice(0, 8)}…
-                            </p>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            {showAllForAdmin || !isAdmin || !isProofreader ? (
-              <section>
-                <h2 className="mb-3 text-start text-sm font-medium text-secondary">בתור ({available.length})</h2>
-                {available.length === 0 && mine.length === 0 ? (
-                  <div className="rounded-2xl border border-card-border bg-card p-12 text-start shadow-soft">
-                    <p className="text-lg font-medium text-primary">אין משימות בהמתנה</p>
-                    <p className="mt-2 text-secondary">משימות חדשות יופיעו כאן כשמשיבים ישלחו תשובות{"\u200E"}.</p>
-                  </div>
-                ) : (
-                  <ul className="space-y-3">
-                    {available.map((q) => (
+                  {waitingForMe.map((q) => {
+                    const other = q.dual_progress?.slots.find(
+                      (s) => s.id && s.id !== userId
+                    );
+                    return (
                       <li key={q.answer_id ?? q.id}>
                         <Card
                           className="cursor-pointer transition-shadow hover:shadow-md"
                           onClick={() => openModal(q)}
                         >
                           <CardContent className="p-4">
-                            <p className="text-xs text-secondary">{formatDate(q.created_at)}</p>
-                            {q.title && <p className="mt-1 text-sm font-medium text-slate-800">{q.title}</p>}
-                            <p className={cn("mt-1 line-clamp-2 text-start text-sm text-primary", q.title && "mt-0.5")}>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-xs text-secondary">
+                                {formatDate(q.created_at)}
+                              </p>
+                              <DualProgressBadge progress={q.dual_progress} />
+                            </div>
+                            {q.title && (
+                              <p className="mt-1 text-sm font-medium text-slate-800">
+                                {q.title}
+                              </p>
+                            )}
+                            <p
+                              className={cn(
+                                "mt-1 line-clamp-2 text-start text-sm text-primary",
+                                q.title && "mt-0.5"
+                              )}
+                            >
                               {truncateSummary(q.content)}
                             </p>
+                            {other && (
+                              <p className="mt-2 text-[11px] text-slate-500">
+                                {other.name || "המגיהה השנייה"}:{" "}
+                                {other.review
+                                  ? `סיימה (${outcomeLabelHe(other.review.outcome)})`
+                                  : "טרם סיימה"}
+                              </p>
+                            )}
                             {q.response_text && (
-                              <div className="mt-2 rounded-md border border-slate-200/70 bg-white/70 px-2 py-1.5">
-                                <p className="mb-1 text-[11px] text-slate-500">תשובה{"\u200E"}:</p>
+                              <div className="mt-2 rounded-xl border border-card-border bg-card px-2 py-1.5">
+                                <p className="mb-1 text-[11px] text-slate-500">
+                                  תשובה{"\u200E"}:
+                                </p>
                                 <div className="max-h-20 overflow-hidden">
-                                  <ResponseTextView value={q.response_text} variant="compact" />
+                                  <ResponseTextView
+                                    value={q.response_text}
+                                    variant="compact"
+                                  />
                                 </div>
                               </div>
                             )}
                           </CardContent>
                         </Card>
                       </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            ) : null}
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
           </>
         )}
       </main>
@@ -356,6 +370,7 @@ export function ProofreaderDashboard() {
         onOpenChange={(open) => !open && closeModal()}
         onActionDone={handleActionDone}
         onDraftSaved={handleDraftSaved}
+        canComplete={canCompleteSelected}
       />
     </>
   );

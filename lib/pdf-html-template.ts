@@ -16,6 +16,8 @@ export function buildPdfHtml(options: {
   createdAt?: string;
   /** חתימה (HTML מצומצם: b/strong/br) — מוצגת מיושרת לשמאל */
   linguisticSignature?: string | null;
+  /** מגדר הפונה — לבחירת חתימת ברירת מחדל */
+  askerGender?: "M" | "F" | null;
   /** אופציונלי: @font-face עם גופני Heebo כ-base64 – מונע בעיות כשגופנים לא נטענים מהרשת */
   fontFaceCss?: string;
   /** לוגו שמאלי מוטמע (data URI) */
@@ -31,6 +33,7 @@ export function buildPdfHtml(options: {
     footnotes,
     createdAt,
     linguisticSignature,
+    askerGender,
     fontFaceCss,
     leftLogoDataUri,
     centerLogoDataUri,
@@ -38,7 +41,7 @@ export function buildPdfHtml(options: {
   } = options;
   const safeBody = sanitizeResponseHtmlForPdf(bodyHtmlForPdf);
   const bodyDir = inferBaseDirFromText(safeBody.replace(/<[^>]+>/g, " "));
-  const sigSan = effectiveLinguisticSignature(linguisticSignature);
+  const sigSan = effectiveLinguisticSignature(linguisticSignature, askerGender);
   const signatureHtml = sigSan
     ? `<div class="pdf-signature-block" dir="ltr">${sigSan}</div>`
     : "";

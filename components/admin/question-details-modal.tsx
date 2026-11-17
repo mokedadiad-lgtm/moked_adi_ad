@@ -1,5 +1,6 @@
 "use client";
 
+import { PdfShareButton } from "@/components/admin/pdf-share-button";
 import { PdfViewModal } from "@/components/admin/pdf-view-modal";
 import { RichTextEditor } from "@/components/respondent/rich-text-editor";
 import { ResponseTextView } from "@/components/response-text-view";
@@ -181,7 +182,10 @@ export function QuestionDetailsModal({
       const value = question.response_text ?? "";
       setResponseText(value);
       setInitialResponse(value);
-      const sig = effectiveLinguisticSignature(question.linguistic_signature);
+      const sig = effectiveLinguisticSignature(
+        question.linguistic_signature,
+        question.asker_gender
+      );
       setSignatureText(sig);
       setInitialSignature(sig);
       setSaveError(null);
@@ -529,6 +533,16 @@ export function QuestionDetailsModal({
                         הורדה
                       </a>
                     </Button>
+                    <PdfShareButton
+                      questionId={question.id}
+                      forParam="archive"
+                      pdfGeneratedAt={question.pdf_generated_at}
+                      title={question.title}
+                      shortId={question.short_id}
+                      showLabel
+                      variant="default"
+                      buttonClassName="bg-red-600 text-white hover:bg-red-700"
+                    />
                     <Button
                       variant="default"
                       size="sm"
@@ -579,6 +593,9 @@ export function QuestionDetailsModal({
       onOpenChange={setShowPdfView}
       questionId={question?.id ?? null}
       forParam="archive"
+      title={question?.title}
+      shortId={question?.short_id}
+      pdfGeneratedAt={question?.pdf_generated_at}
     />
     </>
   );

@@ -23,7 +23,7 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        "sticky top-0 z-10 min-h-14 border-b border-slate-200/80 bg-background md:min-h-0",
+        "sticky top-0 z-10 min-h-14 border-b border-border/80 bg-background md:min-h-0",
         compact && "min-h-0",
         className
       )}

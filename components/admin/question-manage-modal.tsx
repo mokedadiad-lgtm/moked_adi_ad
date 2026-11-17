@@ -44,6 +44,7 @@ function pubLabel(
   if (consent === "publish") return male ? "מסכים לפרסם" : "מסכימה לפרסם";
   if (consent === "blur") return male ? "מסכים בטשטוש נתונים" : "מסכימה בטשטוש נתונים";
   if (consent === "none") return "לא לפרסום";
+  if (consent === "not_asked") return "לא נשאל";
   return "—";
 }
 

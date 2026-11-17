@@ -166,7 +166,7 @@ async function fetchLinguisticQuestionRows(includeSignature: boolean): Promise<Q
       asker_age: q?.asker_age ?? null,
       asker_gender: (q?.asker_gender === "M" || q?.asker_gender === "F" ? q.asker_gender : null) as "M" | "F" | null,
       response_type: (q?.response_type === "short" || q?.response_type === "detailed" ? q.response_type : null) as QuestionRow["response_type"],
-      publication_consent: (q?.publication_consent === "publish" || q?.publication_consent === "blur" || q?.publication_consent === "none" ? q.publication_consent : null) as QuestionRow["publication_consent"],
+      publication_consent: (q?.publication_consent === "publish" || q?.publication_consent === "blur" || q?.publication_consent === "none" || q?.publication_consent === "not_asked" ? q.publication_consent : null) as QuestionRow["publication_consent"],
       respondent_name: respondentName,
       topic_id: first.topic_id ?? null,
       sub_topic_id: first.sub_topic_id ?? null,

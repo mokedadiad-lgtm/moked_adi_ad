@@ -1,6 +1,7 @@
 "use client";
 
 import { updateQuestionStage } from "@/app/admin/actions";
+import { PdfShareButton } from "@/components/admin/pdf-share-button";
 import { PdfViewModal } from "@/components/admin/pdf-view-modal";
 import { QuestionDetailsModal } from "@/components/admin/question-details-modal";
 import { Badge } from "@/components/ui/badge";
@@ -173,6 +174,16 @@ export function ArchiveTable({ questions }: ArchiveTableProps) {
                             <IconDownload className="h-4 w-4" />
                           </a>
                         </Button>
+                        {q.pdf_url ? (
+                          <PdfShareButton
+                            questionId={q.id}
+                            forParam="archive"
+                            pdfGeneratedAt={q.pdf_generated_at}
+                            title={q.title}
+                            shortId={q.short_id}
+                            buttonClassName={cn("shrink-0", PDF_BUTTON_CLASS)}
+                          />
+                        ) : null}
                       </div>
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
@@ -220,6 +231,9 @@ export function ArchiveTable({ questions }: ArchiveTableProps) {
       onOpenChange={(open) => !open && setViewPdfQuestionId(null)}
       questionId={viewPdfQuestionId}
       forParam="archive"
+      title={questions.find((q) => q.id === viewPdfQuestionId)?.title}
+      shortId={questions.find((q) => q.id === viewPdfQuestionId)?.short_id}
+      pdfGeneratedAt={questions.find((q) => q.id === viewPdfQuestionId)?.pdf_generated_at}
     />
 
     <Dialog open={!!returnModalQuestion} onOpenChange={(open) => !open && setReturnModalQuestion(null)}>

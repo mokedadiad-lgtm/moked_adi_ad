@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  audienceMatchesAskerGender,
-  parseAskerAudience,
-} from "@/lib/asker-audience";
+  buildDualProgress,
+  fetchDualProofreadersConfig,
+  fetchReviewsForQuestions,
+  isConfiguredDualProofreader,
+  type DualProofreaderProgress,
+  type ProofreaderReviewRow,
+} from "@/lib/dual-proofreaders";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getUserFromBearerToken } from "@/lib/supabase/route-auth";
 
-type ProofreaderTask = {
+export type ProofreaderTask = {
   id: string;
   answer_id?: string | null;
   title?: string | null;
@@ -15,6 +19,8 @@ type ProofreaderTask = {
   created_at: string;
   assigned_proofreader_id: string | null;
   proofreader_type_id?: string | null;
+  my_review?: ProofreaderReviewRow | null;
+  dual_progress?: DualProofreaderProgress;
 };
 
 function authToken(request: NextRequest): string | null {
@@ -30,7 +36,7 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseAdmin();
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("is_admin, is_technical_lead, is_proofreader, proofreader_type_id, asker_audience")
+      .select("is_admin, is_technical_lead, is_proofreader")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -39,39 +45,34 @@ export async function GET(request: NextRequest) {
     }
 
     const isAdminOrTechLead = profile.is_admin === true || profile.is_technical_lead === true;
-    const canProofread = profile.is_proofreader === true && Boolean(profile.proofreader_type_id);
-    if (!isAdminOrTechLead && !canProofread) {
-      return NextResponse.json({ ok: false, error: "אין הרשאה" }, { status: 403 });
+    const cfg = await fetchDualProofreadersConfig(supabase);
+    const isDual = isConfiguredDualProofreader(cfg, user.id);
+
+    if (!isAdminOrTechLead && !isDual) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "אין הרשאה — לובי ההגהה פתוח רק לשתי המגיהות הקבועות",
+        },
+        { status: 403 }
+      );
     }
 
-    const typeId = (profile.proofreader_type_id as string | null) ?? null;
-    const audience = parseAskerAudience(
-      (profile as { asker_audience?: string }).asker_audience
-    );
-
-    let qaQuery = supabase
+    const qaQuery = supabase
       .from("question_answers")
       .select(
-        "id, question_id, response_text, assigned_proofreader_id, proofreader_type_id, deleted_at, questions(id, title, content, created_at, asker_gender)"
+        "id, question_id, response_text, assigned_proofreader_id, proofreader_type_id, deleted_at, questions(id, title, content, created_at)"
       )
       .eq("stage", "in_proofreading_lobby")
       .order("created_at", { ascending: true });
 
-    if (!isAdminOrTechLead) {
-      qaQuery = qaQuery.or(`proofreader_type_id.eq.${typeId},assigned_proofreader_id.eq.${user.id}`);
-    }
-
-    let legacyQuery = supabase
+    const legacyQuery = supabase
       .from("questions")
       .select(
-        "id, title, content, response_text, created_at, assigned_proofreader_id, proofreader_type_id, asker_gender"
+        "id, title, content, response_text, created_at, assigned_proofreader_id, proofreader_type_id"
       )
       .eq("stage", "in_proofreading_lobby")
       .order("created_at", { ascending: true });
-
-    if (!isAdminOrTechLead) {
-      legacyQuery = legacyQuery.or(`proofreader_type_id.eq.${typeId},assigned_proofreader_id.eq.${user.id}`);
-    }
 
     const [qaRes, qRes] = await Promise.all([qaQuery, legacyQuery]);
     if (qaRes.error) return NextResponse.json({ ok: false, error: qaRes.error.message }, { status: 500 });
@@ -85,31 +86,10 @@ export async function GET(request: NextRequest) {
       proofreader_type_id?: string | null;
       deleted_at?: string | null;
       questions:
-        | {
-            id: string;
-            title?: string | null;
-            content: string;
-            created_at: string;
-            asker_gender?: string | null;
-          }
-        | {
-            id: string;
-            title?: string | null;
-            content: string;
-            created_at: string;
-            asker_gender?: string | null;
-          }[]
+        | { id: string; title?: string | null; content: string; created_at: string }
+        | { id: string; title?: string | null; content: string; created_at: string }[]
         | null;
     }[];
-
-    function genderOk(
-      askerGender: string | null | undefined,
-      assignedToMe: boolean
-    ): boolean {
-      if (isAdminOrTechLead || assignedToMe) return true;
-      const g = askerGender === "M" || askerGender === "F" ? askerGender : null;
-      return audienceMatchesAskerGender(audience, g);
-    }
 
     const activeQa = qaRows.filter((r) => !r.deleted_at);
     const fromQaIds = new Set(activeQa.map((r) => r.question_id));
@@ -117,8 +97,6 @@ export async function GET(request: NextRequest) {
       .map((r): ProofreaderTask | null => {
         const q = Array.isArray(r.questions) ? r.questions[0] : r.questions;
         if (!q) return null;
-        const assignedToMe = r.assigned_proofreader_id === user.id;
-        if (!genderOk(q.asker_gender, assignedToMe)) return null;
         return {
           id: q.id ?? r.question_id,
           answer_id: r.id,
@@ -132,17 +110,38 @@ export async function GET(request: NextRequest) {
       })
       .filter((x): x is ProofreaderTask => x !== null);
 
-    const legacy = (
-      (qRes.data ?? []) as (ProofreaderTask & { asker_gender?: string | null })[]
-    ).filter((q) => {
-      if (fromQaIds.has(q.id)) return false;
-      return genderOk(q.asker_gender, q.assigned_proofreader_id === user.id);
-    });
+    const legacy = ((qRes.data ?? []) as ProofreaderTask[]).filter((q) => !fromQaIds.has(q.id));
 
-    return NextResponse.json({ ok: true, tasks: [...fromQa, ...legacy] });
+    const tasksBase = [...fromQa, ...legacy];
+    const questionIds = [...new Set(tasksBase.map((t) => t.id))];
+    const reviewsByQ = await fetchReviewsForQuestions(supabase, questionIds);
+
+    // Dual proofreaders only see tasks they haven't completed yet (admins see all)
+    const tasks: ProofreaderTask[] = tasksBase
+      .map((t) => {
+        const reviews = reviewsByQ[t.id] ?? [];
+        const dual_progress = buildDualProgress(cfg, reviews);
+        const my_review = reviews.find((r) => r.proofreader_id === user.id) ?? null;
+        return { ...t, dual_progress, my_review };
+      })
+      .filter((t) => {
+        if (isAdminOrTechLead && !isDual) return true;
+        if (isDual && t.my_review) return false;
+        return true;
+      });
+
+    return NextResponse.json({
+      ok: true,
+      tasks,
+      dual_config: {
+        proofreader_a_id: cfg.proofreader_a_id,
+        proofreader_b_id: cfg.proofreader_b_id,
+        proofreader_a_name: cfg.proofreader_a_name ?? null,
+        proofreader_b_name: cfg.proofreader_b_name ?? null,
+      },
+    });
   } catch (e) {
     const message = (e as Error)?.message ?? "Unexpected error";
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
-

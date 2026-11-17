@@ -60,7 +60,7 @@ function demoVars(gender: Gender): RenderVars {
     title: DEMO_TITLE,
     content: DEMO_CONTENT,
     response_type: RESPONSE_SHORT_SUMMARY,
-    publication_consent: PUBLICATION_PUBLISH_SUMMARY,
+    publication_consent: "לא נשאל",
     delivery_preference: DELIVERY_WHATSAPP_SUMMARY,
     asker_email: null,
   };
@@ -71,7 +71,7 @@ function rt(stateKey: string, gender: Gender): string {
 }
 
 /**
- * Full bot flow: gender → mode (bot) → age list → body → title → response → publication → delivery (whatsapp) → confirm.
+ * Full bot flow: gender → mode (bot) → age list → body → title → response → delivery (whatsapp) → confirm.
  */
 export function buildWhatsAppBotDemoBubbles(gender: Gender): DemoBubble[] {
   const v = demoVars(gender);
@@ -150,18 +150,6 @@ export function buildWhatsAppBotDemoBubbles(gender: Gender): DemoBubble[] {
     ],
   });
   bubbles.push({ side: "user", kind: "text", body: BTN.respShort });
-
-  bubbles.push({
-    side: "bot",
-    kind: "buttons",
-    body: rt("publication_consent", gender),
-    buttons: [
-      { id: "PUB_PUBLISH", title: BTN.pubPublish },
-      { id: "PUB_BLUR", title: BTN.pubBlur },
-      { id: "PUB_NONE", title: BTN.pubNone },
-    ],
-  });
-  bubbles.push({ side: "user", kind: "text", body: BTN.pubPublish });
 
   bubbles.push({
     side: "bot",
