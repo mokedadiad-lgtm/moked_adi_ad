@@ -179,15 +179,15 @@ const STAGE_BADGE_CLASS: Record<QuestionStage, string> = {
   sent_archived: "bg-muted text-secondary border-card-border",
 };
 
-/** תג ID עדין לפי שלב — רקע רך + טקסט צבעוני ברור */
-const STAGE_ID_CHIP_CLASS: Record<QuestionStage, string> = {
-  waiting_assignment: "bg-pink-50 text-pink-600 ring-pink-200/70",
-  with_respondent: "bg-sky-50 text-sky-600 ring-sky-200/70",
-  in_proofreading_lobby: "bg-violet-50 text-violet-600 ring-violet-200/70",
-  in_linguistic_review: "bg-amber-50 text-amber-700 ring-amber-200/70",
-  ready_for_sending: "bg-emerald-50 text-emerald-600 ring-emerald-200/70",
-  pending_manager: "bg-rose-50 text-rose-600 ring-rose-200/70",
-  sent_archived: "bg-muted text-secondary ring-card-border",
+/** צבע טקסט עדין ל־ID לפי שלב — בלי מסגרת/רקע */
+const STAGE_ID_TEXT_CLASS: Record<QuestionStage, string> = {
+  waiting_assignment: "text-pink-600",
+  with_respondent: "text-sky-600",
+  in_proofreading_lobby: "text-violet-600",
+  in_linguistic_review: "text-amber-700",
+  ready_for_sending: "text-emerald-600",
+  pending_manager: "text-rose-600",
+  sent_archived: "text-secondary",
 };
 
 const CARD_STYLES: Record<
@@ -576,12 +576,7 @@ export function AdminDashboard({ questions, topics, proofreaderTypes, initialOpe
                     </TableCell>
                     <TableCell className="text-center font-mono text-[11px] md:text-xs">
                       <div className="flex flex-wrap items-center justify-center gap-1.5">
-                        <span
-                          className={cn(
-                            "inline-flex rounded-md px-1.5 py-0.5 font-medium tracking-wide ring-1 ring-inset",
-                            STAGE_ID_CHIP_CLASS[q.stage]
-                          )}
-                        >
+                        <span className={cn("font-medium tracking-wide", STAGE_ID_TEXT_CLASS[q.stage])}>
                           {q.short_id ?? `${q.id.slice(0, 8)}…`}
                         </span>
                         {q.answers_count != null && q.answers_count >= 2 && (
