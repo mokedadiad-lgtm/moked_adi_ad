@@ -174,7 +174,7 @@ export function WhatsappInboxClient({
         title: details.title,
         content: details.content,
         response_type: details.response_type,
-        publication_consent: "not_asked",
+        publication_consent: "not_asked" as const,
         delivery_preference: details.delivery_preference,
         asker_email: details.asker_email,
       };
