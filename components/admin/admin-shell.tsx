@@ -234,6 +234,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               </Link>
               <h2 className="admin-sidebar-title text-lg font-bold">{BRAND_NAME}</h2>
               <p className="admin-sidebar-subtitle mt-0.5 text-xs">ממשק מנהל</p>
+              <div className="mt-3 hidden w-full justify-center md:flex">
+                <UiStyleToggle />
+              </div>
             </div>
             <AdminNav delayedQuestions={delayedQuestions} onNavigate={closeSidebar} />
           </aside>
@@ -248,19 +251,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             : "px-4 pt-4 md:px-8 md:pt-6"
         )}
       >
-        {showSidebar === true && (
-          <div className="fixed left-4 top-4 z-[30] hidden md:block">
-            <div className="flex items-center gap-2">
-              <UiStyleToggle />
-              {showWhatsappHeaderTools ? (
-                <>
-                  <WhatsappInboxPushSettingsIcon />
-                  <WhatsappInboxBell />
-                </>
-              ) : null}
-            </div>
+        {showSidebar === true && showWhatsappHeaderTools ? (
+          <div className="fixed left-4 top-4 z-[30] hidden md:flex items-center gap-2">
+            <WhatsappInboxPushSettingsIcon />
+            <WhatsappInboxBell />
           </div>
-        )}
+        ) : null}
         {showSidebar === false && pathname?.startsWith("/admin") && (
           <div className="mx-auto max-w-6xl px-2 sm:px-4 md:px-6">
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-right text-amber-900">
