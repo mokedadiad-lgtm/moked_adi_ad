@@ -26,9 +26,18 @@ export interface LobbyQuestion {
   response_text: string | null;
   created_at: string;
   assigned_proofreader_id: string | null;
+  asker_age?: string | null;
+  asker_gender?: "M" | "F" | null;
+  response_type?: "short" | "detailed" | null;
+  respondent_name?: string | null;
   my_review?: ProofreaderReviewRow | null;
   dual_progress?: DualProofreaderProgress;
 }
+
+const RESPONSE_LABEL: Record<string, string> = {
+  short: "קצר ולעניין",
+  detailed: "תשובה מפורטת",
+};
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -330,6 +339,42 @@ export function ProofreaderDashboard() {
                             >
                               {truncateSummary(q.content)}
                             </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {q.respondent_name?.trim() ? (
+                                <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-800">
+                                  משיב/ה: {q.respondent_name.trim()}
+                                </span>
+                              ) : null}
+                              {q.asker_gender === "M" || q.asker_gender === "F" ? (
+                                <span
+                                  className={cn(
+                                    "rounded-md px-2 py-0.5 text-xs font-medium",
+                                    q.asker_gender === "M"
+                                      ? "bg-blue-50 text-blue-800"
+                                      : "bg-rose-50 text-rose-800"
+                                  )}
+                                >
+                                  {q.asker_gender === "M" ? "בחור" : "בחורה"}
+                                </span>
+                              ) : null}
+                              {q.asker_age ? (
+                                <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
+                                  גיל {q.asker_age}
+                                </span>
+                              ) : null}
+                              {q.response_type ? (
+                                <span
+                                  className={cn(
+                                    "rounded-md px-2 py-0.5 text-xs",
+                                    q.response_type === "short"
+                                      ? "bg-green-100 text-green-800"
+                                      : "bg-red-100 text-red-800"
+                                  )}
+                                >
+                                  {RESPONSE_LABEL[q.response_type] ?? q.response_type}
+                                </span>
+                              ) : null}
+                            </div>
                             {other && (
                               <p className="mt-2 text-[11px] text-slate-500">
                                 {other.name || "המגיהה השנייה"}:{" "}

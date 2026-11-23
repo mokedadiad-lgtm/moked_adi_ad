@@ -303,6 +303,18 @@ export function RespondentDashboard() {
                       {truncateSummary(q.content)}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
+                      {q.asker_gender === "M" || q.asker_gender === "F" ? (
+                        <span
+                          className={cn(
+                            "rounded-md px-2 py-0.5 text-xs font-medium",
+                            q.asker_gender === "M"
+                              ? "bg-blue-50 text-blue-800"
+                              : "bg-rose-50 text-rose-800"
+                          )}
+                        >
+                          {q.asker_gender === "M" ? "בחור" : "בחורה"}
+                        </span>
+                      ) : null}
                       {q.asker_age && (
                         <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
                           גיל {q.asker_age}

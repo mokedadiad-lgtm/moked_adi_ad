@@ -18,10 +18,36 @@ export type ProofreaderTask = {
   response_text: string | null;
   created_at: string;
   assigned_proofreader_id: string | null;
+  assigned_respondent_id?: string | null;
+  respondent_name?: string | null;
   proofreader_type_id?: string | null;
+  asker_age: string | null;
+  asker_gender: "M" | "F" | null;
+  response_type: "short" | "detailed" | null;
   my_review?: ProofreaderReviewRow | null;
   dual_progress?: DualProofreaderProgress;
 };
+
+type QuestionAskerFields = {
+  asker_age?: string | null;
+  asker_gender?: string | null;
+  response_type?: string | null;
+};
+
+function normalizeAskerFields(q: QuestionAskerFields | null | undefined): {
+  asker_age: string | null;
+  asker_gender: "M" | "F" | null;
+  response_type: "short" | "detailed" | null;
+} {
+  const gender = q?.asker_gender;
+  const responseType = q?.response_type;
+  return {
+    asker_age: q?.asker_age ?? null,
+    asker_gender: gender === "M" || gender === "F" ? gender : null,
+    response_type:
+      responseType === "short" || responseType === "detailed" ? responseType : null,
+  };
+}
 
 function authToken(request: NextRequest): string | null {
   const h = request.headers.get("authorization");
@@ -61,7 +87,7 @@ export async function GET(request: NextRequest) {
     const qaQuery = supabase
       .from("question_answers")
       .select(
-        "id, question_id, response_text, assigned_proofreader_id, proofreader_type_id, deleted_at, questions(id, title, content, created_at)"
+        "id, question_id, response_text, assigned_respondent_id, assigned_proofreader_id, proofreader_type_id, deleted_at, questions(id, title, content, created_at, asker_age, asker_gender, response_type)"
       )
       .eq("stage", "in_proofreading_lobby")
       .order("created_at", { ascending: true });
@@ -69,7 +95,7 @@ export async function GET(request: NextRequest) {
     const legacyQuery = supabase
       .from("questions")
       .select(
-        "id, title, content, response_text, created_at, assigned_proofreader_id, proofreader_type_id"
+        "id, title, content, response_text, created_at, assigned_respondent_id, assigned_proofreader_id, proofreader_type_id, asker_age, asker_gender, response_type"
       )
       .eq("stage", "in_proofreading_lobby")
       .order("created_at", { ascending: true });
@@ -82,12 +108,13 @@ export async function GET(request: NextRequest) {
       id: string;
       question_id: string;
       response_text: string | null;
+      assigned_respondent_id?: string | null;
       assigned_proofreader_id: string | null;
       proofreader_type_id?: string | null;
       deleted_at?: string | null;
       questions:
-        | { id: string; title?: string | null; content: string; created_at: string }
-        | { id: string; title?: string | null; content: string; created_at: string }[]
+        | ({ id: string; title?: string | null; content: string; created_at: string } & QuestionAskerFields)
+        | ({ id: string; title?: string | null; content: string; created_at: string } & QuestionAskerFields)[]
         | null;
     }[];
 
@@ -105,14 +132,42 @@ export async function GET(request: NextRequest) {
           response_text: r.response_text ?? null,
           created_at: q.created_at ?? "",
           assigned_proofreader_id: r.assigned_proofreader_id ?? null,
+          assigned_respondent_id: r.assigned_respondent_id ?? null,
           proofreader_type_id: r.proofreader_type_id ?? null,
+          ...normalizeAskerFields(q),
         };
       })
       .filter((x): x is ProofreaderTask => x !== null);
 
-    const legacy = ((qRes.data ?? []) as ProofreaderTask[]).filter((q) => !fromQaIds.has(q.id));
+    const legacy = ((qRes.data ?? []) as (ProofreaderTask & QuestionAskerFields)[])
+      .filter((q) => !fromQaIds.has(q.id))
+      .map((q) => ({
+        ...q,
+        assigned_respondent_id: q.assigned_respondent_id ?? null,
+        ...normalizeAskerFields(q),
+      }));
 
     const tasksBase = [...fromQa, ...legacy];
+    const respondentIds = [
+      ...new Set(
+        tasksBase
+          .map((t) => t.assigned_respondent_id)
+          .filter((id): id is string => Boolean(id))
+      ),
+    ];
+    let profileNames: Record<string, string> = {};
+    if (respondentIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name_he")
+        .in("id", respondentIds);
+      if (profiles) {
+        profileNames = Object.fromEntries(
+          profiles.map((p) => [p.id, (p.full_name_he ?? "").trim()])
+        );
+      }
+    }
+
     const questionIds = [...new Set(tasksBase.map((t) => t.id))];
     const reviewsByQ = await fetchReviewsForQuestions(supabase, questionIds);
 
@@ -122,7 +177,10 @@ export async function GET(request: NextRequest) {
         const reviews = reviewsByQ[t.id] ?? [];
         const dual_progress = buildDualProgress(cfg, reviews);
         const my_review = reviews.find((r) => r.proofreader_id === user.id) ?? null;
-        return { ...t, dual_progress, my_review };
+        const respondent_name = t.assigned_respondent_id
+          ? profileNames[t.assigned_respondent_id] || null
+          : null;
+        return { ...t, respondent_name, dual_progress, my_review };
       })
       .filter((t) => {
         if (isAdminOrTechLead && !isDual) return true;

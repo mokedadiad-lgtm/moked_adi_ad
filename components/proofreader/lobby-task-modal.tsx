@@ -258,6 +258,40 @@ export function LobbyTaskModal({
                   {question.content}
                 </div>
               </ScrollArea>
+              <div className="mt-3 flex flex-wrap items-center justify-start gap-4 border-t border-card-border pt-3 text-start text-sm">
+                {question.respondent_name?.trim() ? (
+                  <span>
+                    <span className="text-slate-500">משיב/ה<span dir="ltr">:</span></span>{" "}
+                    <span className="text-primary">{question.respondent_name.trim()}</span>
+                  </span>
+                ) : null}
+                {question.asker_gender === "M" || question.asker_gender === "F" ? (
+                  <span>
+                    <span className="text-slate-500">פונה<span dir="ltr">:</span></span>{" "}
+                    <span className="text-primary">
+                      {question.asker_gender === "M" ? "בחור" : "בחורה"}
+                    </span>
+                  </span>
+                ) : null}
+                {question.asker_age ? (
+                  <span>
+                    <span className="text-slate-500">גיל<span dir="ltr">:</span></span>{" "}
+                    <span className="text-primary">{question.asker_age}</span>
+                  </span>
+                ) : null}
+                {question.response_type ? (
+                  <span>
+                    <span className="text-slate-500">מסלול<span dir="ltr">:</span></span>{" "}
+                    <span className="text-primary">
+                      {question.response_type === "short"
+                        ? "קצר ולעניין"
+                        : question.response_type === "detailed"
+                          ? "תשובה מפורטת"
+                          : question.response_type}
+                    </span>
+                  </span>
+                ) : null}
+              </div>
             </div>
 
             <div>
